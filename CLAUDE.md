@@ -20,6 +20,11 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Numbers run without gaps per company, and the OCR is the number plus a Luhn digit.
   - Recipient details are copied onto the invoice when it is issued.
   - Period, rent, VAT and due-date rules live in `src/features/invoicing/rules.ts` and are unit-tested. Change them there.
+- **Payments** come from camt.054 bank files (`src/features/payments/camt054.ts`). Like invoices, they're never deleted:
+  - Their status moves between matched, review, unmatched and ignored.
+  - A bank reference is unique per company, which makes re-importing safe.
+  - Only an exact OCR and amount on an open invoice marks it paid automatically (`matching.ts`). Everything else waits for a person.
+  - `payment.marksInvoicePaid` records which payment paid an invoice. Undoing either side (the payment, or "Ångra betalning" on the invoice) reopens the invoice and frees the payment.
 - **Client bundle.** Keep Effect programs, `#/db` and `#/lib/auth` out of client code. Import them only from server function handlers. Client-safe constants (e.g. `unit-kinds.ts`) live in separate modules.
 - **Shared rules.** Pure logic that both sides need (e.g. `features/leases/terms.ts`) must not import server modules, so the client can use them for previews.
 - **Money** is integer öre, never floats. Parse and format with `src/lib/money.ts`.

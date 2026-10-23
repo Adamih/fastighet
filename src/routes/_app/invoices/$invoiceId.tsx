@@ -14,6 +14,7 @@ import {
 } from '#/features/invoicing/functions'
 import type { InvoiceView } from '#/features/invoicing/program'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
+import { PaymentStatusBadge } from '#/features/payments/components'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek } from '#/lib/money'
 
@@ -42,6 +43,27 @@ function InvoicePage() {
       </div>
       <InvoiceActions invoice={invoice} />
       <PrintableInvoice invoice={invoice} />
+      {invoice.payments.length > 0 && (
+        <section className="grid max-w-3xl gap-2 print:hidden">
+          <h2 className="font-medium text-lg">Inbetalningar</h2>
+          <ul className="grid gap-1 text-sm">
+            {invoice.payments.map((p) => (
+              <li key={p.id} className="flex items-center gap-3">
+                <span className="tabular-nums">{p.bookingDate}</span>
+                <span className="tabular-nums">{formatSek(p.amountOre)}</span>
+                <span className="text-muted-foreground">{p.payerName}</span>
+                <PaymentStatusBadge status={p.status} />
+                {p.marksInvoicePaid && (
+                  <span className="text-muted-foreground text-xs">markerade avin betald</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <Link to="/payments" search={{ filter: 'all' }} className="text-sm underline">
+            Alla betalningar
+          </Link>
+        </section>
+      )}
     </div>
   )
 }

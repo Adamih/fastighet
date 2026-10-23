@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
-import { invoice, invoiceLine, lease } from '#/db/schema'
+import { invoice, invoiceLine, lease, payment } from '#/db/schema'
 import { getSettings, type Settings } from '#/features/settings/program'
 import { formatSek } from '#/lib/money'
 import { Conflict, NotFound } from '#/server/errors'
@@ -208,6 +208,16 @@ export const getInvoice = (invoiceId: string) =>
         with: {
           lines: { orderBy: invoiceLine.position },
           lease: { columns: { id: true, number: true } },
+          payments: {
+            columns: {
+              id: true,
+              bookingDate: true,
+              amountOre: true,
+              payerName: true,
+              status: true,
+              marksInvoicePaid: true,
+            },
+          },
         },
       }),
     )
@@ -309,7 +319,25 @@ export const unmarkInvoicePaid = (invoiceId: string) =>
   Effect.gen(function* () {
     const inv = yield* getInvoice(invoiceId)
     if (inv.status !== 'paid') return yield* new Conflict({ message: 'Avin är inte betald' })
-    yield* updateInvoice(inv.id, { paidOn: null })
+    // A bank payment that paid the invoice goes back to "needs attention" with it.
+    yield* orgQuery((db, organizationId) =>
+      db.batch([
+        db
+          .update(invoice)
+          .set({ paidOn: null })
+          .where(and(eq(invoice.id, inv.id), eq(invoice.organizationId, organizationId))),
+        db
+          .update(payment)
+          .set({ status: 'unmatched', invoiceId: null, marksInvoicePaid: false, note: null })
+          .where(
+            and(
+              eq(payment.invoiceId, inv.id),
+              eq(payment.organizationId, organizationId),
+              eq(payment.marksInvoicePaid, true),
+            ),
+          ),
+      ]),
+    )
     return yield* getInvoice(inv.id)
   })
 

@@ -9,8 +9,9 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
 import { invoiceIntervals, rentIntervals, tenantKinds } from '#/features/leases/options'
+import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
-import { organization } from './auth-schema'
+import { organization, user } from './auth-schema'
 
 export * from './auth-schema'
 
@@ -241,8 +242,66 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   lease: one(lease, { fields: [invoice.leaseId], references: [lease.id] }),
   tenant: one(tenant, { fields: [invoice.tenantId], references: [tenant.id] }),
   lines: many(invoiceLine),
+  payments: many(payment),
 }))
 
 export const invoiceLineRelations = relations(invoiceLine, ({ one }) => ({
   invoice: one(invoice, { fields: [invoiceLine.invoiceId], references: [invoice.id] }),
+}))
+
+/** One uploaded bank file (camt.054). */
+export const paymentImport = sqliteTable(
+  'payment_import',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    fileName: text('file_name').notNull(),
+    messageId: text('message_id'),
+    importedByUserId: text('imported_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    paymentCount: integer('payment_count').notNull(),
+    duplicateCount: integer('duplicate_count').notNull(),
+    totalOre: integer('total_ore').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index('payment_import_org_idx').on(t.organizationId, t.createdAt)],
+)
+
+// Incoming payments are accounting records like invoices: never deleted, only re-classified.
+export const payment = sqliteTable(
+  'payment',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    importId: text('import_id')
+      .notNull()
+      .references(() => paymentImport.id),
+    // The bank's own id for the transaction; a payment is imported at most once.
+    bankReference: text('bank_reference').notNull(),
+    bookingDate: text('booking_date').notNull(),
+    amountOre: integer('amount_ore').notNull(),
+    reference: text('reference'),
+    payerName: text('payer_name'),
+    status: text('status', { enum: paymentStatuses }).notNull(),
+    note: text('note'),
+    invoiceId: text('invoice_id').references(() => invoice.id),
+    // True when this payment is what marked the invoice paid, so undoing it can reopen the invoice.
+    marksInvoicePaid: integer('marks_invoice_paid', { mode: 'boolean' }).notNull().default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('payment_org_bank_reference_uq').on(t.organizationId, t.bankReference),
+    index('payment_org_status_idx').on(t.organizationId, t.status),
+    index('payment_invoice_idx').on(t.invoiceId),
+  ],
+)
+
+export const paymentImportRelations = relations(paymentImport, ({ many }) => ({
+  payments: many(payment),
+}))
+
+export const paymentRelations = relations(payment, ({ one }) => ({
+  import: one(paymentImport, { fields: [payment.importId], references: [paymentImport.id] }),
+  invoice: one(invoice, { fields: [payment.invoiceId], references: [invoice.id] }),
 }))

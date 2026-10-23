@@ -36,6 +36,9 @@ function AppLayout() {
             <Link to="/invoices" className="text-muted-foreground [&.active]:text-foreground">
               Avier
             </Link>
+            <Link to="/payments" className="text-muted-foreground [&.active]:text-foreground">
+              Betalningar
+            </Link>
             <Link to="/team" className="text-muted-foreground [&.active]:text-foreground">
               Användare
             </Link>

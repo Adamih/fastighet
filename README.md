@@ -47,6 +47,7 @@ Email addresses must be verified before signing in. No real email is sent yet: t
 | `db:migrate:local` / `db:migrate:remote` | Apply migrations to local / remote D1 via wrangler |
 | `db:reset` | Wipe the local D1 database, migrate and seed it (never touches remote) |
 | `db:seed` | Fill an empty local database with demo data (`scripts/db-seed.ts`) |
+| `payments:sample` | Write `.wrangler/sample-camt054.xml`, a bank file paying the local open invoices (one 100 kr short, plus two unknown payments), to try the import under Betalningar |
 | `auth:generate` | Regenerate `src/db/auth-schema.ts` after changing Better Auth plugins |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` |
 | `email:dev` | react-email preview server for `src/emails` at http://localhost:3001 |
