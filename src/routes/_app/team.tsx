@@ -12,9 +12,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
+import { useCan } from '#/features/auth/use-can'
 import { teamQuery } from '#/features/team/functions'
 import {
-  canManageTeam,
   type InvitableRole,
   invitableRoles,
   memberActions,
@@ -35,7 +35,8 @@ type TeamMember = { id: string; role: string; name: string; email: string; isSel
 function TeamPage() {
   const { app } = Route.useRouteContext()
   const { data: team } = useSuspenseQuery(teamQuery())
-  const manage = canManageTeam(app.organization.role)
+  const can = useCan()
+  const manage = can({ member: ['update'] }) || can({ member: ['delete'] })
   const ownerCount = team.members.filter((m) => m.role === 'owner').length
 
   const queryClient = useQueryClient()
@@ -92,9 +93,12 @@ function TeamPage() {
       </div>
 
       {team.invitations.length > 0 && (
-        <PendingInvitations invitations={team.invitations} manage={manage} />
+        <PendingInvitations
+          invitations={team.invitations}
+          manage={can({ invitation: ['cancel'] })}
+        />
       )}
-      {manage && <InviteForm />}
+      {can({ invitation: ['create'] }) && <InviteForm />}
     </div>
   )
 }

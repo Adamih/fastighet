@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { DeleteButton } from '#/components/delete-button'
+import { useCan } from '#/features/auth/use-can'
 import { deletePropertyFn, propertyQuery, updatePropertyFn } from '#/features/properties/functions'
 import { PropertyForm } from '#/features/properties/property-form'
-import { canManageTeam } from '#/features/team/roles'
 
 // `$propertyId_` keeps this page out of the property page's layout.
 export const Route = createFileRoute('/_app/properties/$propertyId_/edit')({
@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_app/properties/$propertyId_/edit')({
 
 function EditPropertyPage() {
   const { propertyId } = Route.useParams()
-  const { app } = Route.useRouteContext()
+  const canManage = useCan()({ property: ['manage'] })
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -64,7 +64,7 @@ function EditPropertyPage() {
         onSubmit={(value) => update.mutateAsync({ data: { propertyId, ...value } })}
       />
 
-      {canManageTeam(app.organization.role) && (
+      {canManage && (
         <section className="grid gap-2 border-t pt-6">
           <h2 className="font-medium">Ta bort</h2>
           <p className="text-muted-foreground text-sm">

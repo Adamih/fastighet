@@ -1,8 +1,10 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
 import { invoice, invoiceLine, lease, payment } from '#/db/schema'
-import { getSettings, type Settings } from '#/features/settings/program'
+import { loadSettings, type Settings } from '#/features/settings/program'
 import { formatSek } from '#/lib/money'
+import type { Permissions } from '#/lib/permissions'
+import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery } from '#/server/scoped'
@@ -21,14 +23,20 @@ import {
 } from './rules'
 import type { CreateInvoiceRunInput, ListInvoicesInput, MarkPaidInput } from './schemas'
 
+const read: Permissions = { invoice: ['read'] }
+const manage: Permissions = { invoice: ['manage'] }
+/** A run reads every lease, so it also needs to be allowed to read leases. */
+const runInvoices: Permissions = { invoice: ['manage'], lease: ['read'] }
+
 // ---------------------------------------------------------------------------------------------
 // Invoice runs
 
 /** What a run for `month` would invoice. Leases already invoiced for the period are flagged. */
 export const previewInvoiceRun = (month: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(runInvoices)
     const issueDate = yield* today
-    const settings = yield* getSettings
+    const settings = yield* loadSettings
 
     const leases = yield* orgQuery((db, organizationId) =>
       db.query.lease.findMany({
@@ -90,6 +98,7 @@ const CHUNK_SIZE = 25
 
 export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(runInvoices)
     const preview = yield* previewInvoiceRun(input.month)
     if (!preview.canInvoice) {
       return yield* new Conflict({
@@ -186,6 +195,7 @@ const toView = <R extends typeof invoice.$inferSelect>(row: R, on: string) => ({
 
 export const listInvoices = (input: ListInvoicesInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(read)
     const rows = yield* orgQuery((db, organizationId) =>
       db.query.invoice.findMany({
         where: and(
@@ -202,6 +212,7 @@ export const listInvoices = (input: ListInvoicesInput) =>
 
 export const getInvoice = (invoiceId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(read)
     const row = yield* orgQuery((db, organizationId) =>
       db.query.invoice.findFirst({
         where: and(eq(invoice.id, invoiceId), eq(invoice.organizationId, organizationId)),
@@ -222,8 +233,10 @@ export const getInvoice = (invoiceId: string) =>
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'invoice', id: invoiceId })
-    const seller = yield* getSettings
-    return { ...toView(row, yield* today), seller }
+    const seller = yield* loadSettings
+    // Bank payments are listed only for those who may read payments.
+    const payments = (yield* hasPermission({ payment: ['read'] })) ? row.payments : []
+    return { ...toView(row, yield* today), payments, seller }
   })
 
 export type InvoiceView = Effect.Success<ReturnType<typeof getInvoice>>
@@ -254,6 +267,7 @@ export function sellerDetails(seller: Settings, hasVat: boolean): string[] {
  */
 export const emailInvoice = (invoiceId: string, options: { skipWithoutEmail?: boolean } = {}) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
     if (inv.status === 'void') {
       return yield* new Conflict({ message: 'En makulerad avi kan inte skickas' })
@@ -305,6 +319,7 @@ const updateInvoice = (invoiceId: string, values: Partial<typeof invoice.$inferI
 
 export const markInvoicePaid = (input: MarkPaidInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const inv = yield* getInvoice(input.invoiceId)
     if (inv.status === 'void') return yield* new Conflict({ message: 'Avin är makulerad' })
     if (inv.status === 'paid') return yield* new Conflict({ message: 'Avin är redan betald' })
@@ -317,6 +332,7 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
 
 export const unmarkInvoicePaid = (invoiceId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
     if (inv.status !== 'paid') return yield* new Conflict({ message: 'Avin är inte betald' })
     // A bank payment that paid the invoice goes back to "needs attention" with it.
@@ -344,6 +360,7 @@ export const unmarkInvoicePaid = (invoiceId: string) =>
 /** Voids an unpaid invoice. It keeps its number; credit notes are not supported yet. */
 export const voidInvoice = (invoiceId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
     if (inv.status === 'void') return yield* new Conflict({ message: 'Avin är redan makulerad' })
     if (inv.status === 'paid') {

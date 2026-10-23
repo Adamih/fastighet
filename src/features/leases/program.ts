@@ -1,7 +1,8 @@
 import { and, count, desc, eq, inArray, min, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, lease, leaseUnit, tenant, unit } from '#/db/schema'
-import { requireManager } from '#/server/authorize'
+import type { Permissions } from '#/lib/permissions'
+import { requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
@@ -36,7 +37,11 @@ const toView = (row: LeaseRow, on: string) => ({
 
 export type LeaseView = ReturnType<typeof toView>
 
+const read: Permissions = { lease: ['read'] }
+const manage: Permissions = { lease: ['manage'] }
+
 export const listLeases = Effect.gen(function* () {
+  yield* requirePermission(read)
   const rows = yield* orgQuery((db, organizationId) =>
     db.query.lease.findMany({
       where: eq(lease.organizationId, organizationId),
@@ -50,6 +55,7 @@ export const listLeases = Effect.gen(function* () {
 
 export const getLease = (leaseId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(read)
     const row = yield* orgQuery((db, organizationId) =>
       db.query.lease.findFirst({
         where: and(eq(lease.id, leaseId), eq(lease.organizationId, organizationId)),
@@ -118,6 +124,7 @@ const checkLeaseTerms = (
 
 export const createLease = (input: CreateLeaseInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const extensionMonths = input.endDate ? input.extensionMonths : null
 
     const owner = yield* orgQuery((db, organizationId) =>
@@ -179,6 +186,7 @@ const invoiceHistory = (leaseId: string) =>
  */
 export const updateLease = (input: UpdateLeaseInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const current = yield* getLease(input.leaseId)
     const extensionMonths = input.endDate ? input.extensionMonths : null
 
@@ -224,6 +232,7 @@ export const updateLease = (input: UpdateLeaseInput) =>
 
 export const terminateLease = (input: TerminateLeaseInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const current = yield* getLease(input.leaseId)
     if (current.moveOutDate) {
       return yield* new Conflict({
@@ -257,6 +266,7 @@ export const terminateLease = (input: TerminateLeaseInput) =>
  */
 export const withdrawTermination = (leaseId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const current = yield* getLease(leaseId)
     if (!current.moveOutDate) return yield* new Conflict({ message: 'Avtalet är inte uppsagt' })
     if (current.status === 'ended') {
@@ -286,7 +296,7 @@ export const withdrawTermination = (leaseId: string) =>
 /** Leases that were ever invoiced are accounting history; terminate them instead. */
 export const deleteLease = (leaseId: string) =>
   Effect.gen(function* () {
-    yield* requireManager
+    yield* requirePermission(manage)
     const current = yield* getLease(leaseId)
     const history = yield* invoiceHistory(current.id)
     if (history.total > 0) {

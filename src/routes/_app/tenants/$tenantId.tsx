@@ -2,9 +2,9 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { DeleteButton } from '#/components/delete-button'
+import { useCan } from '#/features/auth/use-can'
 import { formatPeriod, formatRent, LeaseStatusBadge } from '#/features/leases/components'
 import { tenantKindLabels } from '#/features/leases/options'
-import { canManageTeam } from '#/features/team/roles'
 import { deleteTenantFn, tenantQuery, updateTenantFn } from '#/features/tenants/functions'
 import { TenantForm, tenantToInput } from '#/features/tenants/tenant-form'
 
@@ -16,7 +16,7 @@ export const Route = createFileRoute('/_app/tenants/$tenantId')({
 
 function TenantPage() {
   const { tenantId } = Route.useParams()
-  const { app } = Route.useRouteContext()
+  const canManage = useCan()({ tenant: ['manage'] })
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -99,7 +99,7 @@ function TenantPage() {
         {saved && <p className="text-emerald-700 text-sm dark:text-emerald-300">Sparat.</p>}
       </section>
 
-      {canManageTeam(app.organization.role) && (
+      {canManage && (
         <section className="grid max-w-xl gap-2">
           {tenant.leases.length > 0 ? (
             <p className="text-muted-foreground text-sm">

@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { DeleteButton } from '#/components/delete-button'
+import { useCan } from '#/features/auth/use-can'
 import { deleteLeaseFn, leaseQuery, updateLeaseFn } from '#/features/leases/functions'
 import { LeaseForm } from '#/features/leases/lease-form'
 import { unitsQuery } from '#/features/properties/functions'
-import { canManageTeam } from '#/features/team/roles'
 
 // `$leaseId_` keeps this page out of the lease page's layout.
 export const Route = createFileRoute('/_app/leases/$leaseId_/edit')({
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_app/leases/$leaseId_/edit')({
 
 function EditLeasePage() {
   const { leaseId } = Route.useParams()
-  const { app } = Route.useRouteContext()
+  const canManage = useCan()({ lease: ['manage'] })
   const { data: lease } = useSuspenseQuery(leaseQuery(leaseId))
   const { data: units } = useSuspenseQuery(unitsQuery())
   const queryClient = useQueryClient()
@@ -82,7 +82,7 @@ function EditLeasePage() {
         }
       />
 
-      {canManageTeam(app.organization.role) && (
+      {canManage && (
         <section className="grid gap-2 border-t pt-6">
           <h2 className="font-medium">Ta bort</h2>
           <p className="text-muted-foreground text-sm">

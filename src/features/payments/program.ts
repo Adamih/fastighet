@@ -1,6 +1,8 @@
 import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, payment, paymentImport } from '#/db/schema'
+import type { Permissions } from '#/lib/permissions'
+import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
@@ -18,11 +20,17 @@ const chunks = <T>(items: readonly T[], size: number): T[][] =>
     items.slice(i * size, i * size + size),
   )
 
+const read: Permissions = { payment: ['read'] }
+const manage: Permissions = { payment: ['manage'] }
+/** Booking a payment changes whether an invoice is paid, so it needs both. */
+const book: Permissions = { payment: ['manage'], invoice: ['manage'] }
+
 // ---------------------------------------------------------------------------------------------
 // Import
 
 export const importPayments = (input: ImportPaymentsInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(book)
     const me = yield* CurrentUser
     const parsed = yield* Effect.try({
       try: () => parseCamt054(input.content),
@@ -157,47 +165,61 @@ const statusesFor: Record<PaymentFilter, readonly (typeof payment.$inferSelect)[
 }
 
 export const listPayments = (filter: PaymentFilter) =>
-  orgQuery((db, organizationId) =>
-    db.query.payment.findMany({
-      where: and(
-        eq(payment.organizationId, organizationId),
-        inArray(payment.status, [...statusesFor[filter]]),
-      ),
-      orderBy: [desc(payment.bookingDate), desc(payment.createdAt)],
-      with: {
-        invoice: { columns: { id: true, number: true, recipientName: true, totalOre: true } },
-      },
-    }),
-  )
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const rows = yield* orgQuery((db, organizationId) =>
+      db.query.payment.findMany({
+        where: and(
+          eq(payment.organizationId, organizationId),
+          inArray(payment.status, [...statusesFor[filter]]),
+        ),
+        orderBy: [desc(payment.bookingDate), desc(payment.createdAt)],
+        with: {
+          invoice: { columns: { id: true, number: true, recipientName: true, totalOre: true } },
+        },
+      }),
+    )
+    // The linked invoice's details are shown only to those who may read invoices.
+    if (yield* hasPermission({ invoice: ['read'] })) return rows
+    return rows.map((r) => ({ ...r, invoice: null }))
+  })
 
-export const listPaymentImports = orgQuery((db, organizationId) =>
-  db.query.paymentImport.findMany({
-    where: eq(paymentImport.organizationId, organizationId),
-    orderBy: desc(paymentImport.createdAt),
-    limit: 20,
-  }),
+export const listPaymentImports = requirePermission(read).pipe(
+  Effect.andThen(
+    orgQuery((db, organizationId) =>
+      db.query.paymentImport.findMany({
+        where: eq(paymentImport.organizationId, organizationId),
+        orderBy: desc(paymentImport.createdAt),
+        limit: 20,
+      }),
+    ),
+  ),
 )
 
 /** Invoices a payment can be linked to by hand. */
-export const listOpenInvoices = orgQuery((db, organizationId) =>
-  db
-    .select({
-      id: invoice.id,
-      number: invoice.number,
-      ocr: invoice.ocr,
-      recipientName: invoice.recipientName,
-      totalOre: invoice.totalOre,
-      dueDate: invoice.dueDate,
-    })
-    .from(invoice)
-    .where(
-      and(
-        eq(invoice.organizationId, organizationId),
-        isNull(invoice.paidOn),
-        isNull(invoice.voidedAt),
-      ),
-    )
-    .orderBy(desc(invoice.number)),
+export const listOpenInvoices = requirePermission({ ...book, invoice: ['read', 'manage'] }).pipe(
+  Effect.andThen(
+    orgQuery((db, organizationId) =>
+      db
+        .select({
+          id: invoice.id,
+          number: invoice.number,
+          ocr: invoice.ocr,
+          recipientName: invoice.recipientName,
+          totalOre: invoice.totalOre,
+          dueDate: invoice.dueDate,
+        })
+        .from(invoice)
+        .where(
+          and(
+            eq(invoice.organizationId, organizationId),
+            isNull(invoice.paidOn),
+            isNull(invoice.voidedAt),
+          ),
+        )
+        .orderBy(desc(invoice.number)),
+    ),
+  ),
 )
 
 // ---------------------------------------------------------------------------------------------
@@ -225,6 +247,7 @@ const setPayment = (paymentId: string, values: Partial<typeof payment.$inferInse
 /** Books a payment that needs attention against an open invoice, which becomes paid. */
 export const assignPayment = (input: AssignPaymentInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(book)
     const p = yield* getPayment(input.paymentId)
     if (p.status === 'matched') {
       return yield* new Conflict({ message: 'Betalningen är redan kopplad till en avi' })
@@ -269,6 +292,7 @@ export const assignPayment = (input: AssignPaymentInput) =>
 /** For payments that are not rent, e.g. a deposit or a refund handled elsewhere. */
 export const ignorePayment = (paymentId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const p = yield* getPayment(paymentId)
     if (p.status === 'matched') {
       return yield* new Conflict({ message: 'Ångra kopplingen innan du ignorerar betalningen' })
@@ -279,6 +303,7 @@ export const ignorePayment = (paymentId: string) =>
 /** Puts a matched or ignored payment back for handling; reopens the invoice it had paid. */
 export const undoPayment = (paymentId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(book)
     const p = yield* getPayment(paymentId)
     if (p.status !== 'matched' && p.status !== 'ignored') {
       return yield* new Conflict({ message: 'Betalningen är inte hanterad' })

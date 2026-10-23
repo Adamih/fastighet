@@ -6,6 +6,7 @@ import { asc, eq } from 'drizzle-orm'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { stockholmDate } from '#/lib/dates'
+import { ac, roles } from '#/lib/permissions'
 import type { AnyEmail } from '#/server/mail/mailer'
 
 /**
@@ -75,6 +76,9 @@ export function createAuth(
     },
     plugins: [
       organization({
+        // Roles and permissions shared with the server's `requirePermission` and the UI.
+        ac,
+        roles,
         creatorRole: 'owner',
         requireEmailVerificationOnInvitation: true,
         sendInvitationEmail: async (data) =>

@@ -2,23 +2,31 @@ import { and, asc, desc, eq, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { lease, tenant } from '#/db/schema'
 import { leaseStatus } from '#/features/leases/terms'
+import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
-import { requireManager } from '#/server/authorize'
+import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
 import { formatOrganizationNumber } from './organization-number'
 import type { CreateTenantInput, UpdateTenantInput } from './schemas'
 
-export const listTenants = orgQuery((db, organizationId) =>
-  db.query.tenant.findMany({
-    where: eq(tenant.organizationId, organizationId),
-    orderBy: asc(tenant.name),
-  }),
+const read: Permissions = { tenant: ['read'] }
+const manage: Permissions = { tenant: ['manage'] }
+
+export const listTenants = requirePermission(read).pipe(
+  Effect.andThen(
+    orgQuery((db, organizationId) =>
+      db.query.tenant.findMany({
+        where: eq(tenant.organizationId, organizationId),
+        orderBy: asc(tenant.name),
+      }),
+    ),
+  ),
 )
 
-/** The tenant with their leases, newest first. */
-export const getTenant = (tenantId: string) =>
+/** The tenant with all their leases, for the checks below. No permission check of its own. */
+const loadTenant = (tenantId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
       db.query.tenant.findFirst({
@@ -32,6 +40,15 @@ export const getTenant = (tenantId: string) =>
       ...row,
       leases: row.leases.map((l) => ({ ...l, status: leaseStatus(l, on) })),
     }
+  })
+
+/** The tenant with their leases, newest first; the leases only for those who may read leases. */
+export const getTenant = (tenantId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const found = yield* loadTenant(tenantId)
+    const showLeases = yield* hasPermission({ lease: ['read'] })
+    return { ...found, leases: showLeases ? found.leases : [] }
   })
 
 const normalize = (input: CreateTenantInput) => ({
@@ -71,6 +88,7 @@ const ensureUniqueOrganizationNumber = (organizationNumber: string | null, excep
 
 export const createTenant = (input: CreateTenantInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const values = normalize(input)
     yield* ensureUniqueOrganizationNumber(values.organizationNumber)
     const [created] = yield* orgQuery((db, organizationId) =>
@@ -85,7 +103,8 @@ export const createTenant = (input: CreateTenantInput) =>
 /** Issued invoices keep the recipient details they were created with. */
 export const updateTenant = (input: UpdateTenantInput) =>
   Effect.gen(function* () {
-    const current = yield* getTenant(input.tenantId)
+    yield* requirePermission(manage)
+    const current = yield* loadTenant(input.tenantId)
     const values = normalize(input)
     yield* ensureUniqueOrganizationNumber(values.organizationNumber, current.id)
     yield* orgQuery((db, organizationId) =>
@@ -99,8 +118,8 @@ export const updateTenant = (input: UpdateTenantInput) =>
 
 export const deleteTenant = (tenantId: string) =>
   Effect.gen(function* () {
-    yield* requireManager
-    const current = yield* getTenant(tenantId)
+    yield* requirePermission(manage)
+    const current = yield* loadTenant(tenantId)
     if (current.leases.length > 0) {
       return yield* new Conflict({
         message: `${current.name} har avtal och kan inte tas bort. Ta bort avtalen först.`,

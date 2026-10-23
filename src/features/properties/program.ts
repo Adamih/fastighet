@@ -2,8 +2,9 @@ import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { leaseUnit, property, unit } from '#/db/schema'
 import { occupyingLease } from '#/features/leases/terms'
+import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
-import { requireManager } from '#/server/authorize'
+import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
@@ -15,15 +16,24 @@ import type {
   UpdateUnitInput,
 } from './schemas'
 
-export const listProperties = orgQuery((db, organizationId) =>
-  db.query.property.findMany({
-    where: eq(property.organizationId, organizationId),
-    orderBy: asc(property.designation),
-  }),
+// Properties and their units share one permission.
+const read: Permissions = { property: ['read'] }
+const manage: Permissions = { property: ['manage'] }
+
+export const listProperties = requirePermission(read).pipe(
+  Effect.andThen(
+    orgQuery((db, organizationId) =>
+      db.query.property.findMany({
+        where: eq(property.organizationId, organizationId),
+        orderBy: asc(property.designation),
+      }),
+    ),
+  ),
 )
 
 export const getProperty = (propertyId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(read)
     const found = yield* orgQuery((db, organizationId) =>
       db.query.property.findFirst({
         where: and(eq(property.id, propertyId), eq(property.organizationId, organizationId)),
@@ -43,7 +53,10 @@ export const getProperty = (propertyId: string) =>
       }),
     )
     const on = yield* today
+    // Who occupies each unit comes from the leases, so it is only shown to those who may read them.
+    const showOccupancy = yield* hasPermission({ lease: ['read'] })
     const units = rows.map(({ leases, ...u }) => {
+      if (!showOccupancy) return { ...u, occupancy: null }
       const occupant = occupyingLease(
         leases.map((l) => l.lease),
         on,
@@ -65,6 +78,7 @@ export const getProperty = (propertyId: string) =>
 
 /** Every unit in the company with its property, for pickers such as the lease form. */
 export const listUnits = Effect.gen(function* () {
+  yield* requirePermission(read)
   const rows = yield* orgQuery((db, organizationId) =>
     db.query.unit.findMany({
       where: eq(unit.organizationId, organizationId),
@@ -101,6 +115,7 @@ const ensureUniqueDesignation = (designation: string, exceptId?: string) =>
 
 export const createProperty = (input: CreatePropertyInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const values = normalizeProperty(input)
     yield* ensureUniqueDesignation(values.designation)
     const [created] = yield* orgQuery((db, organizationId) =>
@@ -114,6 +129,7 @@ export const createProperty = (input: CreatePropertyInput) =>
 
 export const updateProperty = (input: UpdatePropertyInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const current = yield* getProperty(input.propertyId)
     const values = normalizeProperty(input)
     yield* ensureUniqueDesignation(values.designation, current.id)
@@ -143,7 +159,7 @@ const leasedUnitLabels = (unitIds: readonly string[]) =>
 /** Deletes the property and its units, unless any unit has ever been leased. */
 export const deleteProperty = (propertyId: string) =>
   Effect.gen(function* () {
-    yield* requireManager
+    yield* requirePermission(manage)
     const current = yield* getProperty(propertyId)
     const leased = yield* leasedUnitLabels(current.units.map((u) => u.id))
     if (leased.length > 0) {
@@ -160,6 +176,7 @@ export const deleteProperty = (propertyId: string) =>
 
 export const getUnit = (unitId: string) =>
   Effect.gen(function* () {
+    yield* requirePermission(read)
     const row = yield* orgQuery((db, organizationId) =>
       db.query.unit.findFirst({
         where: and(eq(unit.id, unitId), eq(unit.organizationId, organizationId)),
@@ -173,6 +190,7 @@ export const getUnit = (unitId: string) =>
 
 export const updateUnit = (input: UpdateUnitInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     const current = yield* getUnit(input.unitId)
     const label = input.label.trim()
     const clash = yield* orgQuery((db, organizationId) =>
@@ -198,7 +216,7 @@ export const updateUnit = (input: UpdateUnitInput) =>
 
 export const deleteUnit = (unitId: string) =>
   Effect.gen(function* () {
-    yield* requireManager
+    yield* requirePermission(manage)
     const current = yield* getUnit(unitId)
     if (current.hasLeases) {
       return yield* new Conflict({
@@ -213,6 +231,7 @@ export const deleteUnit = (unitId: string) =>
 
 export const createUnit = (input: CreateUnitInput) =>
   Effect.gen(function* () {
+    yield* requirePermission(manage)
     // Confirms the property belongs to the current company before attaching anything to it.
     const parent = yield* getProperty(input.propertyId)
     const label = input.label.trim()

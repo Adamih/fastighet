@@ -7,9 +7,9 @@ import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import { Label } from '#/components/ui/label'
 import { Switch } from '#/components/ui/switch'
+import { useCan } from '#/features/auth/use-can'
 import { settingsQuery, updateSettingsFn } from '#/features/settings/functions'
 import { UpdateSettingsInput } from '#/features/settings/schemas'
-import { canManageTeam } from '#/features/team/roles'
 
 export const Route = createFileRoute('/_app/settings')({
   loader: ({ context }) => context.queryClient.ensureQueryData(settingsQuery()),
@@ -19,9 +19,9 @@ export const Route = createFileRoute('/_app/settings')({
 const validator = Schema.toStandardSchemaV1(UpdateSettingsInput)
 
 function SettingsPage() {
-  const { app } = Route.useRouteContext()
+  const canManage = useCan()({ settings: ['manage'] })
   const { data: settings } = useSuspenseQuery(settingsQuery())
-  const canEdit = canManageTeam(app.organization.role)
+  const canEdit = canManage
   const queryClient = useQueryClient()
   const [saved, setSaved] = useState(false)
 

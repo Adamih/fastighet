@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { DeleteButton } from '#/components/delete-button'
+import { useCan } from '#/features/auth/use-can'
 import {
   deleteUnitFn,
   propertyQuery,
@@ -8,7 +9,6 @@ import {
   updateUnitFn,
 } from '#/features/properties/functions'
 import { UnitForm } from '#/features/properties/unit-form'
-import { canManageTeam } from '#/features/team/roles'
 
 export const Route = createFileRoute('/_app/units/$unitId/edit')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(unitQuery(params.unitId)),
@@ -17,7 +17,7 @@ export const Route = createFileRoute('/_app/units/$unitId/edit')({
 
 function EditUnitPage() {
   const { unitId } = Route.useParams()
-  const { app } = Route.useRouteContext()
+  const canManage = useCan()({ property: ['manage'] })
   const { data: unit } = useSuspenseQuery(unitQuery(unitId))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -65,7 +65,7 @@ function EditUnitPage() {
         onSubmit={(value) => update.mutateAsync({ data: { unitId, ...value } })}
       />
 
-      {canManageTeam(app.organization.role) && (
+      {canManage && (
         <section className="grid gap-2 border-t pt-6">
           <h2 className="font-medium">Ta bort</h2>
           {unit.hasLeases ? (

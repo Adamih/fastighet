@@ -4,12 +4,16 @@ import { organizationSettings } from '#/db/schema'
 import { formatBankgiro } from '#/features/invoicing/rules'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
 import { blankToNull } from '#/lib/schemas'
-import { requireManager } from '#/server/authorize'
+import { requirePermission } from '#/server/authorize'
 import { orgQuery } from '#/server/scoped'
 import { CurrentOrganization } from '#/server/services'
 import type { UpdateSettingsInput } from './schemas'
 
-export const getSettings = Effect.gen(function* () {
+/**
+ * The seller details, without a permission check: invoices print them for anyone who may work
+ * with invoices. The settings page itself goes through `getSettings`.
+ */
+export const loadSettings = Effect.gen(function* () {
   const organization = yield* CurrentOrganization
   const row = yield* orgQuery((db, organizationId) =>
     db.query.organizationSettings.findFirst({
@@ -29,11 +33,15 @@ export const getSettings = Effect.gen(function* () {
   }
 })
 
-export type Settings = Effect.Success<typeof getSettings>
+export type Settings = Effect.Success<typeof loadSettings>
+
+export const getSettings = requirePermission({ settings: ['read'] }).pipe(
+  Effect.andThen(loadSettings),
+)
 
 export const updateSettings = (input: UpdateSettingsInput) =>
   Effect.gen(function* () {
-    yield* requireManager
+    yield* requirePermission({ settings: ['manage'] })
     const values = {
       organizationNumber: input.organizationNumber.trim()
         ? formatOrganizationNumber(input.organizationNumber)
@@ -52,5 +60,5 @@ export const updateSettings = (input: UpdateSettingsInput) =>
         .values({ organizationId, ...values })
         .onConflictDoUpdate({ target: organizationSettings.organizationId, set: values }),
     )
-    return yield* getSettings
+    return yield* loadSettings
   })
