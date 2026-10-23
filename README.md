@@ -8,15 +8,14 @@ Property management SaaS for small Swedish real estate companies.
 
 ```bash
 mise install                     # installs bun
-bun install
-cp .dev.vars.example .dev.vars   # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
-bun run db:reset                 # creates the local D1 database under .wrangler/ and seeds it
-bun run dev                      # http://localhost:3000
+mise run setup                   # installs dependencies and creates .dev.vars if missing
+mise run db:reset                 # creates the local D1 database under .wrangler/ and seeds it
+mise run dev                     # http://localhost:3000
 ```
 
 ### Seed data
 
-`bun run db:reset` deletes the local database, applies every migration and runs `bun run db:seed`. It touches only the local database. Stop `bun run dev` first and start it again afterwards, because the dev server keeps the old database file open. Wrangler asks you to confirm the migrations.
+`mise run db:reset` deletes the local database, applies every migration and runs `mise run db:seed`. It touches only the local database. Stop `mise run dev` first and start it again afterwards, because the dev server keeps the old database file open. Wrangler asks you to confirm the migrations.
 
 The seed creates Exempel Fastigheter AB with dates relative to today:
 
@@ -30,16 +29,20 @@ The seed creates Exempel Fastigheter AB with dates relative to today:
   - a lease that starts next month, for a tenant without email
 - **Invoice:** one rent notice for this month, emailed and unpaid, so it shows as overdue.
 
-`bun run db:seed` on its own refuses to run on a database that already has users.
+`mise run db:seed` on its own refuses to run on a database that already has users.
 
-To start from scratch instead, run `bun run db:migrate:local`, sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
+To start from scratch instead, run `mise run db:migrate:local`, sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
 
-Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `bun run dev` console. Open the verification, password-reset or invitation link from there.
+Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `mise run dev` console. Open the verification, password-reset or invitation link from there.
 
-## Scripts
+## Commands
 
-| Script | What it does |
+Run `mise tasks` to list all tasks. Every package script has a matching mise task; the underlying Bun scripts remain available. `mise run setup` preserves an existing `.dev.vars` and creates a random `BETTER_AUTH_SECRET` only when that file is missing.
+
+| Task | What it does |
 |---|---|
+| `setup` | Install dependencies and create local auth configuration if missing |
+| `verify` | Run type checking, lint and all tests in sequence |
 | `dev` / `build` / `preview` | Vite dev server (runs in workerd), production build, preview the build |
 | `deploy` | Build and `wrangler deploy` |
 | `typecheck` · `check` · `check:fix` · `test` | `tsc`, Biome lint + format, `bun test` |
@@ -49,6 +52,7 @@ Email addresses must be verified before signing in. No real email is sent yet: t
 | `db:seed` | Fill an empty local database with demo data (`scripts/db-seed.ts`) |
 | `payments:sample` | Write `.wrangler/sample-camt054.xml`, a bank file paying the local open invoices (one 100 kr short, plus two unknown payments), to try the import under Betalningar |
 | `auth:generate` | Regenerate `src/db/auth-schema.ts` after changing Better Auth plugins |
+| `generate-routes` | Regenerate TanStack Router routes |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` |
 | `email:dev` | react-email preview server for `src/emails` at http://localhost:3001 |
 
@@ -72,4 +76,4 @@ A request flows: route loader → TanStack Query → server function (validates 
 
 1. `bunx wrangler d1 create fastighet` and put the returned id in `wrangler.jsonc`.
 2. Set `BETTER_AUTH_URL` in `wrangler.jsonc` `vars` to the production URL, then `bunx wrangler secret put BETTER_AUTH_SECRET`.
-3. `bun run db:migrate:remote && bun run deploy`.
+3. `mise run db:migrate:remote && mise run deploy`.

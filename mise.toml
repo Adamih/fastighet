@@ -1,2 +1,90 @@
 [tools]
 bun = "latest"
+
+[tasks.setup]
+description = "Install dependencies and create local auth configuration if missing"
+run = [
+  "bun install --frozen-lockfile",
+  '''
+if [ ! -f .dev.vars ]; then
+  secret=$(openssl rand -base64 32) || exit 1
+  printf 'BETTER_AUTH_SECRET=%s\n' "$secret" > .dev.vars
+fi
+''',
+]
+
+[tasks.dev]
+description = "Start the app at http://localhost:3000"
+run = "bun run dev"
+
+[tasks.build]
+description = "Build the app for production"
+run = "bun run build"
+
+[tasks.preview]
+description = "Preview the production build locally"
+run = "bun run preview"
+
+[tasks.deploy]
+description = "Build and deploy the app to Cloudflare"
+run = "bun run deploy"
+
+[tasks.typecheck]
+description = "Check TypeScript types"
+run = "bun run typecheck"
+
+[tasks.test]
+description = "Run all tests"
+run = "bun run test"
+
+[tasks.check]
+description = "Check formatting and lint rules"
+run = "bun run check"
+
+[tasks."check:fix"]
+description = "Fix formatting and auto-fixable lint issues"
+run = "bun run check:fix"
+
+[tasks.verify]
+description = "Run type checking, lint and all tests"
+run = ["bun run typecheck", "bun run check", "bun run test"]
+
+[tasks."generate-routes"]
+description = "Regenerate TanStack Router routes"
+run = "bun run generate-routes"
+
+[tasks."cf-typegen"]
+description = "Regenerate Cloudflare binding types"
+run = "bun run cf-typegen"
+
+[tasks."auth:generate"]
+description = "Regenerate the Better Auth database schema"
+run = "bun run auth:generate"
+
+[tasks."db:generate"]
+description = "Generate database migrations from schema changes"
+run = "bun run db:generate"
+
+[tasks."db:migrate:local"]
+description = "Apply migrations to the local database"
+run = "bun run db:migrate:local"
+
+[tasks."db:migrate:remote"]
+description = "Apply migrations to the production database"
+run = "bun run db:migrate:remote"
+
+[tasks."db:seed"]
+description = "Load demo data into an empty local database"
+run = "bun run db:seed"
+
+[tasks."db:reset"]
+description = "Delete the local database, apply migrations and load demo data (stop dev first)"
+run = "bun run db:reset"
+
+[tasks."payments:sample"]
+description = "Generate a sample bank payment file for local testing"
+run = "bun run payments:sample"
+
+[tasks."email:dev"]
+description = "Preview email templates at http://localhost:3001"
+run = "bun run email:dev"
