@@ -41,12 +41,17 @@ export const renderEmail = <T extends TemplateName>(template: T, props: Template
     catch: (cause) => new MailerError({ reason: 'render', cause }),
   })
 
-export const sendEmail = <T extends TemplateName>(input: {
+export interface SendEmailInput<T extends TemplateName = TemplateName> {
   readonly to: string
   readonly template: T
   readonly props: TemplateProps<T>
   readonly replyTo?: string
-}) =>
+}
+
+/** Any template with its matching props, for callers that are not generic over the template. */
+export type AnyEmail = { [T in TemplateName]: SendEmailInput<T> }[TemplateName]
+
+export const sendEmail = <T extends TemplateName>(input: SendEmailInput<T>) =>
   Effect.gen(function* () {
     const rendered = yield* renderEmail(input.template, input.props)
     const mailer = yield* Mailer

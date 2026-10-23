@@ -33,6 +33,9 @@ function AppLayout() {
             <Link to="/leases" className="text-muted-foreground [&.active]:text-foreground">
               Avtal
             </Link>
+            <Link to="/team" className="text-muted-foreground [&.active]:text-foreground">
+              Användare
+            </Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">{app.user.email}</span>

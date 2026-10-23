@@ -16,6 +16,8 @@ bun run dev                      # http://localhost:3000
 
 Sign up at `/login`, create a company at `/onboarding`, then add properties and units.
 
+Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `bun run dev` console. Open the verification, password-reset or invitation link from there.
+
 ## Scripts
 
 | Script | What it does |
