@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { AddForm } from '#/components/add-form'
 import {
   desktopTableClass,
   MobileList,
@@ -33,9 +34,7 @@ function PropertiesPage() {
         subtitle={properties.length > 0 && `${properties.length} fastigheter`}
       />
       {properties.length === 0 ? (
-        <p className="text-muted-foreground">
-          Inga fastigheter ännu.{canManage && ' Lägg till den första nedan.'}
-        </p>
+        <p className="text-muted-foreground">Inga fastigheter ännu.</p>
       ) : (
         <>
           <MobileList>
@@ -83,16 +82,25 @@ function PropertiesPage() {
         </>
       )}
       {canManage && (
-        <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
-          <h2 className="font-medium text-lg">Lägg till fastighet</h2>
-          <PropertyForm
-            defaultValues={emptyProperty}
-            submitLabel="Spara"
-            error={create.error}
-            resetAfterSubmit
-            onSubmit={(value) => create.mutateAsync({ data: value })}
-          />
-        </section>
+        <AddForm
+          title="Lägg till fastighet"
+          description="Lägenheter och lokaler lägger du till på fastighetens sida."
+        >
+          {({ idPrefix, layout, onSaved }) => (
+            <PropertyForm
+              idPrefix={idPrefix}
+              layout={layout}
+              defaultValues={emptyProperty}
+              submitLabel="Spara fastighet"
+              error={create.error}
+              resetAfterSubmit
+              onSubmit={async (value) => {
+                await create.mutateAsync({ data: value })
+                onSaved()
+              }}
+            />
+          )}
+        </AddForm>
       )}
     </div>
   )

@@ -1,17 +1,9 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ChevronRight, Plus, Search, X } from 'lucide-react'
+import { ChevronRight, Search } from 'lucide-react'
 import { useState } from 'react'
+import { AddForm } from '#/components/add-form'
 import { InitialsAvatar } from '#/components/initials-avatar'
-import { Button } from '#/components/ui/button'
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerTitle,
-  DrawerTrigger,
-} from '#/components/ui/drawer'
 import { useCan } from '#/features/auth/use-can'
 import { tenantKindLabels } from '#/features/leases/options'
 import { createTenantFn, tenantsQuery } from '#/features/tenants/functions'
@@ -30,28 +22,12 @@ function TenantsPage() {
   const canManage = useCan()({ tenant: ['manage'] })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const [query, setQuery] = useState('')
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const queryClient = useQueryClient()
   const create = useMutation({
     mutationFn: createTenantFn,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }),
   })
   const visible = tenants.filter((t) => matchesTenant(t, query))
-
-  const form = (idPrefix: string, layout: 'wide' | 'narrow', onSaved?: () => void) => (
-    <TenantForm
-      idPrefix={idPrefix}
-      layout={layout}
-      defaultValues={emptyTenant}
-      submitLabel="Spara hyresgäst"
-      error={create.error}
-      resetAfterSubmit
-      onSubmit={async (value) => {
-        await create.mutateAsync({ data: value })
-        onSaved?.()
-      }}
-    />
-  )
 
   return (
     <div className="grid gap-5 md:gap-7">
@@ -135,54 +111,29 @@ function TenantsPage() {
             </section>
           </>
         )}
-
-        {canManage && (
-          <section
-            aria-labelledby="add-tenant"
-            className="hidden gap-5 rounded-xl border bg-card p-5 md:grid md:max-w-xl lg:p-6"
-          >
-            <div className="grid gap-1">
-              <h2 id="add-tenant" className="font-bold text-[17px]">
-                Lägg till hyresgäst
-              </h2>
-              <p className="text-[13px] text-muted-foreground">
-                Koppla hyresgästen till ett avtal i nästa steg.
-              </p>
-            </div>
-            {form('desktop-', 'wide')}
-          </section>
-        )}
       </div>
 
-      {/* Phone: a floating button opens the form in a drawer. */}
       {canManage && (
-        <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-          <DrawerTrigger asChild>
-            <Button className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 h-13 rounded-2xl px-5 text-[15px] shadow-lg md:hidden">
-              <Plus aria-hidden="true" />
-              Lägg till hyresgäst
-            </Button>
-          </DrawerTrigger>
-          <DrawerContent className="data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-3rem)] data-[vaul-drawer-direction=bottom]:rounded-t-2xl md:hidden">
-            <div className="mt-2 flex items-center justify-between gap-3 border-b py-2 pr-2 pl-5">
-              <DrawerTitle className="font-bold text-lg">Lägg till hyresgäst</DrawerTitle>
-              <DrawerClose asChild>
-                <Button variant="ghost" size="icon" className="size-11" aria-label="Stäng">
-                  <X aria-hidden="true" />
-                </Button>
-              </DrawerClose>
-            </div>
-            <DrawerDescription className="sr-only">
-              Koppla hyresgästen till ett avtal i nästa steg.
-            </DrawerDescription>
-            <div className="overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-              {form('drawer-', 'narrow', () => setDrawerOpen(false))}
-            </div>
-          </DrawerContent>
-        </Drawer>
+        <AddForm
+          title="Lägg till hyresgäst"
+          description="Koppla hyresgästen till ett avtal i nästa steg."
+        >
+          {({ idPrefix, layout, onSaved }) => (
+            <TenantForm
+              idPrefix={idPrefix}
+              layout={layout}
+              defaultValues={emptyTenant}
+              submitLabel="Spara hyresgäst"
+              error={create.error}
+              resetAfterSubmit
+              onSubmit={async (value) => {
+                await create.mutateAsync({ data: value })
+                onSaved()
+              }}
+            />
+          )}
+        </AddForm>
       )}
-      {/* Room for the floating button below the last row. */}
-      {canManage && <div aria-hidden="true" className="h-14 md:hidden" />}
     </div>
   )
 }
