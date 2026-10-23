@@ -6,6 +6,8 @@ import { db } from '#/db'
 import { member, organization } from '#/db/schema'
 import { auth } from '#/lib/auth'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
+import { Mailer } from './mail/mailer'
+import { mailer } from './mail/provider'
 import { query } from './scoped'
 import { type AppServices, CurrentOrganization, CurrentUser, Database } from './services'
 
@@ -60,7 +62,8 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
 
 /**
  * Runs an Effect program inside a server function handler with the signed-in user, their active
- * company and the database provided. Expected failures become redirects or user-facing errors.
+ * company, the database and the mailer provided. Expected failures become redirects or
+ * user-facing errors.
  */
 export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): Promise<A> {
   const exit = await Effect.gen(function* () {
@@ -69,7 +72,11 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
       Effect.provideService(CurrentUser, context.user),
       Effect.provideService(CurrentOrganization, context.organization),
     )
-  }).pipe(Effect.provideService(Database, db), Effect.runPromiseExit)
+  }).pipe(
+    Effect.provideService(Database, db),
+    Effect.provideService(Mailer, mailer),
+    Effect.runPromiseExit,
+  )
 
   if (Exit.isSuccess(exit)) return exit.value
   throw toThrowable(exit.cause)

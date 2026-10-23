@@ -12,6 +12,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Money** is integer öre, never floats. Parse and format with `src/lib/money.ts`.
 - **Dates** are ISO strings (`"2026-10-23"`) in the database, the API and the UI. Use the helpers in `src/lib/dates.ts`. On the server, get today's date from the `today` Effect (`src/server/today.ts`), which uses Stockholm time. Never use `new Date()`, because Workers run in UTC.
 - Shared field schemas (`OptionalText`, `PostalCode`, `IsoDate`, …) and `blankToNull` live in `src/lib/schemas.ts`.
+- **Email.** Send with `sendEmail({ to, template, props })` from `src/server/mail/mailer.ts`. It renders the react-email template and delivers it through the `Mailer` service, which `runApp` provides. Only the mock provider exists so far (`src/server/mail/provider.ts`). It logs emails, including links, and sends nothing.
+  - A new template is a file in `src/emails/` that exports a default component, `Props`, `subject(props)` and `PreviewProps`. Register it in `src/server/mail/templates.ts`.
+  - Use inline styles only. Many email clients ignore stylesheets.
 - **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
 - Use `.validator()` on `createServerFn` (this Start version has no `inputValidator`).
 - Server functions are CSRF-protected (same-origin only). When calling them outside the browser, send `Sec-Fetch-Site: same-origin`.

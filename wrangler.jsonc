@@ -6,7 +6,9 @@
   "main": "@tanstack/react-start/server-entry",
   "observability": { "enabled": true },
   "vars": {
-    "BETTER_AUTH_URL": "http://localhost:3000"
+    "BETTER_AUTH_URL": "http://localhost:3000",
+    // Sender for outgoing email. Use an address on a domain the real provider can send from.
+    "MAIL_FROM": "Fastighet <no-reply@fastighet.localhost>"
   },
   "d1_databases": [
     {

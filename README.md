@@ -27,6 +27,7 @@ Sign up at `/login`, create a company at `/onboarding`, then add properties and 
 | `db:migrate:local` / `db:migrate:remote` | Apply migrations to local / remote D1 via wrangler |
 | `auth:generate` | Regenerate `src/db/auth-schema.ts` after changing Better Auth plugins |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` |
+| `email:dev` | react-email preview server for `src/emails` at http://localhost:3001 |
 
 ## Layout
 
@@ -35,6 +36,8 @@ src/
   db/                 Drizzle schema (domain tables + generated Better Auth tables) and the D1 client
   lib/                Better Auth server config (auth-config.ts / auth.ts) and client
   server/             Effect plumbing: services, typed errors, org-scoped queries, runApp()
+  server/mail/        Mailer service, sendEmail(), template registry, mock provider
+  emails/             react-email templates (Swedish); _components/ holds the shared layout
   features/<name>/    schemas.ts (Effect Schema, shared client/server), program.ts (Effect),
                       functions.ts (server functions + query options)
   routes/             File routes. _app.tsx is the signed-in layout; login/onboarding are public

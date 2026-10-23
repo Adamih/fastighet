@@ -1,5 +1,6 @@
 import { Context } from 'effect'
 import type { Db } from '#/db'
+import type { Mailer } from './mail/mailer'
 
 export class Database extends Context.Service<Database, Db>()('app/Database') {}
 
@@ -14,4 +15,4 @@ export class CurrentOrganization extends Context.Service<
   { readonly id: string; readonly name: string; readonly role: string }
 >()('app/CurrentOrganization') {}
 
-export type AppServices = Database | CurrentUser | CurrentOrganization
+export type AppServices = Database | CurrentUser | CurrentOrganization | Mailer
