@@ -10,11 +10,29 @@ Property management SaaS for small Swedish real estate companies.
 mise install                     # installs bun
 bun install
 cp .dev.vars.example .dev.vars   # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
-bun run db:migrate:local         # creates the local D1 database under .wrangler/
+bun run db:reset                 # creates the local D1 database under .wrangler/ and seeds it
 bun run dev                      # http://localhost:3000
 ```
 
-Sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
+### Seed data
+
+`bun run db:reset` deletes the local database, applies every migration and runs `bun run db:seed`. It touches only the local database. Stop `bun run dev` first and start it again afterwards, because the dev server keeps the old database file open. Wrangler asks you to confirm the migrations.
+
+The seed creates Exempel Fastigheter AB with dates relative to today:
+
+- **Logins:** `agare@fastighet.test` (owner) and `medlem@fastighet.test` (member), already verified. The password is `SEED_PASSWORD` in `scripts/db-seed-constants.ts`.
+- **Settings:** a made-up bankgiro and organisation number that pass their checksums, plus an address.
+- **Properties:** Kv. Lärkan and Kv. Falken, with 8 units. Some are vacant.
+- **Tenants and leases:**
+  - an open-ended apartment
+  - commercial premises with parking: fixed term with extension, yearly rent invoiced quarterly, VAT
+  - a terminated lease
+  - a lease that starts next month, for a tenant without email
+- **Invoice:** one rent notice for this month, emailed and unpaid, so it shows as overdue.
+
+`bun run db:seed` on its own refuses to run on a database that already has users.
+
+To start from scratch instead, run `bun run db:migrate:local`, sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
 
 Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `bun run dev` console. Open the verification, password-reset or invitation link from there.
 
@@ -27,6 +45,8 @@ Email addresses must be verified before signing in. No real email is sent yet: t
 | `typecheck` · `check` · `check:fix` · `test` | `tsc`, Biome lint + format, `bun test` |
 | `db:generate` | Generate a SQL migration in `drizzle/` from `src/db/schema.ts` |
 | `db:migrate:local` / `db:migrate:remote` | Apply migrations to local / remote D1 via wrangler |
+| `db:reset` | Wipe the local D1 database, migrate and seed it (never touches remote) |
+| `db:seed` | Fill an empty local database with demo data (`scripts/db-seed.ts`) |
 | `auth:generate` | Regenerate `src/db/auth-schema.ts` after changing Better Auth plugins |
 | `cf-typegen` | Regenerate `worker-configuration.d.ts` after editing `wrangler.jsonc` |
 | `email:dev` | react-email preview server for `src/emails` at http://localhost:3001 |

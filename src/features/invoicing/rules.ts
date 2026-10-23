@@ -129,3 +129,15 @@ export function periodLabel(period: Period): string {
   if (period.start.slice(0, 7) === period.end.slice(0, 7)) return `${monthOf(period.start)} ${year}`
   return `${monthOf(period.start)}–${monthOf(period.end)} ${year}`
 }
+
+/** "Hyra Uppsala Kungsängen 12:3 · 1001, december 2026" */
+export function rentLineDescription(
+  units: readonly { designation: string; label: string }[],
+  period: Period,
+): string {
+  const objects = units
+    .map((u) => `${u.designation} · ${u.label}`)
+    .sort()
+    .join(', ')
+  return `Hyra ${objects}, ${periodLabel(period)}`
+}

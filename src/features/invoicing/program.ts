@@ -14,6 +14,7 @@ import {
   ocrFor,
   periodLabel,
   rentForPeriod,
+  rentLineDescription,
   VAT_RATE_PERCENT,
   vatFor,
   vatNumberFor,
@@ -57,17 +58,19 @@ export const previewInvoiceRun = (month: string) =>
       const netOre = rentForPeriod(l, period)
       if (netOre <= 0) return []
       const vatOre = vatFor(netOre, l.vat)
-      const units = l.units
-        .map(({ unit }) => `${unit.property.designation} · ${unit.label}`)
-        .sort()
-        .join(', ')
       return [
         {
           leaseId: l.id,
           leaseNumber: l.number,
           tenant: l.tenant,
           period,
-          description: `Hyra ${units}, ${periodLabel(period)}`,
+          description: rentLineDescription(
+            l.units.map(({ unit }) => ({
+              designation: unit.property.designation,
+              label: unit.label,
+            })),
+            period,
+          ),
           netOre,
           vatOre,
           totalOre: netOre + vatOre,

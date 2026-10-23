@@ -26,6 +26,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Better Auth sends verification, password-reset and invitation emails through `deliverEmail` (`src/lib/auth.ts`). It hands the send to `waitUntil` and never awaits it, so response time does not reveal whether an account exists.
   - `src/lib/auth-config.ts` must stay loadable by the Better Auth CLI, so it takes `deliverEmail` as a parameter instead of importing the mailer.
 - **Auth UI.** Show Better Auth errors through `authErrorMessage` (`src/lib/auth-errors.ts`), which maps error codes to Swedish. Pass every post-login `redirect` through `safeRedirect`.
+- **Seed data** (`scripts/db-seed.ts`) writes through the app's Drizzle schema and pure rules, so a schema change that breaks it fails `bun run typecheck`.
+  - When you add a feature, give it seed data and keep `bun run db:reset` working.
+  - Seeded logins are in `scripts/db-seed-constants.ts`.
 - **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
 - Use `.validator()` on `createServerFn` (this Start version has no `inputValidator`).
 - Server functions are CSRF-protected (same-origin only). When calling them outside the browser, send `Sec-Fetch-Site: same-origin`.
