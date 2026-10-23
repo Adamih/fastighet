@@ -95,13 +95,24 @@ function LeasesPage() {
 
   return (
     <div className="grid gap-6 md:gap-7">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div className="grid gap-1">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 md:flex-nowrap md:items-end">
+        <div className="grid min-w-0 flex-1 gap-1 md:flex-none">
           <h1 className="font-bold text-2xl tracking-tight md:text-3xl">Avtal</h1>
-          <p className="text-muted-foreground text-sm">{countLine}</p>
+          <p className="text-muted-foreground text-sm md:whitespace-nowrap">{countLine}</p>
         </div>
-        <div className="flex w-full flex-wrap items-center gap-2.5 md:w-auto">
-          <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-lg border bg-background px-3 md:h-10 md:w-64 md:flex-none">
+        {/* Phones: the button sits beside the title and the search gets its own row. */}
+        <div className="contents md:ml-auto md:flex md:items-center md:gap-2.5">
+          {canCreate && (
+            <Button asChild className="h-11 md:h-10">
+              <Link to="/leases/new">
+                <Plus aria-hidden="true" />
+                <span>
+                  Nytt<span className="sr-only sm:not-sr-only"> avtal</span>
+                </span>
+              </Link>
+            </Button>
+          )}
+          <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:order-first md:h-10 md:w-60 lg:w-64">
             <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
             <span className="sr-only">Sök avtal</span>
             <input
@@ -112,14 +123,6 @@ function LeasesPage() {
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </label>
-          {canCreate && (
-            <Button asChild className="h-11 md:h-10">
-              <Link to="/leases/new">
-                <Plus aria-hidden="true" />
-                Nytt avtal
-              </Link>
-            </Button>
-          )}
         </div>
       </header>
 
@@ -186,15 +189,25 @@ function LeasesPage() {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+                <table className="w-full border-collapse text-left text-[13px] lg:text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground text-xs">
-                      <th className="px-4 py-3 font-semibold">Hyresgäst</th>
-                      <th className="px-4 py-3 font-semibold">Objekt</th>
-                      <th className="px-4 py-3 font-semibold">Period</th>
-                      <th className="px-4 py-3 text-right font-semibold">Hyra</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3">
+                      <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
+                        Hyresgäst
+                      </th>
+                      <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
+                        Objekt
+                      </th>
+                      <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
+                        Period
+                      </th>
+                      <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 text-right font-semibold">
+                        Hyra
+                      </th>
+                      <th className="hidden whitespace-nowrap px-2.5 py-2.5 font-semibold lg:table-cell lg:px-4 lg:py-3">
+                        Status
+                      </th>
+                      <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3">
                         <span className="sr-only">Åtgärder</span>
                       </th>
                     </tr>
@@ -261,10 +274,7 @@ function Summary({ overview }: { overview: ReturnType<typeof leaseOverview> }) {
       </section>
 
       {/* Desktop: four cards. */}
-      <section
-        aria-label="Sammanfattning"
-        className="hidden gap-4 md:grid md:grid-cols-2 lg:grid-cols-4"
-      >
+      <section aria-label="Sammanfattning" className="hidden gap-3 md:grid md:grid-cols-4 lg:gap-4">
         <SummaryCard label="Hyra, gällande avtal" hint="exkl. moms">
           {rent}
           <span className="font-medium text-muted-foreground text-sm"> /mån</span>
@@ -302,9 +312,11 @@ function SummaryCard({
   children: React.ReactNode
 }) {
   return (
-    <div className="grid content-start gap-1.5 rounded-xl border bg-card px-5 py-4">
-      <span className="font-medium text-muted-foreground text-sm">{label}</span>
-      <span className="font-bold text-2xl tabular-nums tracking-tight">{children}</span>
+    <div className="grid min-w-0 content-start gap-1 rounded-xl border bg-card px-4 py-3 lg:gap-1.5 lg:px-5 lg:py-4">
+      <span className="truncate font-medium text-[13px] text-muted-foreground">{label}</span>
+      <span className="whitespace-nowrap font-bold text-xl tabular-nums tracking-tight lg:text-2xl">
+        {children}
+      </span>
       {hint && <span className={cn('text-muted-foreground text-xs', hintClass)}>{hint}</span>}
     </div>
   )
@@ -327,11 +339,15 @@ function ProgressBar({ timeline, className }: { timeline: Timeline; className?: 
 }
 
 function UnitChips({ labels }: { labels: string[] }) {
-  if (labels.length === 1) return <span className="text-muted-foreground text-xs">{labels[0]}</span>
+  if (labels.length === 1)
+    return <span className="whitespace-nowrap text-muted-foreground text-xs">{labels[0]}</span>
   return (
     <span className="flex flex-wrap gap-1.5">
       {labels.map((label) => (
-        <span key={label} className="rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs">
+        <span
+          key={label}
+          className="whitespace-nowrap rounded-md bg-muted px-2 py-0.5 text-muted-foreground text-xs"
+        >
           {label}
         </span>
       ))}
@@ -351,7 +367,7 @@ function LeaseRow({
   const units = unitSummary(lease.units)
   return (
     <tr className="border-b align-top last:border-b-0">
-      <td className="px-4 py-4">
+      <td className="px-2.5 py-3 lg:px-4 lg:py-4">
         <div className="grid gap-0.5">
           <Link
             to="/leases/$leaseId"
@@ -360,32 +376,36 @@ function LeaseRow({
           >
             {lease.tenant.name}
           </Link>
-          <span className="text-muted-foreground text-xs">
+          <span className="whitespace-nowrap text-muted-foreground text-xs">
             Avtal #{lease.number} · {tenantKindLabels[lease.tenant.kind]}
+          </span>
+          {/* Below lg the status sits here so every column fits beside the sidebar. */}
+          <span className="mt-1 lg:hidden">
+            <LeaseStatusBadge status={lease.status} />
           </span>
         </div>
       </td>
-      <td className="px-4 py-4">
+      <td className="px-2.5 py-3 lg:px-4 lg:py-4">
         <div className="grid gap-1">
-          <span>{units.designations}</span>
+          <span className="whitespace-nowrap">{units.designations}</span>
           <UnitChips labels={units.labels} />
         </div>
       </td>
-      <td className="px-4 py-4 tabular-nums">
+      <td className="px-2.5 py-3 tabular-nums lg:px-4 lg:py-4">
         <div className="grid gap-1.5">
-          <span>{timeline.period}</span>
-          <ProgressBar timeline={timeline} className="w-40" />
+          <span className="whitespace-nowrap">{timeline.period}</span>
+          <ProgressBar timeline={timeline} className="w-32 lg:w-40" />
           <span className={cn('text-xs', toneText[timeline.tone])}>{timeline.note}</span>
         </div>
       </td>
-      <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums">
+      <td className="whitespace-nowrap px-2.5 py-3 text-right tabular-nums lg:px-4 lg:py-4">
         <span className="font-semibold">{formatSekShort(lease.rentOre)}</span>
         <div className="text-muted-foreground text-xs">{rentUnit(lease)}</div>
       </td>
-      <td className="px-4 py-4">
+      <td className="hidden px-2.5 py-3 lg:table-cell lg:px-4 lg:py-4">
         <LeaseStatusBadge status={lease.status} />
       </td>
-      <td className="px-2 py-3 text-right">
+      <td className="px-1 py-2 text-right lg:px-2 lg:py-3">
         <LeaseActions lease={lease} canEdit={canEdit} />
       </td>
     </tr>
@@ -435,11 +455,11 @@ function LeaseCard({ lease, timeline }: { lease: LeaseView; timeline: Timeline }
       <Link
         to="/leases/$leaseId"
         params={{ leaseId: lease.id }}
-        className="grid gap-2.5 rounded-xl border bg-card p-4 hover:bg-muted/40"
+        className="grid gap-2.5 rounded-xl border bg-card p-4 text-foreground hover:bg-muted/40 hover:text-foreground"
       >
         <span className="flex items-start justify-between gap-2">
           <span className="grid min-w-0 gap-1">
-            <span className="truncate font-semibold">{lease.tenant.name}</span>
+            <span className="truncate font-semibold text-base">{lease.tenant.name}</span>
             <span className="truncate text-muted-foreground text-sm">
               {units.designations}
               {units.labels.length === 1 && ` · ${units.labels[0]}`}
@@ -449,13 +469,13 @@ function LeaseCard({ lease, timeline }: { lease: LeaseView; timeline: Timeline }
           <LeaseStatusBadge status={lease.status} />
         </span>
         <ProgressBar timeline={timeline} />
-        <span className="flex items-end justify-between gap-3 border-t pt-2.5 text-sm tabular-nums">
+        <span className="flex items-end justify-between gap-3 border-t pt-2.5 text-[13px] tabular-nums">
           <span className="grid min-w-0 gap-0.5">
-            <span>{timeline.period}</span>
+            <span>{timeline.cardPeriod}</span>
             <span className={cn('font-medium', toneText[timeline.tone])}>{timeline.note}</span>
           </span>
           <span className="grid shrink-0 justify-items-end">
-            <span className="font-bold">
+            <span className="whitespace-nowrap font-bold text-base">
               {formatSekShort(lease.rentOre)}
               <span className="font-medium text-muted-foreground text-xs">
                 {lease.rentInterval === 'monthly' ? '/mån' : '/år'}

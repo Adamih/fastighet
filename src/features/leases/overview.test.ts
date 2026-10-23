@@ -26,6 +26,7 @@ describe('leaseTimeline', () => {
   test('open-ended and running', () => {
     expect(leaseTimeline(base, today)).toEqual({
       period: '2025-08-01 → tillsvidare',
+      cardPeriod: 'Från 2025-08-01 · tillsvidare',
       progress: null,
       note: 'Löpande',
       tone: 'neutral',
@@ -43,6 +44,7 @@ describe('leaseTimeline', () => {
       today,
     )
     expect(t.period).toBe('2024-04-01 → 2026-12-31')
+    expect(t.cardPeriod).toBe('2024-04-01 – 2026-12-31')
     expect(t.note).toBe('Upphör om 69 dagar')
     expect(t.tone).toBe('ending')
     expect(t.progress).toBeCloseTo(935 / 1004, 3)

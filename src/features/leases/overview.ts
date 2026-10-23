@@ -51,6 +51,8 @@ export type TimelineTone = 'upcoming' | 'ending' | 'renewing' | 'neutral'
 export interface Timeline {
   /** "2026-11-01 → tillsvidare" */
   readonly period: string
+  /** The period on phone cards: "Från 2026-11-01 · tillsvidare", "2024-04-01 – 2026-12-31" */
+  readonly cardPeriod: string
   /** Share of a bounded period that has passed, 0–1; null when the lease has no end yet. */
   readonly progress: number | null
   readonly note: string
@@ -63,6 +65,7 @@ export function leaseTimeline(
 ): Timeline {
   const end = effectiveEndDate(lease) ?? lease.endDate
   const period = `${lease.startDate} → ${end ?? 'tillsvidare'}`
+  const cardPeriod = end ? `${lease.startDate} – ${end}` : `Från ${lease.startDate} · tillsvidare`
   const progress =
     end && lease.status !== 'upcoming'
       ? Math.min(
@@ -78,17 +81,19 @@ export function leaseTimeline(
   if (lease.status === 'upcoming') {
     return {
       period,
+      cardPeriod,
       progress: null,
       note: `Startar ${inDays(daysUntil(today, lease.startDate))}`,
       tone: 'upcoming',
     }
   }
   if (lease.status === 'ended') {
-    return { period, progress: 1, note: `Avslutat ${end}`, tone: 'neutral' }
+    return { period, cardPeriod, progress: 1, note: `Avslutat ${end}`, tone: 'neutral' }
   }
   if (lease.moveOutDate) {
     return {
       period,
+      cardPeriod,
       progress,
       note: `Upphör ${inDays(daysUntil(today, lease.moveOutDate))}`,
       tone: 'ending',
@@ -97,6 +102,7 @@ export function leaseTimeline(
   if (lease.endDate && lease.extensionMonths) {
     return {
       period,
+      cardPeriod,
       progress,
       note: `Förlängs ${lease.extensionMonths} mån om ej uppsagt`,
       tone: 'renewing',
@@ -105,12 +111,13 @@ export function leaseTimeline(
   if (lease.endDate) {
     return {
       period,
+      cardPeriod,
       progress,
       note: `Upphör ${inDays(daysUntil(today, lease.endDate))}`,
       tone: 'ending',
     }
   }
-  return { period, progress: null, note: 'Löpande', tone: 'neutral' }
+  return { period, cardPeriod, progress: null, note: 'Löpande', tone: 'neutral' }
 }
 
 /** "per månad", "per år + moms" */
