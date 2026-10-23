@@ -1,12 +1,13 @@
 import { and, asc, eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { property, unit } from '#/db/schema'
+import { occupyingLease } from '#/features/leases/terms'
+import { blankToNull } from '#/lib/schemas'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
+import { today } from '#/server/today'
 import { normalizeDesignation } from './designation'
 import type { CreatePropertyInput, CreateUnitInput } from './schemas'
-
-const blankToNull = (value: string) => value.trim() || null
 
 export const listProperties = orgQuery((db, organizationId) =>
   db.query.property.findMany({
@@ -24,14 +25,50 @@ export const getProperty = (propertyId: string) =>
     )
     if (!found) return yield* new NotFound({ entity: 'property', id: propertyId })
 
-    const units = yield* orgQuery((db, organizationId) =>
+    const rows = yield* orgQuery((db, organizationId) =>
       db.query.unit.findMany({
         where: and(eq(unit.propertyId, propertyId), eq(unit.organizationId, organizationId)),
         orderBy: asc(unit.label),
+        with: {
+          leases: {
+            with: { lease: { with: { tenant: { columns: { name: true } } } } },
+          },
+        },
       }),
     )
+    const on = yield* today
+    const units = rows.map(({ leases, ...u }) => {
+      const occupant = occupyingLease(
+        leases.map((l) => l.lease),
+        on,
+      )
+      return {
+        ...u,
+        occupancy: occupant && {
+          leaseId: occupant.lease.id,
+          number: occupant.lease.number,
+          tenantName: occupant.lease.tenant.name,
+          status: occupant.status,
+          startDate: occupant.lease.startDate,
+          moveOutDate: occupant.lease.moveOutDate,
+        },
+      }
+    })
     return { ...found, units }
   })
+
+/** Every unit in the company with its property, for pickers such as the lease form. */
+export const listUnits = Effect.gen(function* () {
+  const rows = yield* orgQuery((db, organizationId) =>
+    db.query.unit.findMany({
+      where: eq(unit.organizationId, organizationId),
+      with: { property: { columns: { designation: true } } },
+    }),
+  )
+  return rows
+    .map((u) => ({ id: u.id, label: u.label, kind: u.kind, designation: u.property.designation }))
+    .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label))
+})
 
 export const createProperty = (input: CreatePropertyInput) =>
   Effect.gen(function* () {

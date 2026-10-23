@@ -1,10 +1,9 @@
 import { Schema } from 'effect'
+import { OptionalText, PostalCode } from '#/lib/schemas'
 import { isValidDesignation } from './designation'
 import { unitKinds } from './unit-kinds'
 
 // Shared by the client forms (TanStack Form) and the server functions (input validation).
-
-const OptionalText = Schema.String.check(Schema.isMaxLength(200))
 
 export const CreatePropertyInput = Schema.Struct({
   designation: Schema.String.check(
@@ -14,9 +13,7 @@ export const CreatePropertyInput = Schema.Struct({
   ),
   name: OptionalText,
   streetAddress: OptionalText,
-  postalCode: Schema.String.check(
-    Schema.isPattern(/^(\d{3} ?\d{2})?$/, { message: 'Postnummer har fem siffror' }),
-  ),
+  postalCode: PostalCode,
   city: OptionalText,
 })
 export type CreatePropertyInput = typeof CreatePropertyInput.Type

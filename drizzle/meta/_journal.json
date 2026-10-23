@@ -8,6 +8,13 @@
       "when": 1792750275845,
       "tag": "0000_woozy_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792752482497,
+      "tag": "0001_curious_slapstick",
+      "breakpoints": true
     }
   ]
 }

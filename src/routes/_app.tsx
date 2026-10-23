@@ -27,6 +27,12 @@ function AppLayout() {
             >
               Fastigheter
             </Link>
+            <Link to="/tenants" className="text-muted-foreground [&.active]:text-foreground">
+              Hyresgäster
+            </Link>
+            <Link to="/leases" className="text-muted-foreground [&.active]:text-foreground">
+              Avtal
+            </Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">{app.user.email}</span>

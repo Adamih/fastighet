@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
+import { LeaseStatusBadge } from '#/features/leases/components'
 import { createUnitFn, propertyQuery } from '#/features/properties/functions'
 import { type UnitKind, unitKindLabels, unitKinds } from '#/features/properties/unit-kinds'
 
@@ -47,6 +48,7 @@ function PropertyPage() {
                 <th className="py-2 font-medium">Objekt</th>
                 <th className="py-2 font-medium">Typ</th>
                 <th className="py-2 text-right font-medium">Yta</th>
+                <th className="py-2 pl-6 font-medium">Hyresgäst</th>
               </tr>
             </thead>
             <tbody>
@@ -56,6 +58,27 @@ function PropertyPage() {
                   <td className="py-2">{unitKindLabels[u.kind]}</td>
                   <td className="py-2 text-right">
                     {u.areaSqm == null ? '–' : `${areaFormat.format(u.areaSqm)} m²`}
+                  </td>
+                  <td className="py-2 pl-6">
+                    {u.occupancy ? (
+                      <span className="flex items-center gap-2">
+                        <Link
+                          to="/leases/$leaseId"
+                          params={{ leaseId: u.occupancy.leaseId }}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {u.occupancy.tenantName}
+                        </Link>
+                        <LeaseStatusBadge status={u.occupancy.status} />
+                        <span className="text-muted-foreground tabular-nums">
+                          {u.occupancy.status === 'upcoming'
+                            ? `från ${u.occupancy.startDate}`
+                            : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Vakant</span>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -13,7 +13,11 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as AppLeasesIndexRouteImport } from './routes/_app/leases/index'
+import { Route as AppLeasesLeaseIdRouteImport } from './routes/_app/leases/$leaseId'
+import { Route as AppLeasesNewRouteImport } from './routes/_app/leases/new'
 import { Route as AppPropertiesPropertyIdRouteImport } from './routes/_app/properties/$propertyId'
+import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const AppRoute = AppRouteImport.update({
@@ -35,9 +39,29 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLeasesIndexRoute = AppLeasesIndexRouteImport.update({
+  id: '/leases/',
+  path: '/leases/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLeasesLeaseIdRoute = AppLeasesLeaseIdRouteImport.update({
+  id: '/leases/$leaseId',
+  path: '/leases/$leaseId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLeasesNewRoute = AppLeasesNewRouteImport.update({
+  id: '/leases/new',
+  path: '/leases/new',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPropertiesPropertyIdRoute = AppPropertiesPropertyIdRouteImport.update({
   id: '/properties/$propertyId',
   path: '/properties/$propertyId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTenantsIndexRoute = AppTenantsIndexRouteImport.update({
+  id: '/tenants/',
+  path: '/tenants/',
   getParentRoute: () => AppRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -50,15 +74,23 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/leases/': typeof AppLeasesIndexRoute
+  '/tenants/': typeof AppTenantsIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/': typeof AppIndexRoute
+  '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/leases': typeof AppLeasesIndexRoute
+  '/tenants': typeof AppTenantsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -66,23 +98,48 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/_app/leases/new': typeof AppLeasesNewRoute
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/_app/leases/': typeof AppLeasesIndexRoute
+  '/_app/tenants/': typeof AppTenantsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/login' | '/onboarding' | '/properties/$propertyId' | '/api/auth/$'
+    | '/'
+    | '/login'
+    | '/onboarding'
+    | '/leases/$leaseId'
+    | '/leases/new'
+    | '/properties/$propertyId'
+    | '/api/auth/$'
+    | '/leases/'
+    | '/tenants/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/onboarding' | '/' | '/properties/$propertyId' | '/api/auth/$'
+  to:
+    | '/login'
+    | '/onboarding'
+    | '/'
+    | '/leases/$leaseId'
+    | '/leases/new'
+    | '/properties/$propertyId'
+    | '/api/auth/$'
+    | '/leases'
+    | '/tenants'
   id:
     | '__root__'
     | '/_app'
     | '/login'
     | '/onboarding'
     | '/_app/'
+    | '/_app/leases/$leaseId'
+    | '/_app/leases/new'
     | '/_app/properties/$propertyId'
     | '/api/auth/$'
+    | '/_app/leases/'
+    | '/_app/tenants/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -122,11 +179,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/leases/': {
+      id: '/_app/leases/'
+      path: '/leases'
+      fullPath: '/leases/'
+      preLoaderRoute: typeof AppLeasesIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/leases/$leaseId': {
+      id: '/_app/leases/$leaseId'
+      path: '/leases/$leaseId'
+      fullPath: '/leases/$leaseId'
+      preLoaderRoute: typeof AppLeasesLeaseIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/leases/new': {
+      id: '/_app/leases/new'
+      path: '/leases/new'
+      fullPath: '/leases/new'
+      preLoaderRoute: typeof AppLeasesNewRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/properties/$propertyId': {
       id: '/_app/properties/$propertyId'
       path: '/properties/$propertyId'
       fullPath: '/properties/$propertyId'
       preLoaderRoute: typeof AppPropertiesPropertyIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/tenants/': {
+      id: '/_app/tenants/'
+      path: '/tenants'
+      fullPath: '/tenants/'
+      preLoaderRoute: typeof AppTenantsIndexRouteImport
       parentRoute: typeof AppRoute
     }
     '/api/auth/$': {
@@ -141,12 +226,20 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
+  AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
+  AppLeasesNewRoute: typeof AppLeasesNewRoute
   AppPropertiesPropertyIdRoute: typeof AppPropertiesPropertyIdRoute
+  AppLeasesIndexRoute: typeof AppLeasesIndexRoute
+  AppTenantsIndexRoute: typeof AppTenantsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
+  AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
+  AppLeasesNewRoute: AppLeasesNewRoute,
   AppPropertiesPropertyIdRoute: AppPropertiesPropertyIdRoute,
+  AppLeasesIndexRoute: AppLeasesIndexRoute,
+  AppTenantsIndexRoute: AppTenantsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
