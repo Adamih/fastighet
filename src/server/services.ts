@@ -1,5 +1,6 @@
 import { Context } from 'effect'
 import type { Db } from '#/db'
+import type { Permissions } from '#/lib/permissions'
 import type { Mailer } from './mail/mailer'
 
 export class Database extends Context.Service<Database, Db>()('app/Database') {}
@@ -15,4 +16,10 @@ export class CurrentOrganization extends Context.Service<
   { readonly id: string; readonly name: string; readonly role: string }
 >()('app/CurrentOrganization') {}
 
-export type AppServices = Database | CurrentUser | CurrentOrganization | Mailer
+/** Better Auth's server permission API, bound to the authenticated request by runApp. */
+export class PermissionChecker extends Context.Service<
+  PermissionChecker,
+  { readonly check: (organizationId: string, permissions: Permissions) => Promise<boolean> }
+>()('app/PermissionChecker') {}
+
+export type AppServices = Database | CurrentUser | CurrentOrganization | Mailer | PermissionChecker

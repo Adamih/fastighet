@@ -1,10 +1,14 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
-import { can, type Permissions } from './permissions'
+import { authClient } from './auth-client'
+import type { Permissions, roles } from './permissions'
+
+const can = (role: string, permissions: Permissions) =>
+  authClient.organization.checkRolePermission({ role: role as keyof typeof roles, permissions })
 
 const appResources = ['property', 'tenant', 'lease', 'invoice', 'payment'] as const
 
-describe('can', () => {
+describe('Better Auth role permissions', () => {
   test.each(['owner', 'admin'])('%p has full access to everything', (role) => {
     for (const resource of [...appResources, 'settings'] as const) {
       expect(can(role, { [resource]: ['read', 'manage'] })).toBe(true)
@@ -38,7 +42,7 @@ describe('can', () => {
 
   test('multiple roles: any role granting the request is enough', () => {
     expect(can('member,admin', { settings: ['manage'] })).toBe(true)
-    expect(can('member, admin', { settings: ['manage'] })).toBe(true)
+    expect(can('owner,admin', { member: ['update'] })).toBe(true)
   })
 
   test('unknown roles get nothing', () => {

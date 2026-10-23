@@ -1,21 +1,21 @@
 import { Effect } from 'effect'
-import { can, type Permissions } from '#/lib/permissions'
-import { Forbidden } from './errors'
-import { CurrentOrganization } from './services'
+import type { Permissions } from '#/lib/permissions'
+import { DatabaseError, Forbidden } from './errors'
+import { CurrentOrganization, PermissionChecker } from './services'
 
-/**
- * Fails with `Forbidden` unless the current member's role grants every permission asked for.
- * Start every program that reads or changes company data with one of these.
- */
-export const requirePermission = (permissions: Permissions) =>
-  Effect.gen(function* () {
-    const { role } = yield* CurrentOrganization
-    if (!can(role, permissions)) return yield* new Forbidden()
-  })
-
-/** Whether the current member holds the permissions, for programs that adapt what they return. */
+/** Ask Better Auth about the authenticated member in the company used by orgQuery. */
 export const hasPermission = (permissions: Permissions) =>
   Effect.gen(function* () {
-    const { role } = yield* CurrentOrganization
-    return can(role, permissions)
+    const organization = yield* CurrentOrganization
+    const checker = yield* PermissionChecker
+    return yield* Effect.tryPromise({
+      try: () => checker.check(organization.id, permissions),
+      catch: (cause) => new DatabaseError({ cause }),
+    })
+  })
+
+/** Domain programs use this Effect adapter; Better Auth evaluates the permissions. */
+export const requirePermission = (permissions: Permissions) =>
+  Effect.gen(function* () {
+    if (!(yield* hasPermission(permissions))) return yield* new Forbidden()
   })

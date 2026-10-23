@@ -1,5 +1,6 @@
 import { useRouteContext } from '@tanstack/react-router'
-import { can, type Permissions } from '#/lib/permissions'
+import { authClient } from '#/lib/auth-client'
+import type { Permissions, roles } from '#/lib/permissions'
 
 /**
  * Permission checks for the signed-in member, for hiding what they may not do. The server
@@ -7,5 +8,10 @@ import { can, type Permissions } from '#/lib/permissions'
  */
 export function useCan() {
   const { app } = useRouteContext({ from: '/_app' })
-  return (permissions: Permissions) => can(app.organization.role, permissions)
+  return (permissions: Permissions) =>
+    authClient.organization.checkRolePermission({
+      // Better Auth also accepts comma-separated memberships at runtime.
+      role: app.organization.role as keyof typeof roles,
+      permissions,
+    })
 }

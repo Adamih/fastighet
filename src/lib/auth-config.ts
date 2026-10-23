@@ -27,6 +27,7 @@ export function createAuth(
   return betterAuth({
     secret: options.secret,
     baseURL: options.baseURL,
+    disabledPaths: ['/organization/leave'],
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     emailAndPassword: {
       enabled: true,

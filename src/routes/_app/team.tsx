@@ -13,10 +13,11 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { useCan } from '#/features/auth/use-can'
-import { removeMemberFn, teamQuery, updateMemberRoleFn } from '#/features/team/functions'
+import { teamQuery } from '#/features/team/functions'
 import {
   type InvitableRole,
   invitableRoles,
+  isOwner,
   memberActions,
   type Role,
   roleLabels,
@@ -37,18 +38,27 @@ function TeamPage() {
   const { data: team } = useSuspenseQuery(teamQuery())
   const can = useCan()
   const manage = can({ member: ['update'] }) || can({ member: ['delete'] })
+  const ownerCount = team.members.filter((m) => isOwner(m.role)).length
 
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey })
   const changeRole = useMutation({
     mutationFn: async (input: { memberId: string; role: Role }) => {
-      await updateMemberRoleFn({ data: input })
+      const result = await authClient.organization.updateMemberRole({
+        ...input,
+        organizationId: app.organization.id,
+      })
+      if (result.error) throw new Error(authErrorMessage(result.error))
     },
     onSettled: refresh,
   })
   const remove = useMutation({
     mutationFn: async (memberId: string) => {
-      await removeMemberFn({ data: { memberId } })
+      const result = await authClient.organization.removeMember({
+        memberIdOrEmail: memberId,
+        organizationId: app.organization.id,
+      })
+      if (result.error) throw new Error(authErrorMessage(result.error))
     },
     onSettled: refresh,
   })
@@ -76,6 +86,8 @@ function TeamPage() {
                 busy={changeRole.isPending || remove.isPending}
                 actions={memberActions({
                   actorRole: app.organization.role,
+                  targetRole: m.role,
+                  ownerCount,
                   isSelf: m.isSelf,
                 })}
                 onRoleChange={(role) => changeRole.mutate({ memberId: m.id, role })}

@@ -9,7 +9,13 @@ import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { Mailer } from './mail/mailer'
 import { mailer } from './mail/provider'
 import { query } from './scoped'
-import { type AppServices, CurrentOrganization, CurrentUser, Database } from './services'
+import {
+  type AppServices,
+  CurrentOrganization,
+  CurrentUser,
+  Database,
+  PermissionChecker,
+} from './services'
 
 const getSession = Effect.tryPromise({
   try: () => auth.api.getSession({ headers: getRequest().headers }),
@@ -90,6 +96,15 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
     return yield* program.pipe(
       Effect.provideService(CurrentUser, context.user),
       Effect.provideService(CurrentOrganization, context.organization),
+      Effect.provideService(PermissionChecker, {
+        check: async (organizationId, permissions) => {
+          const result = await auth.api.hasPermission({
+            headers: getRequest().headers,
+            body: { organizationId, permissions },
+          })
+          return result.success
+        },
+      }),
     )
   }).pipe(
     Effect.provideService(Database, db),

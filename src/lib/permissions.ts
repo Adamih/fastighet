@@ -7,7 +7,7 @@ import {
 } from 'better-auth/plugins/organization/access'
 
 // Role-based access control, shared by Better Auth (organization plugin), the server
-// (`requirePermission`) and the UI (`can`). Client-safe: no server imports.
+// permission API and client checkRolePermission helper. Client-safe: no server imports.
 //
 // Every app resource has two permissions: `read` (view it) and `manage` (create, edit and delete
 // it). `manage` does not imply `read`; every role that manages something is also given read.
@@ -48,18 +48,3 @@ export const roles = { owner, admin, member }
 
 type Statement = typeof statement
 export type Permissions = { [K in keyof Statement]?: Statement[K][number][] }
-
-/**
- * Whether a member with `role` holds every permission asked for. Better Auth stores several roles
- * as a comma-separated string ("admin,member"); any one of them granting the request is enough,
- * which is how Better Auth's own `hasPermission` decides.
- */
-export function can(role: string, permissions: Permissions): boolean {
-  return role
-    .split(',')
-    .map((r) => r.trim())
-    .some((r) => {
-      const definition = roles[r as keyof typeof roles]
-      return definition?.authorize(permissions).success === true
-    })
-}
