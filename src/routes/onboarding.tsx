@@ -10,7 +10,7 @@ export const Route = createFileRoute('/onboarding')({
   beforeLoad: async () => {
     const session = await getSessionFn()
     if (!session) throw redirect({ to: '/login' })
-    if (session.activeOrganizationId) throw redirect({ to: '/' })
+    if (session.hasOrganization) throw redirect({ to: '/' })
   },
   component: OnboardingPage,
 })

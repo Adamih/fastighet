@@ -22,6 +22,12 @@ const messages: Record<string, string> = {
     'Inbjudan gäller en annan e-postadress än den du är inloggad med',
   EMAIL_VERIFICATION_REQUIRED_BEFORE_ACCEPTING_OR_REJECTING_INVITATION:
     'Bekräfta din e-postadress innan du svarar på inbjudan',
+  YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_MEMBER: 'Du har inte behörighet att ändra den här användaren',
+  YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_MEMBER:
+    'Du har inte behörighet att ta bort den här användaren',
+  YOU_CANNOT_LEAVE_THE_ORGANIZATION_AS_THE_ONLY_OWNER: 'Företaget måste ha minst en ägare',
+  YOU_CANNOT_LEAVE_THE_ORGANIZATION_WITHOUT_AN_OWNER: 'Företaget måste ha minst en ägare',
+  MEMBER_NOT_FOUND: 'Användaren finns inte längre i företaget',
   INVITER_IS_NO_LONGER_A_MEMBER_OF_THE_ORGANIZATION:
     'Personen som bjöd in dig är inte längre med i företaget',
 }

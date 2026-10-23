@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { Effect, Schema } from 'effect'
 import { auth } from '#/lib/auth'
-import { getSessionOrNull, runApp } from '#/server/run'
+import { getSessionOrNull, hasAnyMembership, runApp } from '#/server/run'
 import { CurrentOrganization, CurrentUser } from '#/server/services'
 
 /** Session summary for the login and onboarding routes, which run before a company exists. */
@@ -11,7 +11,8 @@ export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () =
   if (!session) return null
   return {
     userId: session.user.id,
-    activeOrganizationId: session.session.activeOrganizationId ?? null,
+    // Checked against the member table: the session's active company may be one the user left.
+    hasOrganization: await hasAnyMembership(session.user.id),
   }
 })
 

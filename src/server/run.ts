@@ -1,9 +1,9 @@
 import { notFound, redirect } from '@tanstack/react-router'
 import { getRequest } from '@tanstack/react-start/server'
-import { and, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
-import { member, organization } from '#/db/schema'
+import { member, organization, session as sessionTable } from '#/db/schema'
 import { auth } from '#/lib/auth'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { Mailer } from './mail/mailer'
@@ -16,27 +16,44 @@ const getSession = Effect.tryPromise({
   catch: (cause) => new DatabaseError({ cause }),
 })
 
+const membershipQuery = (userId: string, organizationId?: string) =>
+  query((db) =>
+    db
+      .select({ organizationId: member.organizationId, role: member.role, name: organization.name })
+      .from(member)
+      .innerJoin(organization, eq(organization.id, member.organizationId))
+      .where(
+        organizationId
+          ? and(eq(member.userId, userId), eq(member.organizationId, organizationId))
+          : eq(member.userId, userId),
+      )
+      .orderBy(asc(member.createdAt))
+      .limit(1),
+  )
+
 const loadRequestContext = Effect.gen(function* () {
   const session = yield* getSession
   if (!session) return yield* new Unauthenticated()
 
-  const organizationId = session.session.activeOrganizationId
-  if (!organizationId) return yield* new NoActiveOrganization()
-
-  // Re-check membership on every request: the session may point at a company the user was removed from.
-  const [membership] = yield* query((db) =>
-    db
-      .select({ role: member.role, name: organization.name })
-      .from(member)
-      .innerJoin(organization, eq(organization.id, member.organizationId))
-      .where(and(eq(member.userId, session.user.id), eq(member.organizationId, organizationId)))
-      .limit(1),
-  )
-  if (!membership) return yield* new NoActiveOrganization()
+  // Re-check membership on every request: the session may point at a company the user was
+  // removed from. Then fall back to their oldest remaining company and remember it on the session.
+  const activeId = session.session.activeOrganizationId
+  let [membership] = activeId ? yield* membershipQuery(session.user.id, activeId) : []
+  if (!membership) {
+    ;[membership] = yield* membershipQuery(session.user.id)
+    if (!membership) return yield* new NoActiveOrganization()
+    const organizationId = membership.organizationId
+    yield* query((db) =>
+      db
+        .update(sessionTable)
+        .set({ activeOrganizationId: organizationId })
+        .where(eq(sessionTable.id, session.session.id)),
+    )
+  }
 
   return {
     user: { id: session.user.id, email: session.user.email, name: session.user.name },
-    organization: { id: organizationId, name: membership.name, role: membership.role },
+    organization: { id: membership.organizationId, name: membership.name, role: membership.role },
   }
 })
 
@@ -84,3 +101,13 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
 
 /** The raw Better Auth session, for routes that run before a company exists (login, onboarding). */
 export const getSessionOrNull = () => auth.api.getSession({ headers: getRequest().headers })
+
+/** Whether the user belongs to any company, regardless of which one the session points at. */
+export async function hasAnyMembership(userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: member.id })
+    .from(member)
+    .where(eq(member.userId, userId))
+    .limit(1)
+  return row !== undefined
+}

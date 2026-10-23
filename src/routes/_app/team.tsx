@@ -1,14 +1,24 @@
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
 import { SelectField } from '#/components/select-field'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select'
 import { teamQuery } from '#/features/team/functions'
 import {
   canManageTeam,
   type InvitableRole,
   invitableRoles,
+  memberActions,
+  type Role,
   roleLabels,
 } from '#/features/team/roles'
 import { authClient } from '#/lib/auth-client'
@@ -20,38 +30,142 @@ export const Route = createFileRoute('/_app/team')({
   component: TeamPage,
 })
 
+type TeamMember = { id: string; role: string; name: string; email: string; isSelf: boolean }
+
 function TeamPage() {
   const { app } = Route.useRouteContext()
   const { data: team } = useSuspenseQuery(teamQuery())
   const manage = canManageTeam(app.organization.role)
+  const ownerCount = team.members.filter((m) => m.role === 'owner').length
+
+  const queryClient = useQueryClient()
+  const refresh = () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey })
+  const changeRole = useMutation({
+    mutationFn: async (input: { memberId: string; role: Role }) => {
+      const result = await authClient.organization.updateMemberRole(input)
+      if (result.error) throw new Error(authErrorMessage(result.error))
+    },
+    onSettled: refresh,
+  })
+  const remove = useMutation({
+    mutationFn: async (memberId: string) => {
+      const result = await authClient.organization.removeMember({ memberIdOrEmail: memberId })
+      if (result.error) throw new Error(authErrorMessage(result.error))
+    },
+    onSettled: refresh,
+  })
+  const error = changeRole.error ?? remove.error
 
   return (
     <div className="grid gap-8">
       <h1 className="font-semibold text-2xl">Användare</h1>
-      <table className="w-full text-left text-sm">
-        <thead className="border-b text-muted-foreground">
-          <tr>
-            <th className="py-2 font-medium">Namn</th>
-            <th className="py-2 font-medium">E-post</th>
-            <th className="py-2 font-medium">Roll</th>
-          </tr>
-        </thead>
-        <tbody>
-          {team.members.map((m) => (
-            <tr key={m.id} className="border-b">
-              <td className="py-2 font-medium">{m.name}</td>
-              <td className="py-2">{m.email}</td>
-              <td className="py-2">{roleLabels[m.role] ?? m.role}</td>
+      <div className="grid gap-2">
+        <table className="w-full text-left text-sm">
+          <thead className="border-b text-muted-foreground">
+            <tr>
+              <th className="py-2 font-medium">Namn</th>
+              <th className="py-2 font-medium">E-post</th>
+              <th className="py-2 font-medium">Roll</th>
+              {manage && <th className="py-2" />}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {team.members.map((m) => (
+              <MemberRow
+                key={m.id}
+                member={m}
+                manage={manage}
+                busy={changeRole.isPending || remove.isPending}
+                actions={memberActions({
+                  actorRole: app.organization.role,
+                  targetRole: m.role,
+                  isSelf: m.isSelf,
+                  ownerCount,
+                })}
+                onRoleChange={(role) => changeRole.mutate({ memberId: m.id, role })}
+                onRemove={() => remove.mutate(m.id)}
+              />
+            ))}
+          </tbody>
+        </table>
+        {error && <p className="text-destructive text-sm">{error.message}</p>}
+      </div>
 
       {team.invitations.length > 0 && (
         <PendingInvitations invitations={team.invitations} manage={manage} />
       )}
       {manage && <InviteForm />}
     </div>
+  )
+}
+
+function MemberRow({
+  member,
+  manage,
+  busy,
+  actions,
+  onRoleChange,
+  onRemove,
+}: {
+  member: TeamMember
+  manage: boolean
+  busy: boolean
+  actions: ReturnType<typeof memberActions>
+  onRoleChange: (role: Role) => void
+  onRemove: () => void
+}) {
+  const [confirming, setConfirming] = useState(false)
+
+  return (
+    <tr className="border-b">
+      <td className="py-2 font-medium">
+        {member.name}
+        {member.isSelf && <span className="font-normal text-muted-foreground"> (du)</span>}
+      </td>
+      <td className="py-2">{member.email}</td>
+      <td className="py-2">
+        {actions.roleOptions.length > 0 ? (
+          <Select
+            value={member.role}
+            disabled={busy}
+            onValueChange={(role) => onRoleChange(role as Role)}
+          >
+            <SelectTrigger size="sm" className="w-40" aria-label={`Roll för ${member.name}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {actions.roleOptions.map((role) => (
+                <SelectItem key={role} value={role}>
+                  {roleLabels[role]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          (roleLabels[member.role] ?? member.role)
+        )}
+      </td>
+      {manage && (
+        <td className="py-2 text-right">
+          {actions.canRemove &&
+            (confirming ? (
+              <span className="inline-flex items-center gap-2">
+                <span className="text-muted-foreground">Ta bort {member.name}?</span>
+                <Button variant="destructive" size="sm" disabled={busy} onClick={onRemove}>
+                  Ta bort
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
+                  Avbryt
+                </Button>
+              </span>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
+                Ta bort
+              </Button>
+            ))}
+        </td>
+      )}
+    </tr>
   )
 }
 
