@@ -18,6 +18,17 @@ export function formatSek(ore: number): string {
   return sekFormat.format(ore / 100)
 }
 
+const sekWholeFormat = new Intl.NumberFormat('sv-SE', {
+  style: 'currency',
+  currency: 'SEK',
+  maximumFractionDigits: 0,
+})
+
+/** Like `formatSek`, but drops ",00" for whole kronor: "6 900 kr", "8 333,33 kr". For overviews. */
+export function formatSekShort(ore: number): string {
+  return ore % 100 === 0 ? sekWholeFormat.format(ore / 100) : formatSek(ore)
+}
+
 /** Öre as a plain form value: 845000 → "8450", 845050 → "8450,50". */
 export function oreToInput(ore: number): string {
   const kronor = Math.trunc(ore / 100)

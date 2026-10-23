@@ -10,14 +10,22 @@ const statusStyles: Record<LeaseStatus, string> = {
   ended: 'bg-muted text-muted-foreground',
 }
 
+const dotStyles: Record<LeaseStatus, string> = {
+  upcoming: 'bg-sky-600 dark:bg-sky-400',
+  active: 'bg-emerald-600 dark:bg-emerald-400',
+  terminated: 'bg-amber-600 dark:bg-amber-400',
+  ended: 'bg-muted-foreground',
+}
+
 export function LeaseStatusBadge({ status }: { status: LeaseStatus }) {
   return (
     <span
       className={cn(
-        'inline-flex rounded-full px-2 py-0.5 font-medium text-xs',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-semibold text-xs',
         statusStyles[status],
       )}
     >
+      <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotStyles[status])} />
       {leaseStatusLabels[status]}
     </span>
   )

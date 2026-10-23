@@ -1,6 +1,11 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
-import { formatSek, oreToInput, parseSek } from './money'
+import { formatSek, formatSekShort, oreToInput, parseSek } from './money'
+
+test('formatSekShort drops zero öre only', () => {
+  expect(formatSekShort(690000).replace(/\s/g, ' ')).toBe('6 900 kr')
+  expect(formatSekShort(833333).replace(/\s/g, ' ')).toBe('8 333,33 kr')
+})
 
 describe('parseSek', () => {
   test.each([
