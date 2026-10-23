@@ -18,3 +18,11 @@ export const CreateTenantInput = Schema.Struct({
   city: OptionalText,
 })
 export type CreateTenantInput = typeof CreateTenantInput.Type
+
+export const TenantIdInput = Schema.Struct({ tenantId: Schema.String })
+
+export const UpdateTenantInput = Schema.Struct({
+  tenantId: Schema.String,
+  ...CreateTenantInput.fields,
+})
+export type UpdateTenantInput = typeof UpdateTenantInput.Type

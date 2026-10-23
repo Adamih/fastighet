@@ -20,6 +20,11 @@ export const CreateLeaseInput = Schema.Struct({
 })
 export type CreateLeaseInput = typeof CreateLeaseInput.Type
 
+/** Everything but the tenant: a different tenant is a different lease. */
+const { tenantId: _tenantId, ...editableLeaseFields } = CreateLeaseInput.fields
+export const UpdateLeaseInput = Schema.Struct({ leaseId: Schema.String, ...editableLeaseFields })
+export type UpdateLeaseInput = typeof UpdateLeaseInput.Type
+
 export const TerminateLeaseInput = Schema.Struct({
   leaseId: Schema.String,
   noticeDate: IsoDate,

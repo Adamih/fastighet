@@ -26,7 +26,11 @@ import { Route as AppLeasesLeaseIdRouteImport } from './routes/_app/leases/$leas
 import { Route as AppLeasesNewRouteImport } from './routes/_app/leases/new'
 import { Route as AppPropertiesPropertyIdRouteImport } from './routes/_app/properties/$propertyId'
 import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index'
+import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AppLeasesLeaseIdEditRouteImport } from './routes/_app/leases/$leaseId_.edit'
+import { Route as AppPropertiesPropertyIdEditRouteImport } from './routes/_app/properties/$propertyId_.edit'
+import { Route as AppUnitsUnitIdEditRouteImport } from './routes/_app/units/$unitId.edit'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -112,10 +116,31 @@ const AppTenantsIndexRoute = AppTenantsIndexRouteImport.update({
   path: '/tenants/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppTenantsTenantIdRoute = AppTenantsTenantIdRouteImport.update({
+  id: '/tenants/$tenantId',
+  path: '/tenants/$tenantId',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppLeasesLeaseIdEditRoute = AppLeasesLeaseIdEditRouteImport.update({
+  id: '/leases/$leaseId_/edit',
+  path: '/leases/$leaseId/edit',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPropertiesPropertyIdEditRoute =
+  AppPropertiesPropertyIdEditRouteImport.update({
+    id: '/properties/$propertyId_/edit',
+    path: '/properties/$propertyId/edit',
+    getParentRoute: () => AppRoute,
+  } as any)
+const AppUnitsUnitIdEditRoute = AppUnitsUnitIdEditRouteImport.update({
+  id: '/units/$unitId/edit',
+  path: '/units/$unitId/edit',
+  getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -132,10 +157,14 @@ export interface FileRoutesByFullPath {
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
+  '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices/': typeof AppInvoicesIndexRoute
   '/leases/': typeof AppLeasesIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
+  '/leases/$leaseId/edit': typeof AppLeasesLeaseIdEditRoute
+  '/properties/$propertyId/edit': typeof AppPropertiesPropertyIdEditRoute
+  '/units/$unitId/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -151,10 +180,14 @@ export interface FileRoutesByTo {
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
+  '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices': typeof AppInvoicesIndexRoute
   '/leases': typeof AppLeasesIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
+  '/leases/$leaseId/edit': typeof AppLeasesLeaseIdEditRoute
+  '/properties/$propertyId/edit': typeof AppPropertiesPropertyIdEditRoute
+  '/units/$unitId/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -172,10 +205,14 @@ export interface FileRoutesById {
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/_app/leases/new': typeof AppLeasesNewRoute
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
+  '/_app/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_app/invoices/': typeof AppInvoicesIndexRoute
   '/_app/leases/': typeof AppLeasesIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
+  '/_app/leases/$leaseId_/edit': typeof AppLeasesLeaseIdEditRoute
+  '/_app/properties/$propertyId_/edit': typeof AppPropertiesPropertyIdEditRoute
+  '/_app/units/$unitId/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -193,10 +230,14 @@ export interface FileRouteTypes {
     | '/leases/$leaseId'
     | '/leases/new'
     | '/properties/$propertyId'
+    | '/tenants/$tenantId'
     | '/api/auth/$'
     | '/invoices/'
     | '/leases/'
     | '/tenants/'
+    | '/leases/$leaseId/edit'
+    | '/properties/$propertyId/edit'
+    | '/units/$unitId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -212,10 +253,14 @@ export interface FileRouteTypes {
     | '/leases/$leaseId'
     | '/leases/new'
     | '/properties/$propertyId'
+    | '/tenants/$tenantId'
     | '/api/auth/$'
     | '/invoices'
     | '/leases'
     | '/tenants'
+    | '/leases/$leaseId/edit'
+    | '/properties/$propertyId/edit'
+    | '/units/$unitId/edit'
   id:
     | '__root__'
     | '/_app'
@@ -232,10 +277,14 @@ export interface FileRouteTypes {
     | '/_app/leases/$leaseId'
     | '/_app/leases/new'
     | '/_app/properties/$propertyId'
+    | '/_app/tenants/$tenantId'
     | '/api/auth/$'
     | '/_app/invoices/'
     | '/_app/leases/'
     | '/_app/tenants/'
+    | '/_app/leases/$leaseId_/edit'
+    | '/_app/properties/$propertyId_/edit'
+    | '/_app/units/$unitId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -369,12 +418,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTenantsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/tenants/$tenantId': {
+      id: '/_app/tenants/$tenantId'
+      path: '/tenants/$tenantId'
+      fullPath: '/tenants/$tenantId'
+      preLoaderRoute: typeof AppTenantsTenantIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/leases/$leaseId_/edit': {
+      id: '/_app/leases/$leaseId_/edit'
+      path: '/leases/$leaseId/edit'
+      fullPath: '/leases/$leaseId/edit'
+      preLoaderRoute: typeof AppLeasesLeaseIdEditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/properties/$propertyId_/edit': {
+      id: '/_app/properties/$propertyId_/edit'
+      path: '/properties/$propertyId/edit'
+      fullPath: '/properties/$propertyId/edit'
+      preLoaderRoute: typeof AppPropertiesPropertyIdEditRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/units/$unitId/edit': {
+      id: '/_app/units/$unitId/edit'
+      path: '/units/$unitId/edit'
+      fullPath: '/units/$unitId/edit'
+      preLoaderRoute: typeof AppUnitsUnitIdEditRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
@@ -388,9 +465,13 @@ interface AppRouteChildren {
   AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
   AppLeasesNewRoute: typeof AppLeasesNewRoute
   AppPropertiesPropertyIdRoute: typeof AppPropertiesPropertyIdRoute
+  AppTenantsTenantIdRoute: typeof AppTenantsTenantIdRoute
   AppInvoicesIndexRoute: typeof AppInvoicesIndexRoute
   AppLeasesIndexRoute: typeof AppLeasesIndexRoute
   AppTenantsIndexRoute: typeof AppTenantsIndexRoute
+  AppLeasesLeaseIdEditRoute: typeof AppLeasesLeaseIdEditRoute
+  AppPropertiesPropertyIdEditRoute: typeof AppPropertiesPropertyIdEditRoute
+  AppUnitsUnitIdEditRoute: typeof AppUnitsUnitIdEditRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -402,9 +483,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
   AppLeasesNewRoute: AppLeasesNewRoute,
   AppPropertiesPropertyIdRoute: AppPropertiesPropertyIdRoute,
+  AppTenantsTenantIdRoute: AppTenantsTenantIdRoute,
   AppInvoicesIndexRoute: AppInvoicesIndexRoute,
   AppLeasesIndexRoute: AppLeasesIndexRoute,
   AppTenantsIndexRoute: AppTenantsIndexRoute,
+  AppLeasesLeaseIdEditRoute: AppLeasesLeaseIdEditRoute,
+  AppPropertiesPropertyIdEditRoute: AppPropertiesPropertyIdEditRoute,
+  AppUnitsUnitIdEditRoute: AppUnitsUnitIdEditRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

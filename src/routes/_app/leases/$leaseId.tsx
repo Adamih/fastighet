@@ -7,7 +7,12 @@ import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { invoicesQuery } from '#/features/invoicing/functions'
 import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, formatRent, LeaseStatusBadge } from '#/features/leases/components'
-import { leaseQuery, leasesQuery, terminateLeaseFn } from '#/features/leases/functions'
+import {
+  leaseQuery,
+  leasesQuery,
+  terminateLeaseFn,
+  withdrawTerminationFn,
+} from '#/features/leases/functions'
 import { invoiceIntervalLabels, tenantKindLabels } from '#/features/leases/options'
 import type { LeaseView } from '#/features/leases/program'
 import { earliestMoveOutDate } from '#/features/leases/terms'
@@ -33,9 +38,21 @@ function LeasePage() {
         <div className="flex items-center gap-3">
           <h1 className="font-semibold text-2xl">Avtal {lease.number}</h1>
           <LeaseStatusBadge status={lease.status} />
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
+              Ändra
+            </Link>
+          </Button>
         </div>
         <p className="text-muted-foreground">
-          {lease.tenant.name} ({tenantKindLabels[lease.tenant.kind].toLowerCase()})
+          <Link
+            to="/tenants/$tenantId"
+            params={{ tenantId: lease.tenant.id }}
+            className="underline-offset-4 hover:underline"
+          >
+            {lease.tenant.name}
+          </Link>{' '}
+          ({tenantKindLabels[lease.tenant.kind].toLowerCase()})
         </p>
       </div>
 
@@ -80,7 +97,39 @@ function LeasePage() {
       <LeaseInvoices leaseId={lease.id} />
 
       {!lease.moveOutDate && lease.status !== 'ended' && <TerminateForm lease={lease} />}
+      {lease.moveOutDate && lease.status !== 'ended' && <WithdrawTermination lease={lease} />}
     </div>
+  )
+}
+
+function WithdrawTermination({ lease }: { lease: LeaseView }) {
+  const queryClient = useQueryClient()
+  const withdraw = useMutation({
+    mutationFn: withdrawTerminationFn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leasesQuery().queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['properties'] })
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+    },
+  })
+
+  return (
+    <section className="grid max-w-xl gap-3 rounded-lg border p-6">
+      <h2 className="font-medium text-lg">Uppsägning</h2>
+      <p className="text-sm">
+        Avtalet sades upp {lease.noticeDate} med avflyttning {lease.moveOutDate}. Om hyresgästen
+        stannar kan du ångra uppsägningen fram till avflyttningsdagen.
+      </p>
+      {withdraw.error && <p className="text-destructive text-sm">{withdraw.error.message}</p>}
+      <Button
+        variant="outline"
+        className="justify-self-start"
+        disabled={withdraw.isPending}
+        onClick={() => withdraw.mutate({ data: { leaseId: lease.id } })}
+      >
+        Ångra uppsägning
+      </Button>
+    </section>
   )
 }
 

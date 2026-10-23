@@ -8,7 +8,12 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Server code goes through Effect.** Server functions are thin: validate input with an Effect Schema (`Schema.toStandardSchemaV1`) and call `runApp(program)`. Business logic lives in `features/*/program.ts` as Effect programs that use `Database`, `CurrentUser` and `CurrentOrganization`.
 - **Active company.** `runApp` checks on every request that the user still belongs to the session's active company. If not (for example after being removed), it switches the session to the user's oldest remaining company, or fails with `NoActiveOrganization` when there is none. Route guards use `getSessionFn().hasOrganization`, which reads the member table, never the session's `activeOrganizationId`.
 - **Team permissions.** Better Auth enforces who may invite, remove or re-role members. `memberActions` (`src/features/team/roles.ts`) mirrors those rules so the UI only offers what will succeed. Keep the two in sync.
-- **Manager-only actions.** Start programs that only owners and admins may run with `yield* requireManager` (`src/server/authorize.ts`). It fails with `Forbidden`.
+- **Manager-only actions.** Start programs that only owners and admins may run with `yield* requireManager` (`src/server/authorize.ts`). It fails with `Forbidden`. Every delete is manager-only; edits are open to all members.
+- **Deleting keeps history.**
+  - Delete a record only when nothing depends on it, and check first so the user gets a `Conflict` explaining why. Foreign keys are only the backstop.
+  - Units that have ever been on a lease, tenants with leases, and leases with invoices can't be deleted. Terminate the lease instead.
+  - Edits never touch issued invoices, which keep their own copy of the details.
+- **Forms.** Each entity has one form component (`features/*/…-form.tsx`), used for both create and edit. Edit pages that live under a detail URL use a trailing underscore (`$leaseId_.edit.tsx`) so they don't render inside the detail page.
 - **Errors.** Expected failures are tagged errors from `src/server/errors.ts`. `runApp` maps them: `Unauthenticated` redirects to /login, `NoActiveOrganization` to /onboarding, `NotFound` becomes a 404, `Forbidden` shows a generic "no permission" message, and a `Conflict` message is shown to the user. Anything else is logged and replaced with a generic message.
 - **Invoices are accounting records.** Never delete or renumber them:
   - Correct a mistake by voiding the invoice (it keeps its number) or, later, with a credit note.

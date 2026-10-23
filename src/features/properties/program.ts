@@ -1,13 +1,19 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { property, unit } from '#/db/schema'
+import { leaseUnit, property, unit } from '#/db/schema'
 import { occupyingLease } from '#/features/leases/terms'
 import { blankToNull } from '#/lib/schemas'
+import { requireManager } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
 import { normalizeDesignation } from './designation'
-import type { CreatePropertyInput, CreateUnitInput } from './schemas'
+import type {
+  CreatePropertyInput,
+  CreateUnitInput,
+  UpdatePropertyInput,
+  UpdateUnitInput,
+} from './schemas'
 
 export const listProperties = orgQuery((db, organizationId) =>
   db.query.property.findMany({
@@ -70,35 +76,139 @@ export const listUnits = Effect.gen(function* () {
     .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label))
 })
 
-export const createProperty = (input: CreatePropertyInput) =>
-  Effect.gen(function* () {
-    const designation = normalizeDesignation(input.designation)
+const normalizeProperty = (input: CreatePropertyInput) => ({
+  designation: normalizeDesignation(input.designation),
+  name: blankToNull(input.name),
+  streetAddress: blankToNull(input.streetAddress),
+  postalCode: blankToNull(input.postalCode.replace(/\s/g, '')),
+  city: blankToNull(input.city),
+})
 
+const ensureUniqueDesignation = (designation: string, exceptId?: string) =>
+  Effect.gen(function* () {
     const existing = yield* orgQuery((db, organizationId) =>
       db.query.property.findFirst({
         columns: { id: true },
         where: and(
           eq(property.organizationId, organizationId),
           eq(property.designation, designation),
+          exceptId ? ne(property.id, exceptId) : undefined,
         ),
       }),
     )
     if (existing) return yield* new Conflict({ message: `${designation} finns redan` })
+  })
 
+export const createProperty = (input: CreatePropertyInput) =>
+  Effect.gen(function* () {
+    const values = normalizeProperty(input)
+    yield* ensureUniqueDesignation(values.designation)
     const [created] = yield* orgQuery((db, organizationId) =>
       db
         .insert(property)
-        .values({
-          organizationId,
-          designation,
-          name: blankToNull(input.name),
-          streetAddress: blankToNull(input.streetAddress),
-          postalCode: blankToNull(input.postalCode.replace(/\s/g, '')),
-          city: blankToNull(input.city),
-        })
+        .values({ organizationId, ...values })
         .returning(),
     )
     return created
+  })
+
+export const updateProperty = (input: UpdatePropertyInput) =>
+  Effect.gen(function* () {
+    const current = yield* getProperty(input.propertyId)
+    const values = normalizeProperty(input)
+    yield* ensureUniqueDesignation(values.designation, current.id)
+    yield* orgQuery((db, organizationId) =>
+      db
+        .update(property)
+        .set(values)
+        .where(and(eq(property.id, current.id), eq(property.organizationId, organizationId))),
+    )
+    return yield* getProperty(current.id)
+  })
+
+/** Units that have ever been on a lease (including ended ones) are part of the history. */
+const leasedUnitLabels = (unitIds: readonly string[]) =>
+  unitIds.length === 0
+    ? Effect.succeed([] as string[])
+    : orgQuery((db, organizationId) =>
+        db
+          .selectDistinct({ label: unit.label })
+          .from(leaseUnit)
+          .innerJoin(unit, eq(unit.id, leaseUnit.unitId))
+          .where(
+            and(eq(leaseUnit.organizationId, organizationId), inArray(leaseUnit.unitId, unitIds)),
+          ),
+      ).pipe(Effect.map((rows) => rows.map((r) => r.label).sort()))
+
+/** Deletes the property and its units, unless any unit has ever been leased. */
+export const deleteProperty = (propertyId: string) =>
+  Effect.gen(function* () {
+    yield* requireManager
+    const current = yield* getProperty(propertyId)
+    const leased = yield* leasedUnitLabels(current.units.map((u) => u.id))
+    if (leased.length > 0) {
+      return yield* new Conflict({
+        message: `Fastigheten har avtal på objekt ${leased.join(', ')} och kan inte tas bort.`,
+      })
+    }
+    yield* orgQuery((db, organizationId) =>
+      db
+        .delete(property)
+        .where(and(eq(property.id, current.id), eq(property.organizationId, organizationId))),
+    )
+  })
+
+export const getUnit = (unitId: string) =>
+  Effect.gen(function* () {
+    const row = yield* orgQuery((db, organizationId) =>
+      db.query.unit.findFirst({
+        where: and(eq(unit.id, unitId), eq(unit.organizationId, organizationId)),
+        with: { property: { columns: { id: true, designation: true } } },
+      }),
+    )
+    if (!row) return yield* new NotFound({ entity: 'unit', id: unitId })
+    const leased = yield* leasedUnitLabels([row.id])
+    return { ...row, hasLeases: leased.length > 0 }
+  })
+
+export const updateUnit = (input: UpdateUnitInput) =>
+  Effect.gen(function* () {
+    const current = yield* getUnit(input.unitId)
+    const label = input.label.trim()
+    const clash = yield* orgQuery((db, organizationId) =>
+      db.query.unit.findFirst({
+        columns: { id: true },
+        where: and(
+          eq(unit.organizationId, organizationId),
+          eq(unit.propertyId, current.propertyId),
+          eq(unit.label, label),
+          ne(unit.id, current.id),
+        ),
+      }),
+    )
+    if (clash) return yield* new Conflict({ message: `Objekt ${label} finns redan på fastigheten` })
+    yield* orgQuery((db, organizationId) =>
+      db
+        .update(unit)
+        .set({ kind: input.kind, label, areaSqm: input.areaSqm })
+        .where(and(eq(unit.id, current.id), eq(unit.organizationId, organizationId))),
+    )
+    return yield* getUnit(current.id)
+  })
+
+export const deleteUnit = (unitId: string) =>
+  Effect.gen(function* () {
+    yield* requireManager
+    const current = yield* getUnit(unitId)
+    if (current.hasLeases) {
+      return yield* new Conflict({
+        message: `Objekt ${current.label} har avtal och kan inte tas bort.`,
+      })
+    }
+    yield* orgQuery((db, organizationId) =>
+      db.delete(unit).where(and(eq(unit.id, current.id), eq(unit.organizationId, organizationId))),
+    )
+    return { propertyId: current.propertyId }
   })
 
 export const createUnit = (input: CreateUnitInput) =>
