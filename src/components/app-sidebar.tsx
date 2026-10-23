@@ -74,7 +74,7 @@ export function AppSidebar() {
                       <SidebarMenuButton
                         asChild
                         isActive={active}
-                        className="h-11 text-sidebar-foreground! hover:text-sidebar-accent-foreground! data-[active=true]:text-sidebar-accent-foreground!"
+                        className="h-11 text-sidebar-foreground"
                       >
                         <Link
                           to={item.to}
