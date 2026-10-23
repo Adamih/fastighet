@@ -59,6 +59,7 @@ function ResetPasswordPage() {
     <main className="mx-auto grid max-w-sm gap-6 px-4 py-16">
       <h1 className="font-semibold text-2xl">Välj nytt lösenord</h1>
       <form
+        method="post"
         className="grid gap-4"
         onSubmit={(e) => {
           e.preventDefault()

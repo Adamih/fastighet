@@ -53,6 +53,7 @@ function OnboardingPage() {
         </p>
       </div>
       <form
+        method="post"
         className="grid gap-4"
         onSubmit={(e) => {
           e.preventDefault()
