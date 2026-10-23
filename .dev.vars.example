@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local dev. Generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=
