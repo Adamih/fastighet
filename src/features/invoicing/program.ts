@@ -9,6 +9,7 @@ import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
+import { matchesFilter } from './overview'
 import {
   dueDate,
   invoicePeriod,
@@ -196,6 +197,8 @@ const toView = <R extends typeof invoice.$inferSelect>(row: R, on: string) => ({
 export const listInvoices = (input: ListInvoicesInput) =>
   Effect.gen(function* () {
     yield* requirePermission(read)
+    // The lease's current units label each row; only for those who may read leases and units.
+    const showUnits = yield* hasPermission({ lease: ['read'], property: ['read'] })
     const rows = yield* orgQuery((db, organizationId) =>
       db.query.invoice.findMany({
         where: and(
@@ -203,11 +206,35 @@ export const listInvoices = (input: ListInvoicesInput) =>
           input.leaseId ? eq(invoice.leaseId, input.leaseId) : undefined,
         ),
         orderBy: desc(invoice.number),
+        with: {
+          lease: {
+            columns: { id: true },
+            with: {
+              units: {
+                with: {
+                  unit: {
+                    columns: { kind: true, label: true },
+                    with: { property: { columns: { designation: true } } },
+                  },
+                },
+              },
+            },
+          },
+        },
       }),
     )
     const on = yield* today
-    const views = rows.map((row) => toView(row, on))
-    return input.filter === 'all' ? views : views.filter((v) => v.status === input.filter)
+    const views = rows.map(({ lease: leaseRow, ...row }) => ({
+      ...toView(row, on),
+      units: showUnits
+        ? leaseRow.units.map(({ unit }) => ({
+            kind: unit.kind,
+            label: unit.label,
+            designation: unit.property.designation,
+          }))
+        : [],
+    }))
+    return views.filter((v) => matchesFilter(v.status, input.filter))
   })
 
 export const getInvoice = (invoiceId: string) =>

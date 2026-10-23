@@ -8,14 +8,22 @@ const statusStyles: Record<InvoiceStatus, string> = {
   void: 'bg-muted text-muted-foreground line-through',
 }
 
+const dotStyles: Record<InvoiceStatus, string> = {
+  unpaid: 'bg-sky-600 dark:bg-sky-400',
+  overdue: 'bg-red-600 dark:bg-red-400',
+  paid: 'bg-emerald-600 dark:bg-emerald-400',
+  void: 'bg-muted-foreground',
+}
+
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   return (
     <span
       className={cn(
-        'inline-flex rounded-full px-2 py-0.5 font-medium text-xs',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 font-semibold text-xs',
         statusStyles[status],
       )}
     >
+      <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotStyles[status])} />
       {invoiceStatusLabels[status]}
     </span>
   )

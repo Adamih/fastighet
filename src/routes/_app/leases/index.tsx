@@ -2,7 +2,7 @@ import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { MoreHorizontal, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
-import { FilterChips } from '#/components/responsive'
+import { FilterChips, filterChipClass, filterTabClass, StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import {
   DropdownMenu,
@@ -141,12 +141,7 @@ function LeasesPage() {
                   to="/leases"
                   search={f === 'all' ? {} : { status: f }}
                   aria-current={f === filter ? 'page' : undefined}
-                  className={cn(
-                    'inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3.5 text-sm',
-                    f === filter
-                      ? 'border-foreground bg-foreground font-semibold text-background'
-                      : 'bg-background text-muted-foreground',
-                  )}
+                  className={filterChipClass(f === filter)}
                 >
                   {filterLabels[f]} <span className="tabular-nums">{overview.counts[f]}</span>
                 </Link>
@@ -172,12 +167,7 @@ function LeasesPage() {
                   to="/leases"
                   search={f === 'all' ? {} : { status: f }}
                   aria-current={f === filter ? 'page' : undefined}
-                  className={cn(
-                    'rounded-md px-3 py-2 text-sm',
-                    f === filter
-                      ? 'bg-accent font-semibold text-accent-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
+                  className={filterTabClass(f === filter)}
                 >
                   {filterLabels[f]} <span className="tabular-nums">{overview.counts[f]}</span>
                 </Link>
@@ -275,11 +265,11 @@ function Summary({ overview }: { overview: ReturnType<typeof leaseOverview> }) {
 
       {/* Desktop: four cards. */}
       <section aria-label="Sammanfattning" className="hidden gap-3 md:grid md:grid-cols-4 lg:gap-4">
-        <SummaryCard label="Hyra, gällande avtal" hint="exkl. moms">
+        <StatCard label="Hyra, gällande avtal" hint="exkl. moms">
           {rent}
           <span className="font-medium text-muted-foreground text-sm"> /mån</span>
-        </SummaryCard>
-        <SummaryCard
+        </StatCard>
+        <StatCard
           label="Gällande"
           hint={
             overview.openEndedActive > 0
@@ -288,37 +278,15 @@ function Summary({ overview }: { overview: ReturnType<typeof leaseOverview> }) {
           }
         >
           {overview.counts.active}
-        </SummaryCard>
-        <SummaryCard label="Kommande" hint={upcomingHint} hintClass={toneText.upcoming}>
+        </StatCard>
+        <StatCard label="Kommande" hint={upcomingHint} hintClass={toneText.upcoming}>
           {overview.counts.upcoming}
-        </SummaryCard>
-        <SummaryCard label="Uppsagda" hint={endingHint} hintClass={toneText.ending}>
+        </StatCard>
+        <StatCard label="Uppsagda" hint={endingHint} hintClass={toneText.ending}>
           {overview.counts.terminated}
-        </SummaryCard>
+        </StatCard>
       </section>
     </>
-  )
-}
-
-function SummaryCard({
-  label,
-  hint,
-  hintClass,
-  children,
-}: {
-  label: string
-  hint?: string | null
-  hintClass?: string
-  children: React.ReactNode
-}) {
-  return (
-    <div className="grid min-w-0 content-start gap-1 rounded-xl border bg-card px-4 py-3 lg:gap-1.5 lg:px-5 lg:py-4">
-      <span className="truncate font-medium text-[13px] text-muted-foreground">{label}</span>
-      <span className="whitespace-nowrap font-bold text-xl tabular-nums tracking-tight lg:text-2xl">
-        {children}
-      </span>
-      {hint && <span className={cn('text-muted-foreground text-xs', hintClass)}>{hint}</span>}
-    </div>
   )
 }
 

@@ -17,9 +17,9 @@ export function PageHeader({
   action?: ReactNode
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-3 md:items-end">
       <div className="grid min-w-0 gap-1">
-        <h1 className="font-semibold text-2xl">{title}</h1>
+        <h1 className="font-bold text-2xl tracking-tight md:text-3xl">{title}</h1>
         {subtitle && <p className="text-muted-foreground text-sm">{subtitle}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -41,9 +41,71 @@ export function FilterChips({ label, children }: { label: string; children: Reac
 
 export const filterChipClass = (active: boolean) =>
   cn(
-    'inline-flex h-9 shrink-0 items-center rounded-full border px-3 whitespace-nowrap',
-    active ? 'bg-foreground text-background' : 'text-muted-foreground',
+    'inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3.5 text-sm',
+    active
+      ? 'border-foreground bg-foreground font-semibold text-background'
+      : 'bg-background text-muted-foreground',
   )
+
+/** A filter tab in the bar on top of a list card (from `md` up). */
+export const filterTabClass = (active: boolean) =>
+  cn(
+    'whitespace-nowrap rounded-md px-3 py-2 text-sm',
+    active
+      ? 'bg-accent font-semibold text-accent-foreground'
+      : 'text-muted-foreground hover:text-foreground',
+  )
+
+/** A summary figure: label, value and an optional hint. `danger` marks money that is overdue. */
+export function StatCard({
+  label,
+  hint,
+  hintClass,
+  tone = 'default',
+  className,
+  children,
+}: {
+  label: string
+  hint?: ReactNode
+  hintClass?: string
+  tone?: 'default' | 'danger'
+  className?: string
+  children: ReactNode
+}) {
+  const danger = tone === 'danger'
+  return (
+    <div
+      className={cn(
+        'grid min-w-0 content-start gap-1 rounded-xl border bg-card px-4 py-3 lg:gap-1.5 lg:px-5 lg:py-4',
+        danger && 'border-destructive/30 bg-destructive/5',
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          'truncate font-medium text-[13px]',
+          danger ? 'font-semibold text-destructive' : 'text-muted-foreground',
+        )}
+      >
+        {label}
+      </span>
+      <span className="whitespace-nowrap font-bold text-xl tabular-nums tracking-tight lg:text-2xl">
+        {children}
+      </span>
+      {hint && (
+        <span
+          className={cn(
+            'text-xs',
+            danger ? 'text-destructive' : 'text-muted-foreground',
+            hintClass,
+          )}
+        >
+          {hint}
+        </span>
+      )}
+    </div>
+  )
+}
 
 /** The phone version of a table: a bordered card of rows. Hidden from `md` up. */
 export function MobileList({ children, className }: { children: ReactNode; className?: string }) {
