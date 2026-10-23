@@ -1,0 +1,74 @@
+import { queryOptions } from '@tanstack/react-query'
+import { createServerFn } from '@tanstack/react-start'
+import { Schema } from 'effect'
+import { runApp } from '#/server/run'
+import {
+  createInvoiceRun,
+  emailInvoice,
+  getInvoice,
+  listInvoices,
+  markInvoicePaid,
+  previewInvoiceRun,
+  unmarkInvoicePaid,
+  voidInvoice,
+} from './program'
+import {
+  CreateInvoiceRunInput,
+  InvoiceIdInput,
+  InvoiceRunInput,
+  type ListInvoicesInput,
+  ListInvoicesInput as ListInvoicesSchema,
+  MarkPaidInput,
+} from './schemas'
+
+const std = Schema.toStandardSchemaV1
+
+export const previewInvoiceRunFn = createServerFn({ method: 'GET' })
+  .validator(std(InvoiceRunInput))
+  .handler(({ data }) => runApp(previewInvoiceRun(data.month)))
+
+export const createInvoiceRunFn = createServerFn({ method: 'POST' })
+  .validator(std(CreateInvoiceRunInput))
+  .handler(({ data }) => runApp(createInvoiceRun(data)))
+
+export const listInvoicesFn = createServerFn({ method: 'GET' })
+  .validator(std(ListInvoicesSchema))
+  .handler(({ data }) => runApp(listInvoices(data)))
+
+export const getInvoiceFn = createServerFn({ method: 'GET' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(getInvoice(data.invoiceId)))
+
+export const emailInvoiceFn = createServerFn({ method: 'POST' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(emailInvoice(data.invoiceId)))
+
+export const markInvoicePaidFn = createServerFn({ method: 'POST' })
+  .validator(std(MarkPaidInput))
+  .handler(({ data }) => runApp(markInvoicePaid(data)))
+
+export const unmarkInvoicePaidFn = createServerFn({ method: 'POST' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(unmarkInvoicePaid(data.invoiceId)))
+
+export const voidInvoiceFn = createServerFn({ method: 'POST' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(voidInvoice(data.invoiceId)))
+
+export const invoicesQuery = (input: ListInvoicesInput) =>
+  queryOptions({
+    queryKey: ['invoices', 'list', input],
+    queryFn: () => listInvoicesFn({ data: input }),
+  })
+
+export const invoiceQuery = (invoiceId: string) =>
+  queryOptions({
+    queryKey: ['invoices', invoiceId],
+    queryFn: () => getInvoiceFn({ data: { invoiceId } }),
+  })
+
+export const invoiceRunPreviewQuery = (month: string) =>
+  queryOptions({
+    queryKey: ['invoices', 'preview', month],
+    queryFn: () => previewInvoiceRunFn({ data: { month } }),
+  })

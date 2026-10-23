@@ -14,7 +14,7 @@ bun run db:migrate:local         # creates the local D1 database under .wrangler
 bun run dev                      # http://localhost:3000
 ```
 
-Sign up at `/login`, create a company at `/onboarding`, then add properties and units.
+Sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
 
 Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `bun run dev` console. Open the verification, password-reset or invitation link from there.
 

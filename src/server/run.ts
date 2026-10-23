@@ -69,6 +69,8 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
         return redirect({ to: '/onboarding' })
       case 'NotFound':
         return notFound()
+      case 'Forbidden':
+        return new Error('Du har inte behörighet att göra det här.')
       case 'Conflict':
         return new Error(e.message)
     }

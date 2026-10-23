@@ -34,6 +34,33 @@ export function endOfMonth(date: string): string {
   return toIso(new Date(Date.UTC(year, month - 1, daysInMonth(year, month))))
 }
 
+export function addDays(date: string, days: number): string {
+  const [year, month, day] = parts(date)
+  return toIso(new Date(Date.UTC(year, month - 1, day + days)))
+}
+
+/** Inclusive number of days from `start` to `end`; 0 if `end` is before `start`. */
+export function daysBetweenInclusive(start: string, end: string): number {
+  const [y1, m1, d1] = parts(start)
+  const [y2, m2, d2] = parts(end)
+  const days = (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000 + 1
+  return Math.max(0, days)
+}
+
+/** The last Monday–Friday strictly before `date`. Swedish public holidays are not considered. */
+export function lastWeekdayBefore(date: string): string {
+  let candidate = addDays(date, -1)
+  for (;;) {
+    const [year, month, day] = parts(candidate)
+    const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay()
+    if (weekday !== 0 && weekday !== 6) return candidate
+    candidate = addDays(candidate, -1)
+  }
+}
+
+export const maxDate = (a: string, b: string) => (a > b ? a : b)
+export const minDate = (a: string, b: string) => (a < b ? a : b)
+
 const stockholmFormat = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Europe/Stockholm',
   year: 'numeric',

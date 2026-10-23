@@ -1,8 +1,11 @@
 import { useForm } from '@tanstack/react-form'
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
+import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { invoicesQuery } from '#/features/invoicing/functions'
+import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, formatRent, LeaseStatusBadge } from '#/features/leases/components'
 import { leaseQuery, leasesQuery, terminateLeaseFn } from '#/features/leases/functions'
 import { invoiceIntervalLabels, tenantKindLabels } from '#/features/leases/options'
@@ -10,6 +13,7 @@ import type { LeaseView } from '#/features/leases/program'
 import { earliestMoveOutDate } from '#/features/leases/terms'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
+import { formatSek } from '#/lib/money'
 
 export const Route = createFileRoute('/_app/leases/$leaseId')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(leaseQuery(params.leaseId)),
@@ -73,8 +77,43 @@ function LeasePage() {
         </ul>
       </section>
 
+      <LeaseInvoices leaseId={lease.id} />
+
       {!lease.moveOutDate && lease.status !== 'ended' && <TerminateForm lease={lease} />}
     </div>
+  )
+}
+
+function LeaseInvoices({ leaseId }: { leaseId: string }) {
+  const { data: invoices } = useQuery(invoicesQuery({ filter: 'all', leaseId }))
+  if (!invoices || invoices.length === 0) return null
+
+  return (
+    <section className="grid gap-3">
+      <h2 className="font-medium text-lg">Avier</h2>
+      <table className="w-full max-w-2xl text-left text-sm">
+        <tbody>
+          {invoices.map((i) => (
+            <tr key={i.id} className="border-b">
+              <td className="py-2 tabular-nums">
+                <Link
+                  to="/invoices/$invoiceId"
+                  params={{ invoiceId: i.id }}
+                  className="underline-offset-4 hover:underline"
+                >
+                  {i.number}
+                </Link>
+              </td>
+              <td className="py-2">{periodLabel({ start: i.periodStart, end: i.periodEnd })}</td>
+              <td className="py-2 text-right tabular-nums">{formatSek(i.totalOre)}</td>
+              <td className="py-2 pl-4">
+                <InvoiceStatusBadge status={i.status} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 

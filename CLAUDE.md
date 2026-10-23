@@ -8,7 +8,13 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Server code goes through Effect.** Server functions are thin: validate input with an Effect Schema (`Schema.toStandardSchemaV1`) and call `runApp(program)`. Business logic lives in `features/*/program.ts` as Effect programs that use `Database`, `CurrentUser` and `CurrentOrganization`.
 - **Active company.** `runApp` checks on every request that the user still belongs to the session's active company. If not (for example after being removed), it switches the session to the user's oldest remaining company, or fails with `NoActiveOrganization` when there is none. Route guards use `getSessionFn().hasOrganization`, which reads the member table, never the session's `activeOrganizationId`.
 - **Team permissions.** Better Auth enforces who may invite, remove or re-role members. `memberActions` (`src/features/team/roles.ts`) mirrors those rules so the UI only offers what will succeed. Keep the two in sync.
-- **Errors.** Expected failures are tagged errors from `src/server/errors.ts`. `runApp` maps them: `Unauthenticated` redirects to /login, `NoActiveOrganization` to /onboarding, `NotFound` becomes a 404, and a `Conflict` message is shown to the user. Anything else is logged and replaced with a generic message.
+- **Manager-only actions.** Start programs that only owners and admins may run with `yield* requireManager` (`src/server/authorize.ts`). It fails with `Forbidden`.
+- **Errors.** Expected failures are tagged errors from `src/server/errors.ts`. `runApp` maps them: `Unauthenticated` redirects to /login, `NoActiveOrganization` to /onboarding, `NotFound` becomes a 404, `Forbidden` shows a generic "no permission" message, and a `Conflict` message is shown to the user. Anything else is logged and replaced with a generic message.
+- **Invoices are accounting records.** Never delete or renumber them:
+  - Correct a mistake by voiding the invoice (it keeps its number) or, later, with a credit note.
+  - Numbers run without gaps per company, and the OCR is the number plus a Luhn digit.
+  - Recipient details are copied onto the invoice when it is issued.
+  - Period, rent, VAT and due-date rules live in `src/features/invoicing/rules.ts` and are unit-tested. Change them there.
 - **Client bundle.** Keep Effect programs, `#/db` and `#/lib/auth` out of client code. Import them only from server function handlers. Client-safe constants (e.g. `unit-kinds.ts`) live in separate modules.
 - **Shared rules.** Pure logic that both sides need (e.g. `features/leases/terms.ts`) must not import server modules, so the client can use them for previews.
 - **Money** is integer öre, never floats. Parse and format with `src/lib/money.ts`.

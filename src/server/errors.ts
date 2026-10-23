@@ -10,6 +10,9 @@ export class NotFound extends Data.TaggedError('NotFound')<{
   readonly id: string
 }> {}
 
+/** The user's role in the company does not allow this action. */
+export class Forbidden extends Data.TaggedError('Forbidden') {}
+
 /** A business-rule violation whose message is safe to show to the user. */
 export class Conflict extends Data.TaggedError('Conflict')<{ readonly message: string }> {}
 

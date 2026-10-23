@@ -1,6 +1,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
 import { Effect, Exit } from 'effect'
+import RentInvoice from '#/emails/RentInvoice'
 import { Mailer, MailerError, renderEmail, sendEmail } from './mailer'
 import { makeMockMailer } from './mock'
 
@@ -58,6 +59,7 @@ test('every template renders to HTML and plain text', async () => {
       expiresInMinutes: 60,
     }),
     renderEmail('organizationInvitation', invitation),
+    renderEmail('rentInvoice', RentInvoice.PreviewProps),
   ]
   for (const rendered of await Effect.runPromise(Effect.all(cases))) {
     expect(rendered.subject.length).toBeGreaterThan(0)

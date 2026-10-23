@@ -1,6 +1,33 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
-import { addMonths, endOfMonth, isIsoDate, stockholmDate } from './dates'
+import {
+  addDays,
+  addMonths,
+  daysBetweenInclusive,
+  endOfMonth,
+  isIsoDate,
+  lastWeekdayBefore,
+  stockholmDate,
+} from './dates'
+
+test('addDays crosses month and year boundaries', () => {
+  expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
+  expect(addDays('2026-03-01', -1)).toBe('2026-02-28')
+})
+
+test('daysBetweenInclusive', () => {
+  expect(daysBetweenInclusive('2026-01-01', '2026-01-31')).toBe(31)
+  expect(daysBetweenInclusive('2026-01-15', '2026-01-15')).toBe(1)
+  expect(daysBetweenInclusive('2026-02-01', '2026-01-31')).toBe(0)
+  // Not thrown off by the switch to summer time on 29 March 2026.
+  expect(daysBetweenInclusive('2026-03-01', '2026-03-31')).toBe(31)
+})
+
+test('lastWeekdayBefore skips weekends', () => {
+  expect(lastWeekdayBefore('2026-12-01')).toBe('2026-11-30') // Monday
+  expect(lastWeekdayBefore('2026-11-01')).toBe('2026-10-30') // 31 Oct is a Saturday
+  expect(lastWeekdayBefore('2027-03-01')).toBe('2027-02-26') // 27–28 Feb is a weekend
+})
 
 describe('isIsoDate', () => {
   test.each(['2026-10-23', '2028-02-29'])('accepts %p', (d) => expect(isIsoDate(d)).toBe(true))

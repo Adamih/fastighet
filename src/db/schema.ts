@@ -147,14 +147,102 @@ export const unitRelations = relations(unit, ({ one, many }) => ({
   leases: many(leaseUnit),
 }))
 
-export const tenantRelations = relations(tenant, ({ many }) => ({ leases: many(lease) }))
+export const tenantRelations = relations(tenant, ({ many }) => ({
+  leases: many(lease),
+  invoices: many(invoice),
+}))
 
 export const leaseRelations = relations(lease, ({ one, many }) => ({
   tenant: one(tenant, { fields: [lease.tenantId], references: [tenant.id] }),
   units: many(leaseUnit),
+  invoices: many(invoice),
 }))
 
 export const leaseUnitRelations = relations(leaseUnit, ({ one }) => ({
   lease: one(lease, { fields: [leaseUnit.leaseId], references: [lease.id] }),
   unit: one(unit, { fields: [leaseUnit.unitId], references: [unit.id] }),
+}))
+
+/** Seller details printed on invoices. One row per organization, created on first save. */
+export const organizationSettings = sqliteTable('organization_settings', {
+  organizationId: text('organization_id')
+    .primaryKey()
+    .references(() => organization.id, { onDelete: 'cascade' }),
+  // Normalized to NNNNNN-NNNN and NNN(N)-NNNN.
+  organizationNumber: text('organization_number'),
+  bankgiro: text('bankgiro'),
+  streetAddress: text('street_address'),
+  postalCode: text('postal_code'),
+  city: text('city'),
+  email: text('email'),
+  phone: text('phone'),
+  // Godkänd för F-skatt, printed on invoices.
+  fSkatt: integer('f_skatt', { mode: 'boolean' }).notNull().default(true),
+})
+
+// Issued invoices are accounting records: they are never deleted, only voided, and their
+// numbers run without gaps per organization. Recipient details are copied at issue time.
+export const invoice = sqliteTable(
+  'invoice',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    number: integer('number').notNull(),
+    ocr: text('ocr').notNull(),
+    leaseId: text('lease_id')
+      .notNull()
+      .references(() => lease.id),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenant.id),
+    recipientName: text('recipient_name').notNull(),
+    recipientStreetAddress: text('recipient_street_address'),
+    recipientPostalCode: text('recipient_postal_code'),
+    recipientCity: text('recipient_city'),
+    recipientEmail: text('recipient_email'),
+    periodStart: text('period_start').notNull(),
+    periodEnd: text('period_end').notNull(),
+    issueDate: text('issue_date').notNull(),
+    dueDate: text('due_date').notNull(),
+    netOre: integer('net_ore').notNull(),
+    vatOre: integer('vat_ore').notNull(),
+    totalOre: integer('total_ore').notNull(),
+    sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
+    paidOn: text('paid_on'),
+    voidedAt: integer('voided_at', { mode: 'timestamp_ms' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('invoice_org_number_uq').on(t.organizationId, t.number),
+    // A lease is invoiced at most once per period, which makes invoice runs safe to repeat.
+    uniqueIndex('invoice_lease_period_uq').on(t.leaseId, t.periodStart),
+    index('invoice_org_due_idx').on(t.organizationId, t.dueDate),
+  ],
+)
+
+export const invoiceLine = sqliteTable(
+  'invoice_line',
+  {
+    id: id(),
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => invoice.id, { onDelete: 'cascade' }),
+    organizationId: organizationId(),
+    position: integer('position').notNull(),
+    description: text('description').notNull(),
+    netOre: integer('net_ore').notNull(),
+    vatRatePercent: integer('vat_rate_percent').notNull(),
+    vatOre: integer('vat_ore').notNull(),
+  },
+  (t) => [index('invoice_line_invoice_idx').on(t.invoiceId)],
+)
+
+export const invoiceRelations = relations(invoice, ({ one, many }) => ({
+  lease: one(lease, { fields: [invoice.leaseId], references: [lease.id] }),
+  tenant: one(tenant, { fields: [invoice.tenantId], references: [tenant.id] }),
+  lines: many(invoiceLine),
+}))
+
+export const invoiceLineRelations = relations(invoiceLine, ({ one }) => ({
+  invoice: one(invoice, { fields: [invoiceLine.invoiceId], references: [invoice.id] }),
 }))

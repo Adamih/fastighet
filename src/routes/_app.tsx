@@ -16,7 +16,7 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b">
+      <header className="border-b print:hidden">
         <div className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3">
           <span className="font-semibold">{app.organization.name}</span>
           <nav className="flex gap-4 text-sm">
@@ -33,8 +33,14 @@ function AppLayout() {
             <Link to="/leases" className="text-muted-foreground [&.active]:text-foreground">
               Avtal
             </Link>
+            <Link to="/invoices" className="text-muted-foreground [&.active]:text-foreground">
+              Avier
+            </Link>
             <Link to="/team" className="text-muted-foreground [&.active]:text-foreground">
               Användare
+            </Link>
+            <Link to="/settings" className="text-muted-foreground [&.active]:text-foreground">
+              Inställningar
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
@@ -52,7 +58,7 @@ function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 print:max-w-none print:p-0">
         <Outlet />
       </main>
     </div>

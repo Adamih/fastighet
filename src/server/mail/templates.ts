@@ -1,4 +1,5 @@
 import OrganizationInvitation, * as organizationInvitation from '#/emails/OrganizationInvitation'
+import RentInvoice, * as rentInvoice from '#/emails/RentInvoice'
 import ResetPassword, * as resetPassword from '#/emails/ResetPassword'
 import VerifyEmail, * as verifyEmail from '#/emails/VerifyEmail'
 
@@ -12,6 +13,7 @@ export const templates = {
     Component: OrganizationInvitation,
     subject: organizationInvitation.subject,
   },
+  rentInvoice: { Component: RentInvoice, subject: rentInvoice.subject },
 } as const
 
 export type TemplateName = keyof typeof templates
