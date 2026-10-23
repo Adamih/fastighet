@@ -1,9 +1,9 @@
 import { useForm } from '@tanstack/react-form'
 import { Schema } from 'effect'
-import { optionsFrom, SelectField } from '#/components/select-field'
+import { SegmentedControl } from '#/components/segmented-control'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
-import { tenantKindLabels } from '#/features/leases/options'
+import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
 import { type CreateTenantInput, CreateTenantInput as TenantSchema } from './schemas'
 
 const validator = Schema.toStandardSchemaV1(TenantSchema)
@@ -48,6 +48,8 @@ export function TenantForm({
   error,
   disabled = false,
   resetAfterSubmit = false,
+  idPrefix = '',
+  layout = 'wide',
 }: {
   defaultValues: CreateTenantInput
   submitLabel: string
@@ -55,7 +57,13 @@ export function TenantForm({
   error: Error | null
   disabled?: boolean
   resetAfterSubmit?: boolean
+  /** Keeps ids unique when the form can be on the page twice (side panel and phone sheet). */
+  idPrefix?: string
+  /** `narrow` stacks every field, for side panels and sheets. */
+  layout?: 'wide' | 'narrow'
 }) {
+  const pair = layout === 'wide' ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4'
+  const id = (name: string) => `${idPrefix}${name}`
   const form = useForm({
     defaultValues,
     validators: { onSubmit: validator },
@@ -76,20 +84,28 @@ export function TenantForm({
       <fieldset disabled={disabled} className="grid gap-4">
         <form.Field name="kind">
           {(field) => (
-            <SelectField
+            <SegmentedControl
+              label="Typ av hyresgäst"
+              name={id('kind')}
               disabled={disabled}
-              field={field}
-              label="Typ"
-              options={optionsFrom(tenantKindLabels)}
+              value={field.state.value}
+              options={tenantKinds.map((k) => ({ value: k, label: tenantKindLabels[k] }))}
+              onChange={(kind) => field.handleChange(kind)}
             />
           )}
         </form.Field>
         <form.Subscribe selector={(s) => s.values.kind}>
           {(kind) => (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className={pair}>
               <form.Field name="name">
                 {(field) => (
-                  <TextField field={field} label={kind === 'company' ? 'Företagsnamn' : 'Namn'} />
+                  <TextField
+                    field={field}
+                    id={id('name')}
+                    label={kind === 'company' ? 'Företagsnamn' : 'Namn'}
+                    autoComplete={kind === 'company' ? 'organization' : 'name'}
+                    placeholder={kind === 'company' ? undefined : 'För- och efternamn'}
+                  />
                 )}
               </form.Field>
               {kind === 'company' && (
@@ -97,8 +113,11 @@ export function TenantForm({
                   {(field) => (
                     <TextField
                       field={field}
+                      id={id('organizationNumber')}
                       label="Organisationsnummer"
                       placeholder="556677-8899"
+                      inputMode="numeric"
+                      hint="10 siffror, med eller utan bindestreck"
                     />
                   )}
                 </form.Field>
@@ -106,22 +125,58 @@ export function TenantForm({
             </div>
           )}
         </form.Subscribe>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className={pair}>
           <form.Field name="email">
-            {(field) => <TextField field={field} label="E-post" type="email" />}
+            {(field) => (
+              <TextField
+                field={field}
+                id={id('email')}
+                label="E-post"
+                type="email"
+                autoComplete="email"
+                hint="Avier skickas hit. Utan e-post kan avier inte mejlas."
+              />
+            )}
           </form.Field>
           <form.Field name="phone">
-            {(field) => <TextField field={field} label="Telefon" type="tel" />}
+            {(field) => (
+              <TextField
+                field={field}
+                id={id('phone')}
+                label={<Optional>Telefon</Optional>}
+                type="tel"
+                autoComplete="tel"
+              />
+            )}
           </form.Field>
         </div>
         <form.Field name="streetAddress">
-          {(field) => <TextField field={field} label="Fakturaadress" />}
+          {(field) => (
+            <TextField
+              field={field}
+              id={id('streetAddress')}
+              label={<Optional>Fakturaadress</Optional>}
+              autoComplete="street-address"
+            />
+          )}
         </form.Field>
-        <div className="grid grid-cols-[8rem_1fr] gap-4">
+        <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
           <form.Field name="postalCode">
-            {(field) => <TextField field={field} label="Postnummer" />}
+            {(field) => (
+              <TextField
+                field={field}
+                id={id('postalCode')}
+                label="Postnummer"
+                inputMode="numeric"
+                autoComplete="postal-code"
+              />
+            )}
           </form.Field>
-          <form.Field name="city">{(field) => <TextField field={field} label="Ort" />}</form.Field>
+          <form.Field name="city">
+            {(field) => (
+              <TextField field={field} id={id('city')} label="Ort" autoComplete="address-level2" />
+            )}
+          </form.Field>
         </div>
         {error && <p className="text-destructive text-sm">{error.message}</p>}
         <form.Subscribe selector={(s) => s.isSubmitting}>
@@ -129,7 +184,11 @@ export function TenantForm({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
+              className={
+                layout === 'wide'
+                  ? 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start'
+                  : 'h-11 w-full sm:h-10'
+              }
             >
               {submitLabel}
             </Button>
@@ -137,5 +196,13 @@ export function TenantForm({
         </form.Subscribe>
       </fieldset>
     </form>
+  )
+}
+
+function Optional({ children }: { children: string }) {
+  return (
+    <span>
+      {children} <span className="font-normal text-muted-foreground">(valfritt)</span>
+    </span>
   )
 }

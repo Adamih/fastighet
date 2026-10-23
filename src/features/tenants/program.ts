@@ -14,16 +14,35 @@ import type { CreateTenantInput, UpdateTenantInput } from './schemas'
 const read: Permissions = { tenant: ['read'] }
 const manage: Permissions = { tenant: ['manage'] }
 
-export const listTenants = requirePermission(read).pipe(
-  Effect.andThen(
-    orgQuery((db, organizationId) =>
-      db.query.tenant.findMany({
-        where: eq(tenant.organizationId, organizationId),
-        orderBy: asc(tenant.name),
-      }),
-    ),
-  ),
-)
+/** Tenants by name, each with their leases (newest first) for those who may read leases and units. */
+export const listTenants = Effect.gen(function* () {
+  yield* requirePermission(read)
+  const showLeases = yield* hasPermission({ lease: ['read'], property: ['read'] })
+  const rows = yield* orgQuery((db, organizationId) =>
+    db.query.tenant.findMany({
+      where: eq(tenant.organizationId, organizationId),
+      orderBy: asc(tenant.name),
+      with: {
+        leases: {
+          orderBy: desc(lease.number),
+          with: { units: { with: { unit: { columns: { kind: true, label: true } } } } },
+        },
+      },
+    }),
+  )
+  const on = yield* today
+  return rows.map(({ leases, ...row }) => ({
+    ...row,
+    leases: showLeases
+      ? leases.map((l) => ({
+          id: l.id,
+          number: l.number,
+          status: leaseStatus(l, on),
+          units: l.units.map(({ unit }) => unit),
+        }))
+      : [],
+  }))
+})
 
 /** The tenant with all their leases, for the checks below. No permission check of its own. */
 const loadTenant = (tenantId: string) =>

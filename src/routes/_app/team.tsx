@@ -1,15 +1,11 @@
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
+import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import {
-  desktopTableClass,
-  MobileList,
-  PageHeader,
-  RowMeta,
-  RowTitle,
-} from '#/components/responsive'
-import { SelectField } from '#/components/select-field'
+import { InitialsAvatar } from '#/components/initials-avatar'
+import { PageHeader } from '#/components/responsive'
+import { SegmentedControl } from '#/components/segmented-control'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import {
@@ -71,71 +67,62 @@ function TeamPage() {
   })
   const error = changeRole.error ?? remove.error
 
+  const rowProps = (m: TeamMember) => ({
+    member: m,
+    manage,
+    busy: changeRole.isPending || remove.isPending,
+    actions: memberActions({
+      actorRole: app.organization.role,
+      targetRole: m.role,
+      ownerCount,
+      isSelf: m.isSelf,
+    }),
+    onRoleChange: (role: Role) => changeRole.mutate({ memberId: m.id, role }),
+    onRemove: () => remove.mutate(m.id),
+  })
+  const count = team.members.length
+
   return (
-    <div className="grid gap-6 sm:gap-8">
+    <div className="grid gap-6 md:gap-7">
       <PageHeader
         title="Användare"
-        subtitle={`${team.members.length} ${team.members.length === 1 ? 'person har' : 'personer har'} åtkomst`}
+        subtitle={
+          <>
+            <span className="md:hidden">
+              {count} {count === 1 ? 'person har' : 'personer har'} åtkomst
+            </span>
+            <span className="hidden md:inline">
+              Personer med åtkomst till {app.organization.name}
+            </span>
+          </>
+        }
       />
-      <div className="grid gap-2">
-        <MobileList>
-          {team.members.map((m) => (
-            <MemberRow
-              layout="card"
-              key={m.id}
-              member={m}
-              manage={manage}
-              busy={changeRole.isPending || remove.isPending}
-              actions={memberActions({
-                actorRole: app.organization.role,
-                targetRole: m.role,
-                ownerCount,
-                isSelf: m.isSelf,
-              })}
-              onRoleChange={(role) => changeRole.mutate({ memberId: m.id, role })}
-              onRemove={() => remove.mutate(m.id)}
-            />
-          ))}
-        </MobileList>
-        <table className={desktopTableClass}>
-          <thead className="border-b text-muted-foreground">
-            <tr>
-              <th className="py-2 font-medium">Namn</th>
-              <th className="py-2 font-medium">E-post</th>
-              <th className="py-2 font-medium">Roll</th>
-              {manage && <th className="py-2" />}
-            </tr>
-          </thead>
-          <tbody>
-            {team.members.map((m) => (
-              <MemberRow
-                layout="row"
-                key={m.id}
-                member={m}
-                manage={manage}
-                busy={changeRole.isPending || remove.isPending}
-                actions={memberActions({
-                  actorRole: app.organization.role,
-                  targetRole: m.role,
-                  ownerCount,
-                  isSelf: m.isSelf,
-                })}
-                onRoleChange={(role) => changeRole.mutate({ memberId: m.id, role })}
-                onRemove={() => remove.mutate(m.id)}
-              />
-            ))}
-          </tbody>
-        </table>
-        {error && <p className="text-destructive text-sm">{error.message}</p>}
-      </div>
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-6">
+          <section aria-labelledby="members" className="overflow-hidden rounded-xl border bg-card">
+            <h2 id="members" className="hidden border-b px-5 py-4 font-bold text-[15px] md:block">
+              Medlemmar{' '}
+              <span className="font-medium text-muted-foreground tabular-nums">{count}</span>
+            </h2>
+            <ul className="divide-y">
+              {team.members.map((m) => (
+                <MemberRow key={m.id} {...rowProps(m)} />
+              ))}
+            </ul>
+            {error && (
+              <p className="border-t px-5 py-3 text-destructive text-sm">{error.message}</p>
+            )}
+          </section>
 
-      {team.invitations.length > 0 && (
-        <PendingInvitations
-          invitations={team.invitations}
-          manage={can({ invitation: ['cancel'] })}
-        />
-      )}
-      {can({ invitation: ['create'] }) && <InviteForm />}
+          {team.invitations.length > 0 && (
+            <PendingInvitations
+              invitations={team.invitations}
+              manage={can({ invitation: ['cancel'] })}
+            />
+          )}
+        </div>
+        {can({ invitation: ['create'] }) && <InviteForm />}
+      </div>
     </div>
   )
 }
@@ -147,7 +134,6 @@ function MemberRow({
   actions,
   onRoleChange,
   onRemove,
-  layout,
 }: {
   member: TeamMember
   manage: boolean
@@ -155,109 +141,98 @@ function MemberRow({
   actions: ReturnType<typeof memberActions>
   onRoleChange: (role: Role) => void
   onRemove: () => void
-  /** `row` for the table from `md` up, `card` for the phone list. */
-  layout: 'row' | 'card'
 }) {
   const [confirming, setConfirming] = useState(false)
-  const card = layout === 'card'
+  const canChangeRole = actions.roleOptions.length > 0
+  const canRemove = manage && actions.canRemove
+  const roleLabel = roleLabels[member.role] ?? member.role
 
-  const name = (
-    <>
-      {member.name}
-      {member.isSelf && <span className="font-normal text-muted-foreground"> (du)</span>}
-    </>
-  )
-  const role =
-    actions.roleOptions.length > 0 ? (
-      <Select value={member.role} disabled={busy} onValueChange={(r) => onRoleChange(r as Role)}>
-        <SelectTrigger
-          size="sm"
-          className={card ? 'h-11 w-full' : 'w-40'}
-          aria-label={`Roll för ${member.name}`}
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {actions.roleOptions.map((r) => (
-            <SelectItem key={r} value={r}>
-              {roleLabels[r]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    ) : (
-      (roleLabels[member.role] ?? member.role)
-    )
-  const remove =
-    manage &&
-    actions.canRemove &&
-    (confirming ? (
-      <span className="flex flex-wrap items-center justify-end gap-2">
-        <span className="text-muted-foreground">Ta bort {member.name}?</span>
-        <Button
-          variant="destructive"
-          size="sm"
-          className={card ? 'h-11' : undefined}
-          disabled={busy}
-          onClick={onRemove}
-        >
-          Ta bort
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className={card ? 'h-11' : undefined}
-          onClick={() => setConfirming(false)}
-        >
-          Avbryt
-        </Button>
-      </span>
-    ) : (
-      <Button
-        variant="outline"
-        size="sm"
-        className={card ? 'h-11' : undefined}
-        onClick={() => setConfirming(true)}
+  const roleSelect = canChangeRole && (
+    <Select value={member.role} disabled={busy} onValueChange={(r) => onRoleChange(r as Role)}>
+      <SelectTrigger
+        className="h-11 w-full min-w-0 flex-1 md:h-9 md:w-40 md:flex-none"
+        aria-label={`Roll för ${member.name}`}
       >
-        Ta bort
-      </Button>
-    ))
-
-  if (card) {
-    return (
-      <li className="grid gap-3 px-4 py-3">
-        <span className="grid min-w-0 gap-1">
-          <RowTitle
-            end={
-              actions.roleOptions.length === 0 && (
-                <span className="text-muted-foreground text-sm">{role}</span>
-              )
-            }
-          >
-            {name}
-          </RowTitle>
-          <RowMeta>{member.email}</RowMeta>
-        </span>
-        {actions.roleOptions.length > 0 && (
-          <div className="grid gap-1.5 text-sm">
-            <span aria-hidden="true" className="text-muted-foreground">
-              Roll
-            </span>
-            {role}
-          </div>
-        )}
-        {remove && <span className="flex justify-end">{remove}</span>}
-      </li>
-    )
-  }
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {actions.roleOptions.map((r) => (
+          <SelectItem key={r} value={r}>
+            {roleLabels[r]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
 
   return (
-    <tr className="border-b">
-      <td className="py-2 font-medium">{name}</td>
-      <td className="py-2">{member.email}</td>
-      <td className="py-2">{role}</td>
-      {manage && <td className="py-2 text-right">{remove}</td>}
-    </tr>
+    <li className="grid gap-3 px-4 py-3.5 md:px-5 md:py-4">
+      <div className="flex items-center gap-3 md:gap-4">
+        <InitialsAvatar name={member.name} className="size-10 md:size-9" />
+        <span className="grid min-w-0 flex-1 gap-0.5">
+          <span className="truncate font-semibold text-[15px] md:text-sm">
+            {member.name}
+            {member.isSelf && (
+              <span className="font-medium text-muted-foreground text-xs"> (du)</span>
+            )}
+          </span>
+          <span className="truncate text-[13px] text-muted-foreground">{member.email}</span>
+        </span>
+        {!canChangeRole && (
+          <span className="shrink-0 md:w-40">
+            <span className="inline-block rounded-full bg-muted px-2.5 py-1 font-semibold text-muted-foreground text-xs md:rounded-md md:px-3 md:py-2">
+              {roleLabel}
+            </span>
+          </span>
+        )}
+        {/* From md up the role picker sits on the row; on phones it gets its own line. */}
+        {roleSelect && <span className="hidden md:block">{roleSelect}</span>}
+        {canRemove ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-11 shrink-0 text-destructive hover:text-destructive md:size-9"
+            aria-label={`Ta bort ${member.name}`}
+            aria-expanded={confirming}
+            onClick={() => setConfirming((c) => !c)}
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+        ) : (
+          manage && <span aria-hidden="true" className="hidden w-9 shrink-0 md:block" />
+        )}
+      </div>
+      {roleSelect && (
+        <div className="flex items-center gap-3 pl-13 md:hidden">
+          <span aria-hidden="true" className="text-[13px] text-muted-foreground">
+            Roll
+          </span>
+          {roleSelect}
+        </div>
+      )}
+      {confirming && (
+        <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-destructive/5 p-3 text-sm md:ml-13">
+          <span className="mr-auto">Ta bort {member.name} från företaget?</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-11 md:h-8"
+            onClick={() => setConfirming(false)}
+          >
+            Avbryt
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-11 md:h-8"
+            disabled={busy}
+            onClick={onRemove}
+          >
+            Ta bort
+          </Button>
+        </div>
+      )}
+    </li>
   )
 }
 
@@ -278,13 +253,16 @@ function PendingInvitations({
   })
 
   return (
-    <section className="grid gap-3">
-      <h2 className="font-medium text-lg">Väntande inbjudningar</h2>
-      <ul className="grid gap-2 text-sm">
+    <section aria-labelledby="invitations" className="overflow-hidden rounded-xl border bg-card">
+      <h2 id="invitations" className="border-b px-4 py-3 font-bold text-[15px] md:px-5 md:py-4">
+        Väntande inbjudningar{' '}
+        <span className="font-medium text-muted-foreground tabular-nums">{invitations.length}</span>
+      </h2>
+      <ul className="divide-y text-sm">
         {invitations.map((i) => (
-          <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-medium">{i.email}</span>
-            <span className="text-muted-foreground">
+          <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 md:px-5">
+            <span className="min-w-0 truncate font-medium">{i.email}</span>
+            <span className="text-[13px] text-muted-foreground">
               {roleLabels[i.role ?? 'member']} · gäller till {stockholmDate(i.expiresAt.getTime())}
             </span>
             {manage && (
@@ -301,7 +279,11 @@ function PendingInvitations({
           </li>
         ))}
       </ul>
-      {cancel.error && <p className="text-destructive text-sm">{cancel.error.message}</p>}
+      {cancel.error && (
+        <p className="border-t px-4 py-3 text-destructive text-sm md:px-5">
+          {cancel.error.message}
+        </p>
+      )}
     </section>
   )
 }
@@ -325,8 +307,13 @@ function InviteForm() {
   })
 
   return (
-    <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
-      <h2 className="font-medium text-lg">Bjud in en kollega</h2>
+    <section
+      aria-labelledby="invite"
+      className="grid gap-4 rounded-xl border bg-card p-4 md:max-w-xl md:p-6 xl:max-w-none"
+    >
+      <h2 id="invite" className="font-bold text-[17px]">
+        Bjud in en kollega
+      </h2>
       <form
         className="grid gap-4"
         onSubmit={(e) => {
@@ -334,7 +321,7 @@ function InviteForm() {
           void form.handleSubmit()
         }}
       >
-        <div className="grid gap-4 sm:grid-cols-[1fr_12rem]">
+        <div className="grid gap-4">
           <form.Field
             name="email"
             validators={{
@@ -344,29 +331,41 @@ function InviteForm() {
                   : 'Ange en e-postadress',
             }}
           >
-            {(field) => <TextField field={field} label="E-post" type="email" />}
-          </form.Field>
-          <form.Field name="role">
             {(field) => (
-              <SelectField
+              <TextField
                 field={field}
-                label="Roll"
-                options={invitableRoles.map((r) => ({ value: r, label: roleLabels[r] }))}
+                id="invite-email"
+                label="E-post"
+                type="email"
+                autoComplete="off"
+                placeholder="namn@foretag.se"
               />
             )}
           </form.Field>
+          <form.Field name="role">
+            {(field) => (
+              <div className="grid gap-1.5">
+                <span aria-hidden="true" className="font-medium text-sm">
+                  Roll
+                </span>
+                <SegmentedControl
+                  label="Roll"
+                  name="invite-role"
+                  value={field.state.value}
+                  options={invitableRoles.map((r) => ({ value: r, label: roleLabels[r] }))}
+                  onChange={(role) => field.handleChange(role)}
+                />
+              </div>
+            )}
+          </form.Field>
         </div>
-        <p className="text-muted-foreground text-sm">
+        <p className="rounded-lg bg-muted px-3.5 py-3 text-[13px] text-muted-foreground leading-relaxed">
           Administratörer kan också bjuda in och ta bort användare.
         </p>
         {invite.error && <p className="text-destructive text-sm">{invite.error.message}</p>}
         <form.Subscribe selector={(s) => s.isSubmitting}>
           {(isSubmitting) => (
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
-            >
+            <Button type="submit" disabled={isSubmitting} className="h-11 w-full md:h-10">
               Skicka inbjudan
             </Button>
           )}
