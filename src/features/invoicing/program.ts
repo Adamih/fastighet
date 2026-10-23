@@ -1,7 +1,8 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
 import { invoice, invoiceLine, lease, payment } from '#/db/schema'
-import { loadSettings, type Settings } from '#/features/settings/program'
+import { loadSettings } from '#/features/settings/program'
+import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -20,7 +21,6 @@ import {
   rentLineDescription,
   VAT_RATE_PERCENT,
   vatFor,
-  vatNumberFor,
 } from './rules'
 import type { CreateInvoiceRunInput, ListInvoicesInput, MarkPaidInput } from './schemas'
 
@@ -270,23 +270,6 @@ export type InvoiceView = Effect.Success<ReturnType<typeof getInvoice>>
 
 // ---------------------------------------------------------------------------------------------
 // Sending and payments
-
-/** Seller details for the footer of the email and the printed invoice. */
-export function sellerDetails(seller: Settings, hasVat: boolean): string[] {
-  const address = [seller.streetAddress, [seller.postalCode, seller.city].filter(Boolean).join(' ')]
-    .filter(Boolean)
-    .join(', ')
-  const ids = [
-    seller.organizationNumber && `Org.nr ${seller.organizationNumber}`,
-    hasVat && seller.organizationNumber && `Momsreg.nr ${vatNumberFor(seller.organizationNumber)}`,
-    seller.fSkatt && 'Godkänd för F-skatt',
-  ].filter(Boolean)
-  return [
-    [seller.organizationName, address].filter(Boolean).join(', '),
-    ids.join(' · '),
-    [seller.email, seller.phone].filter(Boolean).join(' · '),
-  ].filter(Boolean)
-}
 
 /**
  * Emails one invoice to its recipient and records when it was sent. Returns false when the
