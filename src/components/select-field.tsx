@@ -15,22 +15,28 @@ export function SelectField({
   options,
   placeholder,
   disabled,
+  id = field.name,
 }: {
   field: AnyFieldApi
   label: string
   options: readonly { value: string; label: string }[]
   placeholder?: string
   disabled?: boolean
+  /** Defaults to the field name; set it when the same form can be on the page twice. */
+  id?: string
 }) {
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={field.name}>{label}</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Select
         disabled={disabled}
         value={field.state.value || undefined}
         onValueChange={(v) => field.handleChange(v)}
       >
-        <SelectTrigger id={field.name} className="w-full">
+        <SelectTrigger
+          id={id}
+          className="w-full data-[size=default]:h-11 sm:data-[size=default]:h-9"
+        >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

@@ -23,6 +23,8 @@ export function UnitForm({
   error,
   disabled = false,
   resetAfterSubmit = false,
+  idPrefix = '',
+  layout = 'wide',
 }: {
   defaultValues: UnitValues
   submitLabel: string
@@ -30,6 +32,10 @@ export function UnitForm({
   error: Error | null
   disabled?: boolean
   resetAfterSubmit?: boolean
+  /** Keeps ids unique when the form can be on the page twice (card and phone drawer). */
+  idPrefix?: string
+  /** `narrow` gives a full-width submit button, for drawers. */
+  layout?: 'wide' | 'narrow'
 }) {
   const form = useForm({
     defaultValues: {
@@ -59,13 +65,21 @@ export function UnitForm({
               onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange objektsnummer'),
             }}
           >
-            {(field) => <TextField field={field} label="Objektsnummer" placeholder="1001" />}
+            {(field) => (
+              <TextField
+                field={field}
+                id={`${idPrefix}label`}
+                label="Objektsnummer"
+                placeholder="1001"
+              />
+            )}
           </form.Field>
           <form.Field name="kind">
             {(field) => (
               <SelectField
                 disabled={disabled}
                 field={field}
+                id={`${idPrefix}kind`}
                 label="Typ"
                 options={optionsFrom(unitKindLabels)}
               />
@@ -83,7 +97,19 @@ export function UnitForm({
             },
           }}
         >
-          {(field) => <TextField field={field} label="Yta (m²)" placeholder="72,5" />}
+          {(field) => (
+            <TextField
+              field={field}
+              id={`${idPrefix}area`}
+              label={
+                <span>
+                  Yta (m²) <span className="font-normal text-muted-foreground">(valfritt)</span>
+                </span>
+              }
+              placeholder="72,5"
+              inputMode="decimal"
+            />
+          )}
         </form.Field>
         {error && <p className="text-destructive text-sm">{error.message}</p>}
         <form.Subscribe selector={(s) => s.isSubmitting}>
@@ -91,7 +117,11 @@ export function UnitForm({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
+              className={
+                layout === 'wide'
+                  ? 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start'
+                  : 'h-11 w-full sm:h-10'
+              }
             >
               {submitLabel}
             </Button>

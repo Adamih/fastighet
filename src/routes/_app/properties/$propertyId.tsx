@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { AddForm } from '#/components/add-form'
 import { desktopTableClass, MobileList, RowMeta, RowTitle } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
@@ -159,15 +160,21 @@ function CreateUnit({ propertyId }: { propertyId: string }) {
   })
 
   return (
-    <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
-      <h2 className="font-medium text-lg">Lägg till objekt</h2>
-      <UnitForm
-        defaultValues={emptyUnit}
-        submitLabel="Spara"
-        error={create.error}
-        resetAfterSubmit
-        onSubmit={(value) => create.mutateAsync({ data: { propertyId, ...value } })}
-      />
-    </section>
+    <AddForm title="Lägg till objekt" description="Lägenheter, lokaler, parkeringar och förråd.">
+      {({ idPrefix, layout, onSaved }) => (
+        <UnitForm
+          idPrefix={idPrefix}
+          layout={layout}
+          defaultValues={emptyUnit}
+          submitLabel="Spara objekt"
+          error={create.error}
+          resetAfterSubmit
+          onSubmit={async (value) => {
+            await create.mutateAsync({ data: { propertyId, ...value } })
+            onSaved()
+          }}
+        />
+      )}
+    </AddForm>
   )
 }
