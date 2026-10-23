@@ -126,7 +126,11 @@ export function TenantForm({
         {error && <p className="text-destructive text-sm">{error.message}</p>}
         <form.Subscribe selector={(s) => s.isSubmitting}>
           {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting} className="justify-self-start">
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
+            >
               {submitLabel}
             </Button>
           )}

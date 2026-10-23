@@ -1,5 +1,15 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  desktopTableClass,
+  FilterChips,
+  filterChipClass,
+  MobileList,
+  MobileListLink,
+  PageHeader,
+  RowMeta,
+  RowTitle,
+} from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
@@ -7,7 +17,6 @@ import { invoicesQuery } from '#/features/invoicing/functions'
 import { periodLabel } from '#/features/invoicing/rules'
 import { type InvoiceFilter, invoiceFilters } from '#/features/invoicing/schemas'
 import { formatSek } from '#/lib/money'
-import { cn } from '#/lib/utils'
 
 const filterLabels: Record<InvoiceFilter, string> = {
   all: 'Alla',
@@ -40,36 +49,57 @@ function InvoicesPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="font-semibold text-2xl">Avier</h1>
-        {canCreate && (
-          <Button asChild>
-            <Link to="/invoices/new">Skapa avier</Link>
-          </Button>
-        )}
-      </div>
+      <PageHeader
+        title="Avier"
+        action={
+          canCreate && (
+            <Button asChild className="h-11 sm:h-9">
+              <Link to="/invoices/new">Skapa avier</Link>
+            </Button>
+          )
+        }
+      />
 
-      <nav className="flex flex-wrap gap-2 text-sm">
+      <FilterChips label="Filtrera avier">
         {invoiceFilters.map((f) => (
           <Link
             key={f}
             to="/invoices"
             search={f === 'all' ? {} : { filter: f }}
-            className={cn(
-              'rounded-full border px-3 py-1',
-              f === filter ? 'bg-foreground text-background' : 'text-muted-foreground',
-            )}
+            className={filterChipClass(f === filter)}
+            aria-current={f === filter ? 'page' : undefined}
           >
             {filterLabels[f]}
           </Link>
         ))}
-      </nav>
+      </FilterChips>
 
       {invoices.length === 0 ? (
         <p className="text-muted-foreground">Inga avier.</p>
       ) : (
         <>
-          <table className="w-full text-left text-sm">
+          <MobileList>
+            {invoices.map((i) => (
+              <li key={i.id}>
+                <MobileListLink to="/invoices/$invoiceId" params={{ invoiceId: i.id }}>
+                  <RowTitle end={<InvoiceStatusBadge status={i.status} />}>
+                    {i.recipientName}
+                  </RowTitle>
+                  <RowMeta>
+                    Avi {i.number} · {periodLabel({ start: i.periodStart, end: i.periodEnd })}
+                  </RowMeta>
+                  <span className="flex flex-wrap justify-between gap-x-3 text-sm tabular-nums">
+                    <span className="text-muted-foreground">
+                      Förfaller {i.dueDate}
+                      {i.sentAt && ' · skickad'}
+                    </span>
+                    <span className="font-medium">{formatSek(i.totalOre)}</span>
+                  </span>
+                </MobileListLink>
+              </li>
+            ))}
+          </MobileList>
+          <table className={desktopTableClass}>
             <thead className="border-b text-muted-foreground">
               <tr>
                 <th className="py-2 font-medium">Nr</th>

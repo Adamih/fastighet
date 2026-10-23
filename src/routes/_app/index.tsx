@@ -1,5 +1,13 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  desktopTableClass,
+  MobileList,
+  MobileListLink,
+  PageHeader,
+  RowMeta,
+  RowTitle,
+} from '#/components/responsive'
 import { useCan } from '#/features/auth/use-can'
 import { createPropertyFn, propertiesQuery } from '#/features/properties/functions'
 import { emptyProperty, PropertyForm } from '#/features/properties/property-form'
@@ -19,46 +27,63 @@ function PropertiesPage() {
   })
 
   return (
-    <div className="grid gap-8">
-      <h1 className="font-semibold text-2xl">Fastigheter</h1>
+    <div className="grid gap-6 sm:gap-8">
+      <PageHeader
+        title="Fastigheter"
+        subtitle={properties.length > 0 && `${properties.length} fastigheter`}
+      />
       {properties.length === 0 ? (
         <p className="text-muted-foreground">
           Inga fastigheter ännu.{canManage && ' Lägg till den första nedan.'}
         </p>
       ) : (
-        <table className="w-full text-left text-sm">
-          <thead className="border-b text-muted-foreground">
-            <tr>
-              <th className="py-2 font-medium">Beteckning</th>
-              <th className="py-2 font-medium">Namn</th>
-              <th className="py-2 font-medium">Adress</th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          <MobileList>
             {properties.map((p) => (
-              <tr key={p.id} className="border-b">
-                <td className="py-2">
-                  <Link
-                    to="/properties/$propertyId"
-                    params={{ propertyId: p.id }}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    {p.designation}
-                  </Link>
-                </td>
-                <td className="py-2">{p.name}</td>
-                <td className="py-2">
-                  {[p.streetAddress, [p.postalCode, p.city].filter(Boolean).join(' ')]
-                    .filter(Boolean)
-                    .join(', ')}
-                </td>
-              </tr>
+              <li key={p.id}>
+                <MobileListLink to="/properties/$propertyId" params={{ propertyId: p.id }}>
+                  <RowTitle>{p.designation}</RowTitle>
+                  <RowMeta>
+                    {[p.name, p.streetAddress, p.city].filter(Boolean).join(' · ') || '–'}
+                  </RowMeta>
+                </MobileListLink>
+              </li>
             ))}
-          </tbody>
-        </table>
+          </MobileList>
+          <table className={desktopTableClass}>
+            <thead className="border-b text-muted-foreground">
+              <tr>
+                <th className="py-2 font-medium">Beteckning</th>
+                <th className="py-2 font-medium">Namn</th>
+                <th className="py-2 font-medium">Adress</th>
+              </tr>
+            </thead>
+            <tbody>
+              {properties.map((p) => (
+                <tr key={p.id} className="border-b">
+                  <td className="py-2">
+                    <Link
+                      to="/properties/$propertyId"
+                      params={{ propertyId: p.id }}
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {p.designation}
+                    </Link>
+                  </td>
+                  <td className="py-2">{p.name}</td>
+                  <td className="py-2">
+                    {[p.streetAddress, [p.postalCode, p.city].filter(Boolean).join(' ')]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
       {canManage && (
-        <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+        <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
           <h2 className="font-medium text-lg">Lägg till fastighet</h2>
           <PropertyForm
             defaultValues={emptyProperty}

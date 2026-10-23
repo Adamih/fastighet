@@ -2,11 +2,13 @@ import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-q
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { DeleteButton } from '#/components/delete-button'
+import { desktopTableClass, MobileList, MobileListLink, RowTitle } from '#/components/responsive'
 import { useCan } from '#/features/auth/use-can'
 import { formatPeriod, formatRent, LeaseStatusBadge } from '#/features/leases/components'
 import { tenantKindLabels } from '#/features/leases/options'
 import { deleteTenantFn, tenantQuery, updateTenantFn } from '#/features/tenants/functions'
 import { TenantForm, tenantToInput } from '#/features/tenants/tenant-form'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/tenants/$tenantId')({
   loader: ({ context, params }) =>
@@ -42,7 +44,7 @@ function TenantPage() {
   })
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-6 sm:gap-8">
       <div className="grid gap-1">
         <Link to="/tenants" className="text-muted-foreground text-sm hover:underline">
           ← Hyresgäster
@@ -57,33 +59,50 @@ function TenantPage() {
           {tenant.leases.length === 0 ? (
             <p className="text-muted-foreground">Inga avtal.</p>
           ) : (
-            <table className="w-full max-w-3xl text-left text-sm">
-              <tbody>
+            <>
+              <MobileList>
                 {tenant.leases.map((l) => (
-                  <tr key={l.id} className="border-b">
-                    <td className="py-2 tabular-nums">
-                      <Link
-                        to="/leases/$leaseId"
-                        params={{ leaseId: l.id }}
-                        className="font-medium underline-offset-4 hover:underline"
-                      >
+                  <li key={l.id}>
+                    <MobileListLink to="/leases/$leaseId" params={{ leaseId: l.id }}>
+                      <RowTitle end={<LeaseStatusBadge status={l.status} />}>
                         Avtal {l.number}
-                      </Link>
-                    </td>
-                    <td className="py-2 tabular-nums">{formatPeriod(l)}</td>
-                    <td className="py-2 text-right tabular-nums">{formatRent(l)}</td>
-                    <td className="py-2 pl-4">
-                      <LeaseStatusBadge status={l.status} />
-                    </td>
-                  </tr>
+                      </RowTitle>
+                      <span className="flex flex-wrap justify-between gap-x-3 text-sm tabular-nums">
+                        <span className="text-muted-foreground">{formatPeriod(l)}</span>
+                        <span className="font-medium">{formatRent(l)}</span>
+                      </span>
+                    </MobileListLink>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </MobileList>
+              <table className={cn(desktopTableClass, 'max-w-3xl')}>
+                <tbody>
+                  {tenant.leases.map((l) => (
+                    <tr key={l.id} className="border-b">
+                      <td className="py-2 tabular-nums">
+                        <Link
+                          to="/leases/$leaseId"
+                          params={{ leaseId: l.id }}
+                          className="font-medium underline-offset-4 hover:underline"
+                        >
+                          Avtal {l.number}
+                        </Link>
+                      </td>
+                      <td className="py-2 tabular-nums">{formatPeriod(l)}</td>
+                      <td className="py-2 text-right tabular-nums">{formatRent(l)}</td>
+                      <td className="py-2 pl-4">
+                        <LeaseStatusBadge status={l.status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
           )}
         </section>
       )}
 
-      <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+      <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
         <h2 className="font-medium text-lg">Uppgifter</h2>
         <p className="text-muted-foreground text-sm">
           Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med.

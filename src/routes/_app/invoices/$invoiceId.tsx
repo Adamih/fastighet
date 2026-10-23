@@ -49,7 +49,7 @@ function InvoicePage() {
           <h2 className="font-medium text-lg">Inbetalningar</h2>
           <ul className="grid gap-1 text-sm">
             {invoice.payments.map((p) => (
-              <li key={p.id} className="flex items-center gap-3">
+              <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="tabular-nums">{p.bookingDate}</span>
                 <span className="tabular-nums">{formatSek(p.amountOre)}</span>
                 <span className="text-muted-foreground">{p.payerName}</span>
@@ -95,7 +95,7 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
 
   return (
     <section className="grid gap-3 print:hidden">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-end [&_button]:h-11 sm:[&_button]:h-9">
         <Button variant="outline" onClick={() => window.print()}>
           Skriv ut
         </Button>
@@ -109,14 +109,14 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
           </Button>
         )}
         {canManage && open && (
-          <div className="flex items-end gap-2">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:flex">
             <div className="grid gap-1.5">
               <Label htmlFor="paidOn">Betald den</Label>
               <Input
                 id="paidOn"
                 type="date"
                 value={paidOn}
-                className="w-40"
+                className="h-11 w-full sm:h-9 sm:w-40"
                 onChange={(e) => setPaidOn(e.target.value)}
               />
             </div>
@@ -140,8 +140,8 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
         {canManage &&
           open &&
           (confirmVoid ? (
-            <span className="inline-flex items-center gap-2">
-              <span className="text-sm">Makulera avi {invoice.number}?</span>
+            <span className="flex flex-wrap items-center gap-2">
+              <span className="w-full text-sm sm:w-auto">Makulera avi {invoice.number}?</span>
               <Button
                 variant="destructive"
                 disabled={voidIt.isPending}
@@ -174,7 +174,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
   const period = periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })
 
   return (
-    <article className="grid max-w-3xl gap-8 rounded-lg border p-8 print:border-0 print:p-0">
+    <article className="grid max-w-3xl gap-6 rounded-lg border p-4 sm:gap-8 sm:p-8 print:border-0 print:p-0">
       <header className="flex flex-wrap justify-between gap-6">
         <div>
           <p className="font-semibold text-lg">{seller.organizationName}</p>
@@ -184,11 +184,11 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
             {[seller.postalCode, seller.city].filter(Boolean).join(' ')}
           </p>
         </div>
-        <div className="text-right">
+        <div className="sm:text-right print:text-right">
           <h1 className="font-semibold text-2xl">
             Hyresavi{invoice.status === 'void' && ' (makulerad)'}
           </h1>
-          <dl className="mt-2 grid grid-cols-[auto_auto] justify-end gap-x-4 text-sm">
+          <dl className="mt-2 grid grid-cols-[auto_auto] justify-start gap-x-4 text-sm sm:justify-end print:justify-end">
             <dt className="text-muted-foreground">Fakturanummer</dt>
             <dd className="tabular-nums">{invoice.number}</dd>
             <dt className="text-muted-foreground">Fakturadatum</dt>
@@ -246,7 +246,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
         </tfoot>
       </table>
 
-      <section className="grid gap-x-8 gap-y-1 rounded-md bg-muted p-4 text-sm sm:grid-cols-4">
+      <section className="grid gap-x-8 gap-y-1 rounded-md bg-muted p-4 text-sm grid-cols-2 sm:grid-cols-4">
         <PaymentField label="Bankgiro" value={seller.bankgiro ?? '–'} />
         <PaymentField label="OCR-nummer" value={invoice.ocr} />
         <PaymentField label="Förfallodag" value={invoice.dueDate} />

@@ -1,6 +1,7 @@
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { desktopTableClass, MobileList, MobileListLink, RowTitle } from '#/components/responsive'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
@@ -20,6 +21,7 @@ import { earliestMoveOutDate } from '#/features/leases/terms'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
 import { formatSek } from '#/lib/money'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/leases/$leaseId')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(leaseQuery(params.leaseId)),
@@ -33,16 +35,16 @@ function LeasePage() {
   const { data: lease } = useSuspenseQuery(leaseQuery(leaseId))
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-6 sm:gap-8">
       <div className="grid gap-1">
         <Link to="/leases" className="text-muted-foreground text-sm hover:underline">
           ← Avtal
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-semibold text-2xl">Avtal {lease.number}</h1>
           <LeaseStatusBadge status={lease.status} />
           {canManage && can({ property: ['read'] }) && (
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" className="ml-auto h-11 sm:ml-0 sm:h-8" asChild>
               <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
                 Ändra
               </Link>
@@ -61,7 +63,7 @@ function LeasePage() {
         </p>
       </div>
 
-      <dl className="grid max-w-2xl grid-cols-[12rem_1fr] gap-x-4 gap-y-2 text-sm">
+      <dl className="grid max-w-2xl grid-cols-[7.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm sm:grid-cols-[12rem_1fr]">
         <dt className="text-muted-foreground">Period</dt>
         <dd className="tabular-nums">{formatPeriod(lease)}</dd>
         <dt className="text-muted-foreground">Uppsägningstid</dt>
@@ -123,7 +125,7 @@ function WithdrawTermination({ lease }: { lease: LeaseView }) {
   })
 
   return (
-    <section className="grid max-w-xl gap-3 rounded-lg border p-6">
+    <section className="grid max-w-xl gap-3 rounded-lg border p-4 sm:p-6">
       <h2 className="font-medium text-lg">Uppsägning</h2>
       <p className="text-sm">
         Avtalet sades upp {lease.noticeDate} med avflyttning {lease.moveOutDate}. Om hyresgästen
@@ -132,7 +134,7 @@ function WithdrawTermination({ lease }: { lease: LeaseView }) {
       {withdraw.error && <p className="text-destructive text-sm">{withdraw.error.message}</p>}
       <Button
         variant="outline"
-        className="justify-self-start"
+        className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
         disabled={withdraw.isPending}
         onClick={() => withdraw.mutate({ data: { leaseId: lease.id } })}
       >
@@ -149,7 +151,22 @@ function LeaseInvoices({ leaseId }: { leaseId: string }) {
   return (
     <section className="grid gap-3">
       <h2 className="font-medium text-lg">Avier</h2>
-      <table className="w-full max-w-2xl text-left text-sm">
+      <MobileList>
+        {invoices.map((i) => (
+          <li key={i.id}>
+            <MobileListLink to="/invoices/$invoiceId" params={{ invoiceId: i.id }}>
+              <RowTitle end={<InvoiceStatusBadge status={i.status} />}>Avi {i.number}</RowTitle>
+              <span className="flex flex-wrap justify-between gap-x-3 text-sm tabular-nums">
+                <span className="text-muted-foreground">
+                  {periodLabel({ start: i.periodStart, end: i.periodEnd })}
+                </span>
+                <span className="font-medium">{formatSek(i.totalOre)}</span>
+              </span>
+            </MobileListLink>
+          </li>
+        ))}
+      </MobileList>
+      <table className={cn(desktopTableClass, 'max-w-2xl')}>
         <tbody>
           {invoices.map((i) => (
             <tr key={i.id} className="border-b">
@@ -199,7 +216,7 @@ function TerminateForm({ lease }: { lease: LeaseView }) {
   })
 
   return (
-    <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+    <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
       <h2 className="font-medium text-lg">Säg upp avtalet</h2>
       <form
         className="grid gap-4"
@@ -243,7 +260,7 @@ function TerminateForm({ lease }: { lease: LeaseView }) {
               type="submit"
               variant="destructive"
               disabled={isSubmitting}
-              className="justify-self-start"
+              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
             >
               Registrera uppsägning
             </Button>

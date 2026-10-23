@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
+import { desktopTableClass, MobileList, RowMeta, RowTitle } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
@@ -10,6 +11,7 @@ import { createInvoiceRunFn, invoiceRunPreviewQuery } from '#/features/invoicing
 import { isInvoiceMonth, periodLabel } from '#/features/invoicing/rules'
 import { addMonths, stockholmDate } from '#/lib/dates'
 import { formatSek } from '#/lib/money'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/invoices/new')({ component: NewInvoiceRunPage })
 
@@ -54,14 +56,14 @@ function NewInvoiceRunPage() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-end gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">
         <div className="grid gap-1.5">
           <Label htmlFor="month">Hyresmånad</Label>
           <Input
             id="month"
             type="month"
             value={month}
-            className="w-48"
+            className="h-11 w-full sm:h-9 sm:w-48"
             onChange={(e) => {
               setMonth(e.target.value)
               setResult(null)
@@ -75,7 +77,7 @@ function NewInvoiceRunPage() {
       </div>
 
       {result ? (
-        <section className="grid gap-2 rounded-lg border p-6">
+        <section className="grid gap-2 rounded-lg border p-4 sm:p-6">
           <h2 className="font-medium text-lg">Klart</h2>
           <ul className="grid gap-1 text-sm">
             <li>{result.created} avier skapade</li>
@@ -110,7 +112,35 @@ function NewInvoiceRunPage() {
         <p className="text-muted-foreground">Inga avtal att avisera för {month}.</p>
       ) : (
         <>
-          <table className="w-full text-left text-sm">
+          <MobileList>
+            {rows.map((r) => (
+              <li
+                key={r.leaseId}
+                className={cn('grid gap-1 px-4 py-3', r.alreadyInvoiced && 'text-muted-foreground')}
+              >
+                <RowTitle
+                  end={<span className="font-medium tabular-nums">{formatSek(r.totalOre)}</span>}
+                >
+                  {r.tenant.name}
+                </RowTitle>
+                <RowMeta>
+                  Avtal {r.leaseNumber} · {periodLabel(r.period)} · förfaller {r.dueDate}
+                </RowMeta>
+                {(r.alreadyInvoiced || r.vatOre > 0 || (!r.tenant.email && send)) && (
+                  <span className="text-muted-foreground text-xs">
+                    {[
+                      r.alreadyInvoiced && 'Redan aviserad',
+                      r.vatOre > 0 && 'inkl. moms',
+                      !r.alreadyInvoiced && !r.tenant.email && send && 'Ingen e-post',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                )}
+              </li>
+            ))}
+          </MobileList>
+          <table className={desktopTableClass}>
             <thead className="border-b text-muted-foreground">
               <tr>
                 <th className="py-2 font-medium">Avtal</th>
@@ -147,8 +177,9 @@ function NewInvoiceRunPage() {
             </tbody>
           </table>
           {create.error && <p className="text-destructive text-sm">{create.error.message}</p>}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Button
+              className="h-11 w-full sm:h-9 sm:w-auto"
               disabled={pending.length === 0 || create.isPending}
               onClick={() => create.mutate({ data: { month, send } })}
             >

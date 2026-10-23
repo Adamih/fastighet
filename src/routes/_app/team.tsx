@@ -2,6 +2,13 @@ import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
+import {
+  desktopTableClass,
+  MobileList,
+  PageHeader,
+  RowMeta,
+  RowTitle,
+} from '#/components/responsive'
 import { SelectField } from '#/components/select-field'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
@@ -65,10 +72,32 @@ function TeamPage() {
   const error = changeRole.error ?? remove.error
 
   return (
-    <div className="grid gap-8">
-      <h1 className="font-semibold text-2xl">Användare</h1>
+    <div className="grid gap-6 sm:gap-8">
+      <PageHeader
+        title="Användare"
+        subtitle={`${team.members.length} ${team.members.length === 1 ? 'person har' : 'personer har'} åtkomst`}
+      />
       <div className="grid gap-2">
-        <table className="w-full text-left text-sm">
+        <MobileList>
+          {team.members.map((m) => (
+            <MemberRow
+              layout="card"
+              key={m.id}
+              member={m}
+              manage={manage}
+              busy={changeRole.isPending || remove.isPending}
+              actions={memberActions({
+                actorRole: app.organization.role,
+                targetRole: m.role,
+                ownerCount,
+                isSelf: m.isSelf,
+              })}
+              onRoleChange={(role) => changeRole.mutate({ memberId: m.id, role })}
+              onRemove={() => remove.mutate(m.id)}
+            />
+          ))}
+        </MobileList>
+        <table className={desktopTableClass}>
           <thead className="border-b text-muted-foreground">
             <tr>
               <th className="py-2 font-medium">Namn</th>
@@ -80,6 +109,7 @@ function TeamPage() {
           <tbody>
             {team.members.map((m) => (
               <MemberRow
+                layout="row"
                 key={m.id}
                 member={m}
                 manage={manage}
@@ -117,6 +147,7 @@ function MemberRow({
   actions,
   onRoleChange,
   onRemove,
+  layout,
 }: {
   member: TeamMember
   manage: boolean
@@ -124,58 +155,108 @@ function MemberRow({
   actions: ReturnType<typeof memberActions>
   onRoleChange: (role: Role) => void
   onRemove: () => void
+  /** `row` for the table from `md` up, `card` for the phone list. */
+  layout: 'row' | 'card'
 }) {
   const [confirming, setConfirming] = useState(false)
+  const card = layout === 'card'
+
+  const name = (
+    <>
+      {member.name}
+      {member.isSelf && <span className="font-normal text-muted-foreground"> (du)</span>}
+    </>
+  )
+  const role =
+    actions.roleOptions.length > 0 ? (
+      <Select value={member.role} disabled={busy} onValueChange={(r) => onRoleChange(r as Role)}>
+        <SelectTrigger
+          size="sm"
+          className={card ? 'h-11 w-full' : 'w-40'}
+          aria-label={`Roll för ${member.name}`}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {actions.roleOptions.map((r) => (
+            <SelectItem key={r} value={r}>
+              {roleLabels[r]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : (
+      (roleLabels[member.role] ?? member.role)
+    )
+  const remove =
+    manage &&
+    actions.canRemove &&
+    (confirming ? (
+      <span className="flex flex-wrap items-center justify-end gap-2">
+        <span className="text-muted-foreground">Ta bort {member.name}?</span>
+        <Button
+          variant="destructive"
+          size="sm"
+          className={card ? 'h-11' : undefined}
+          disabled={busy}
+          onClick={onRemove}
+        >
+          Ta bort
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className={card ? 'h-11' : undefined}
+          onClick={() => setConfirming(false)}
+        >
+          Avbryt
+        </Button>
+      </span>
+    ) : (
+      <Button
+        variant="outline"
+        size="sm"
+        className={card ? 'h-11' : undefined}
+        onClick={() => setConfirming(true)}
+      >
+        Ta bort
+      </Button>
+    ))
+
+  if (card) {
+    return (
+      <li className="grid gap-3 px-4 py-3">
+        <span className="grid min-w-0 gap-1">
+          <RowTitle
+            end={
+              actions.roleOptions.length === 0 && (
+                <span className="text-muted-foreground text-sm">{role}</span>
+              )
+            }
+          >
+            {name}
+          </RowTitle>
+          <RowMeta>{member.email}</RowMeta>
+        </span>
+        {actions.roleOptions.length > 0 && (
+          <div className="grid gap-1.5 text-sm">
+            <span aria-hidden="true" className="text-muted-foreground">
+              Roll
+            </span>
+            {role}
+          </div>
+        )}
+        {remove && <span className="flex justify-end">{remove}</span>}
+      </li>
+    )
+  }
 
   return (
     <tr className="border-b">
-      <td className="py-2 font-medium">
-        {member.name}
-        {member.isSelf && <span className="font-normal text-muted-foreground"> (du)</span>}
-      </td>
+      <td className="py-2 font-medium">{name}</td>
       <td className="py-2">{member.email}</td>
-      <td className="py-2">
-        {actions.roleOptions.length > 0 ? (
-          <Select
-            value={member.role}
-            disabled={busy}
-            onValueChange={(role) => onRoleChange(role as Role)}
-          >
-            <SelectTrigger size="sm" className="w-40" aria-label={`Roll för ${member.name}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {actions.roleOptions.map((role) => (
-                <SelectItem key={role} value={role}>
-                  {roleLabels[role]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : (
-          (roleLabels[member.role] ?? member.role)
-        )}
-      </td>
-      {manage && (
-        <td className="py-2 text-right">
-          {actions.canRemove &&
-            (confirming ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="text-muted-foreground">Ta bort {member.name}?</span>
-                <Button variant="destructive" size="sm" disabled={busy} onClick={onRemove}>
-                  Ta bort
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setConfirming(false)}>
-                  Avbryt
-                </Button>
-              </span>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => setConfirming(true)}>
-                Ta bort
-              </Button>
-            ))}
-        </td>
-      )}
+      <td className="py-2">{role}</td>
+      {manage && <td className="py-2 text-right">{remove}</td>}
     </tr>
   )
 }
@@ -201,7 +282,7 @@ function PendingInvitations({
       <h2 className="font-medium text-lg">Väntande inbjudningar</h2>
       <ul className="grid gap-2 text-sm">
         {invitations.map((i) => (
-          <li key={i.id} className="flex items-center gap-3">
+          <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-medium">{i.email}</span>
             <span className="text-muted-foreground">
               {roleLabels[i.role ?? 'member']} · gäller till {stockholmDate(i.expiresAt.getTime())}
@@ -210,7 +291,7 @@ function PendingInvitations({
               <Button
                 variant="outline"
                 size="sm"
-                className="ml-auto"
+                className="ml-auto h-11 sm:h-8"
                 disabled={cancel.isPending}
                 onClick={() => cancel.mutate(i.id)}
               >
@@ -244,7 +325,7 @@ function InviteForm() {
   })
 
   return (
-    <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+    <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
       <h2 className="font-medium text-lg">Bjud in en kollega</h2>
       <form
         className="grid gap-4"
@@ -281,7 +362,11 @@ function InviteForm() {
         {invite.error && <p className="text-destructive text-sm">{invite.error.message}</p>}
         <form.Subscribe selector={(s) => s.isSubmitting}>
           {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting} className="justify-self-start">
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
+            >
               Skicka inbjudan
             </Button>
           )}

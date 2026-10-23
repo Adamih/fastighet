@@ -32,7 +32,7 @@ function InvitationPage() {
         {result.code === 'YOU_ARE_NOT_THE_RECIPIENT_OF_THE_INVITATION' && (
           <Button
             variant="outline"
-            className="justify-self-start"
+            className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
             onClick={async () => {
               await authClient.signOut()
               await router.invalidate()

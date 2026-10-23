@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { desktopTableClass, MobileList, RowMeta, RowTitle } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
@@ -22,15 +23,15 @@ function PropertyPage() {
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
 
   return (
-    <div className="grid gap-8">
+    <div className="grid gap-6 sm:gap-8">
       <div className="grid gap-1">
         <Link to="/" className="text-muted-foreground text-sm hover:underline">
           ← Fastigheter
         </Link>
-        <div className="flex items-center gap-3">
-          <h1 className="font-semibold text-2xl">{property.designation}</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-start">
+          <h1 className="min-w-0 font-semibold text-2xl">{property.designation}</h1>
           {canManage && (
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" className="h-11 sm:h-8" asChild>
               <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
                 Ändra
               </Link>
@@ -45,28 +46,20 @@ function PropertyPage() {
         {property.units.length === 0 ? (
           <p className="text-muted-foreground">Inga objekt ännu.</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead className="border-b text-muted-foreground">
-              <tr>
-                <th className="py-2 font-medium">Objekt</th>
-                <th className="py-2 font-medium">Typ</th>
-                <th className="py-2 text-right font-medium">Yta</th>
-                {can({ lease: ['read'] }) && <th className="py-2 pl-6 font-medium">Hyresgäst</th>}
-                <th className="py-2" />
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            {/* Rows are not links here: each has its own tenant link and edit button. */}
+            <MobileList>
               {property.units.map((u) => (
-                <tr key={u.id} className="border-b">
-                  <td className="py-2 font-medium">{u.label}</td>
-                  <td className="py-2">{unitKindLabels[u.kind]}</td>
-                  <td className="py-2 text-right">
-                    {u.areaSqm == null ? '–' : `${areaFormat.format(u.areaSqm)} m²`}
-                  </td>
-                  {can({ lease: ['read'] }) && (
-                    <td className="py-2 pl-6">
-                      {u.occupancy ? (
-                        <span className="flex items-center gap-2">
+                <li key={u.id} className="flex min-h-14 items-center gap-3 px-4 py-3">
+                  <span className="grid min-w-0 flex-1 gap-1">
+                    <RowTitle>{u.label}</RowTitle>
+                    <RowMeta>
+                      {unitKindLabels[u.kind]}
+                      {u.areaSqm != null && ` · ${areaFormat.format(u.areaSqm)} m²`}
+                    </RowMeta>
+                    {can({ lease: ['read'] }) &&
+                      (u.occupancy ? (
+                        <span className="flex flex-wrap items-center gap-2 text-sm">
                           <Link
                             to="/leases/$leaseId"
                             params={{ leaseId: u.occupancy.leaseId }}
@@ -75,32 +68,78 @@ function PropertyPage() {
                             {u.occupancy.tenantName}
                           </Link>
                           <LeaseStatusBadge status={u.occupancy.status} />
-                          <span className="text-muted-foreground tabular-nums">
-                            {u.occupancy.status === 'upcoming'
-                              ? `från ${u.occupancy.startDate}`
-                              : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
-                          </span>
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">Vakant</span>
-                      )}
-                    </td>
-                  )}
-                  <td className="py-2 text-right">
-                    {canManage && (
-                      <Link
-                        to="/units/$unitId/edit"
-                        params={{ unitId: u.id }}
-                        className="text-muted-foreground underline-offset-4 hover:underline"
-                      >
+                        <span className="text-muted-foreground text-sm">Vakant</span>
+                      ))}
+                  </span>
+                  {canManage && (
+                    <Button variant="outline" size="sm" className="h-11" asChild>
+                      <Link to="/units/$unitId/edit" params={{ unitId: u.id }}>
                         Ändra
                       </Link>
-                    )}
-                  </td>
-                </tr>
+                    </Button>
+                  )}
+                </li>
               ))}
-            </tbody>
-          </table>
+            </MobileList>
+            <table className={desktopTableClass}>
+              <thead className="border-b text-muted-foreground">
+                <tr>
+                  <th className="py-2 font-medium">Objekt</th>
+                  <th className="py-2 font-medium">Typ</th>
+                  <th className="py-2 text-right font-medium">Yta</th>
+                  {can({ lease: ['read'] }) && <th className="py-2 pl-6 font-medium">Hyresgäst</th>}
+                  <th className="py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {property.units.map((u) => (
+                  <tr key={u.id} className="border-b">
+                    <td className="py-2 font-medium">{u.label}</td>
+                    <td className="py-2">{unitKindLabels[u.kind]}</td>
+                    <td className="py-2 text-right">
+                      {u.areaSqm == null ? '–' : `${areaFormat.format(u.areaSqm)} m²`}
+                    </td>
+                    {can({ lease: ['read'] }) && (
+                      <td className="py-2 pl-6">
+                        {u.occupancy ? (
+                          <span className="flex items-center gap-2">
+                            <Link
+                              to="/leases/$leaseId"
+                              params={{ leaseId: u.occupancy.leaseId }}
+                              className="underline-offset-4 hover:underline"
+                            >
+                              {u.occupancy.tenantName}
+                            </Link>
+                            <LeaseStatusBadge status={u.occupancy.status} />
+                            <span className="text-muted-foreground tabular-nums">
+                              {u.occupancy.status === 'upcoming'
+                                ? `från ${u.occupancy.startDate}`
+                                : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Vakant</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="py-2 text-right">
+                      {canManage && (
+                        <Link
+                          to="/units/$unitId/edit"
+                          params={{ unitId: u.id }}
+                          className="text-muted-foreground underline-offset-4 hover:underline"
+                        >
+                          Ändra
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </section>
 
@@ -120,7 +159,7 @@ function CreateUnit({ propertyId }: { propertyId: string }) {
   })
 
   return (
-    <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+    <section className="grid max-w-xl gap-4 rounded-lg border p-4 sm:p-6">
       <h2 className="font-medium text-lg">Lägg till objekt</h2>
       <UnitForm
         defaultValues={emptyUnit}

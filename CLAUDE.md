@@ -15,6 +15,11 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Delete a record only when nothing depends on it, and check first so the user gets a `Conflict` explaining why. Foreign keys are only the backstop.
   - Units that have ever been on a lease, tenants with leases, and leases with invoices can't be deleted. Terminate the lease instead.
   - Edits never touch issued invoices, which keep their own copy of the details.
+- **Phone width.** Every page must work at 390 px. Use `src/components/responsive.tsx`:
+  - Pair each data table (`className={desktopTableClass}`, shown from `md` up) with a `MobileList` of the same rows, using `MobileListLink` when the whole row opens something.
+  - Use `PageHeader` for the title and its primary action, and `FilterChips` for filters (they scroll sideways on phones).
+  - On phones, give action buttons and inputs 44 px height (`h-11 sm:h-9`) and make form submit buttons full width.
+  - Keep the existing theme tokens; don't add colors for mobile.
 - **Forms.** Each entity has one form component (`features/*/…-form.tsx`), used for both create and edit. Edit pages that live under a detail URL use a trailing underscore (`$leaseId_.edit.tsx`) so they don't render inside the detail page.
 - **Errors.** Expected failures are tagged errors from `src/server/errors.ts`. `runApp` maps them: `Unauthenticated` redirects to /login, `NoActiveOrganization` to /onboarding, `NotFound` becomes a 404, `Forbidden` shows a generic "no permission" message, and a `Conflict` message is shown to the user. Anything else is logged and replaced with a generic message.
 - **Invoices are accounting records.** Never delete or renumber them:
