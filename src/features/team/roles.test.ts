@@ -1,6 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
-import { memberActions } from './roles'
+import { isOwner, memberActions } from './roles'
 
 const actions = (
   actorRole: string,
@@ -15,6 +15,25 @@ const actions = (
   })
 
 describe('memberActions', () => {
+  test.each([
+    'owner,admin',
+    'member, owner',
+    ' owner , admin ',
+  ])('protects an owner with multiple roles: %p', (targetRole) => {
+    expect(actions('admin', targetRole, { owners: 2 })).toEqual({
+      roleOptions: [],
+      canRemove: false,
+    })
+    expect(actions('owner,admin', targetRole, { owners: 1 })).toEqual({
+      roleOptions: [],
+      canRemove: false,
+    })
+    expect(actions('member, owner', targetRole, { owners: 2 })).toEqual({
+      roleOptions: ['owner', 'admin', 'member'],
+      canRemove: true,
+    })
+  })
+
   test('members manage nobody', () => {
     expect(actions('member', 'member')).toEqual({ roleOptions: [], canRemove: false })
   })
@@ -52,4 +71,21 @@ describe('memberActions', () => {
       canRemove: true,
     })
   })
+})
+
+describe('isOwner', () => {
+  test.each([
+    'owner',
+    'owner,admin',
+    'member, owner',
+    ' owner , owner ',
+  ])('recognizes owner membership: %p', (role) => expect(isOwner(role)).toBe(true))
+
+  test.each([
+    '',
+    'admin',
+    'member,admin',
+    'homeowner',
+    'owner-assistant',
+  ])('does not treat other roles as owners: %p', (role) => expect(isOwner(role)).toBe(false))
 })

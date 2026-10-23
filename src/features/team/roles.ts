@@ -15,6 +15,9 @@ export const roleLabels: Record<string, string> = {
 export const invitableRoles = ['member', 'admin'] as const
 export type InvitableRole = (typeof invitableRoles)[number]
 
+/** Better Auth stores multiple roles as a comma-separated string. */
+export const isOwner = (role: string) => role.split(',').some((r) => r.trim() === 'owner')
+
 export interface MemberActions {
   /** Roles the actor may switch the target to (includes the current one). Empty = no change. */
   readonly roleOptions: readonly Role[]
@@ -41,9 +44,9 @@ export function memberActions(input: {
   if (isSelf) return none
   const mayUpdate = can(actorRole, { member: ['update'] })
   const mayRemove = can(actorRole, { member: ['delete'] })
-  const actorIsOwner = actorRole.split(',').some((r) => r.trim() === 'owner')
+  const actorIsOwner = isOwner(actorRole)
 
-  if (targetRole === 'owner') {
+  if (isOwner(targetRole)) {
     if (!actorIsOwner || ownerCount <= 1) return none
     return { roleOptions: mayUpdate ? roles : [], canRemove: mayRemove }
   }

@@ -17,6 +17,7 @@ import { teamQuery } from '#/features/team/functions'
 import {
   type InvitableRole,
   invitableRoles,
+  isOwner,
   memberActions,
   type Role,
   roleLabels,
@@ -37,7 +38,7 @@ function TeamPage() {
   const { data: team } = useSuspenseQuery(teamQuery())
   const can = useCan()
   const manage = can({ member: ['update'] }) || can({ member: ['delete'] })
-  const ownerCount = team.members.filter((m) => m.role === 'owner').length
+  const ownerCount = team.members.filter((m) => isOwner(m.role)).length
 
   const queryClient = useQueryClient()
   const refresh = () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey })
