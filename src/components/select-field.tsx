@@ -14,16 +14,22 @@ export function SelectField({
   label,
   options,
   placeholder,
+  disabled,
 }: {
   field: AnyFieldApi
   label: string
   options: readonly { value: string; label: string }[]
   placeholder?: string
+  disabled?: boolean
 }) {
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={field.name}>{label}</Label>
-      <Select value={field.state.value || undefined} onValueChange={(v) => field.handleChange(v)}>
+      <Select
+        disabled={disabled}
+        value={field.state.value || undefined}
+        onValueChange={(v) => field.handleChange(v)}
+      >
         <SelectTrigger id={field.name} className="w-full">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>

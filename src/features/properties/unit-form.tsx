@@ -21,12 +21,14 @@ export function UnitForm({
   submitLabel,
   onSubmit,
   error,
+  disabled = false,
   resetAfterSubmit = false,
 }: {
   defaultValues: UnitValues
   submitLabel: string
   onSubmit: (value: UnitValues) => Promise<unknown>
   error: Error | null
+  disabled?: boolean
   resetAfterSubmit?: boolean
 }) {
   const form = useForm({
@@ -46,45 +48,52 @@ export function UnitForm({
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
-        void form.handleSubmit()
+        if (!disabled) void form.handleSubmit()
       }}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <fieldset disabled={disabled} className="grid gap-4">
+        <div className="grid grid-cols-2 gap-4">
+          <form.Field
+            name="label"
+            validators={{
+              onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange objektsnummer'),
+            }}
+          >
+            {(field) => <TextField field={field} label="Objektsnummer" placeholder="1001" />}
+          </form.Field>
+          <form.Field name="kind">
+            {(field) => (
+              <SelectField
+                disabled={disabled}
+                field={field}
+                label="Typ"
+                options={optionsFrom(unitKindLabels)}
+              />
+            )}
+          </form.Field>
+        </div>
         <form.Field
-          name="label"
+          name="area"
           validators={{
-            onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange objektsnummer'),
+            onSubmit: ({ value }) => {
+              const area = parseArea(value)
+              return area === null || (Number.isFinite(area) && area > 0)
+                ? undefined
+                : 'Ange yta i m², t.ex. 72,5'
+            },
           }}
         >
-          {(field) => <TextField field={field} label="Objektsnummer" placeholder="1001" />}
+          {(field) => <TextField field={field} label="Yta (m²)" placeholder="72,5" />}
         </form.Field>
-        <form.Field name="kind">
-          {(field) => (
-            <SelectField field={field} label="Typ" options={optionsFrom(unitKindLabels)} />
+        {error && <p className="text-destructive text-sm">{error.message}</p>}
+        <form.Subscribe selector={(s) => s.isSubmitting}>
+          {(isSubmitting) => (
+            <Button type="submit" disabled={isSubmitting} className="justify-self-start">
+              {submitLabel}
+            </Button>
           )}
-        </form.Field>
-      </div>
-      <form.Field
-        name="area"
-        validators={{
-          onSubmit: ({ value }) => {
-            const area = parseArea(value)
-            return area === null || (Number.isFinite(area) && area > 0)
-              ? undefined
-              : 'Ange yta i m², t.ex. 72,5'
-          },
-        }}
-      >
-        {(field) => <TextField field={field} label="Yta (m²)" placeholder="72,5" />}
-      </form.Field>
-      {error && <p className="text-destructive text-sm">{error.message}</p>}
-      <form.Subscribe selector={(s) => s.isSubmitting}>
-        {(isSubmitting) => (
-          <Button type="submit" disabled={isSubmitting} className="justify-self-start">
-            {submitLabel}
-          </Button>
-        )}
-      </form.Subscribe>
+        </form.Subscribe>
+      </fieldset>
     </form>
   )
 }

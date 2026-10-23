@@ -52,6 +52,7 @@ function EditPropertyPage() {
       </div>
 
       <PropertyForm
+        disabled={!canManage}
         defaultValues={{
           designation: property.designation,
           name: property.name ?? '',

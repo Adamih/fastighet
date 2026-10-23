@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet, useRouter } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
 import { getAppContextFn } from '#/features/auth/functions'
+import { useCan } from '#/features/auth/use-can'
 import { authClient } from '#/lib/auth-client'
 
 // Pathless layout for everything behind login. `getAppContextFn` redirects to /login or
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/_app')({
 })
 
 function AppLayout() {
+  const can = useCan()
   const { app } = Route.useRouteContext()
   const router = useRouter()
 
@@ -20,31 +22,43 @@ function AppLayout() {
         <div className="mx-auto flex max-w-5xl items-center gap-6 px-4 py-3">
           <span className="font-semibold">{app.organization.name}</span>
           <nav className="flex gap-4 text-sm">
-            <Link
-              to="/"
-              className="text-muted-foreground [&.active]:text-foreground"
-              activeOptions={{ exact: true }}
-            >
-              Fastigheter
-            </Link>
-            <Link to="/tenants" className="text-muted-foreground [&.active]:text-foreground">
-              Hyresgäster
-            </Link>
-            <Link to="/leases" className="text-muted-foreground [&.active]:text-foreground">
-              Avtal
-            </Link>
-            <Link to="/invoices" className="text-muted-foreground [&.active]:text-foreground">
-              Avier
-            </Link>
-            <Link to="/payments" className="text-muted-foreground [&.active]:text-foreground">
-              Betalningar
-            </Link>
+            {can({ property: ['read'] }) && (
+              <Link
+                to="/"
+                className="text-muted-foreground [&.active]:text-foreground"
+                activeOptions={{ exact: true }}
+              >
+                Fastigheter
+              </Link>
+            )}
+            {can({ tenant: ['read'] }) && (
+              <Link to="/tenants" className="text-muted-foreground [&.active]:text-foreground">
+                Hyresgäster
+              </Link>
+            )}
+            {can({ lease: ['read'] }) && (
+              <Link to="/leases" className="text-muted-foreground [&.active]:text-foreground">
+                Avtal
+              </Link>
+            )}
+            {can({ invoice: ['read'] }) && (
+              <Link to="/invoices" className="text-muted-foreground [&.active]:text-foreground">
+                Avier
+              </Link>
+            )}
+            {can({ payment: ['read'] }) && (
+              <Link to="/payments" className="text-muted-foreground [&.active]:text-foreground">
+                Betalningar
+              </Link>
+            )}
             <Link to="/team" className="text-muted-foreground [&.active]:text-foreground">
               Användare
             </Link>
-            <Link to="/settings" className="text-muted-foreground [&.active]:text-foreground">
-              Inställningar
-            </Link>
+            {can({ settings: ['read'] }) && (
+              <Link to="/settings" className="text-muted-foreground [&.active]:text-foreground">
+                Inställningar
+              </Link>
+            )}
           </nav>
           <div className="ml-auto flex items-center gap-3 text-sm">
             <span className="text-muted-foreground">{app.user.email}</span>

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import {
   emailInvoiceFn,
@@ -69,6 +70,7 @@ function InvoicePage() {
 }
 
 function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
+  const canManage = useCan()({ invoice: ['manage'] })
   const queryClient = useQueryClient()
   const [paidOn, setPaidOn] = useState(() => stockholmDate(Date.now()))
   const [confirmVoid, setConfirmVoid] = useState(false)
@@ -97,7 +99,7 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
         <Button variant="outline" onClick={() => window.print()}>
           Skriv ut
         </Button>
-        {invoice.status !== 'void' && invoice.recipientEmail && (
+        {canManage && invoice.status !== 'void' && invoice.recipientEmail && (
           <Button
             variant="outline"
             disabled={email.isPending}
@@ -106,7 +108,7 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
             {invoice.sentAt ? 'Skicka igen' : 'Skicka e-post'}
           </Button>
         )}
-        {open && (
+        {canManage && open && (
           <div className="flex items-end gap-2">
             <div className="grid gap-1.5">
               <Label htmlFor="paidOn">Betald den</Label>
@@ -126,7 +128,7 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
             </Button>
           </div>
         )}
-        {invoice.status === 'paid' && (
+        {canManage && invoice.status === 'paid' && (
           <Button
             variant="outline"
             disabled={unpay.isPending}
@@ -135,7 +137,8 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
             Ångra betalning ({invoice.paidOn})
           </Button>
         )}
-        {open &&
+        {canManage &&
+          open &&
           (confirmVoid ? (
             <span className="inline-flex items-center gap-2">
               <span className="text-sm">Makulera avi {invoice.number}?</span>

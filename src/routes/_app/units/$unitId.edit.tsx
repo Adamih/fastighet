@@ -59,6 +59,7 @@ function EditUnitPage() {
       </div>
 
       <UnitForm
+        disabled={!canManage}
         defaultValues={{ kind: unit.kind, label: unit.label, areaSqm: unit.areaSqm }}
         submitLabel="Spara ändringar"
         error={update.error}

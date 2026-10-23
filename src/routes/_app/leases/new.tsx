@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { useCan } from '#/features/auth/use-can'
 import { createLeaseFn, leasesQuery } from '#/features/leases/functions'
 import { emptyLease, LeaseForm } from '#/features/leases/lease-form'
 import { unitsQuery } from '#/features/properties/functions'
@@ -15,6 +16,7 @@ export const Route = createFileRoute('/_app/leases/new')({
 })
 
 function NewLeasePage() {
+  const canCreate = useCan()({ lease: ['manage'], tenant: ['read'], property: ['read'] })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const { data: units } = useSuspenseQuery(unitsQuery())
   const navigate = useNavigate()
@@ -29,6 +31,8 @@ function NewLeasePage() {
       await navigate({ to: '/leases/$leaseId', params: { leaseId: lease.id } })
     },
   })
+
+  if (!canCreate) return <p>Du saknar behörighet att skapa avtal.</p>
 
   if (tenants.length === 0 || units.length === 0) {
     return (

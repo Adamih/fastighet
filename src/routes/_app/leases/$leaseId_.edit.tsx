@@ -62,6 +62,7 @@ function EditLeasePage() {
       </div>
 
       <LeaseForm
+        disabled={!canManage}
         units={units}
         defaultValues={{
           tenantId: lease.tenant.id,

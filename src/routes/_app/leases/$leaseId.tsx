@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tansta
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
+import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { invoicesQuery } from '#/features/invoicing/functions'
 import { periodLabel } from '#/features/invoicing/rules'
@@ -26,6 +27,8 @@ export const Route = createFileRoute('/_app/leases/$leaseId')({
 })
 
 function LeasePage() {
+  const can = useCan()
+  const canManage = can({ lease: ['manage'] })
   const { leaseId } = Route.useParams()
   const { data: lease } = useSuspenseQuery(leaseQuery(leaseId))
 
@@ -38,11 +41,13 @@ function LeasePage() {
         <div className="flex items-center gap-3">
           <h1 className="font-semibold text-2xl">Avtal {lease.number}</h1>
           <LeaseStatusBadge status={lease.status} />
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
-              Ändra
-            </Link>
-          </Button>
+          {canManage && can({ property: ['read'] }) && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
+                Ändra
+              </Link>
+            </Button>
+          )}
         </div>
         <p className="text-muted-foreground">
           <Link
@@ -94,10 +99,14 @@ function LeasePage() {
         </ul>
       </section>
 
-      <LeaseInvoices leaseId={lease.id} />
+      {can({ invoice: ['read'] }) && <LeaseInvoices leaseId={lease.id} />}
 
-      {!lease.moveOutDate && lease.status !== 'ended' && <TerminateForm lease={lease} />}
-      {lease.moveOutDate && lease.status !== 'ended' && <WithdrawTermination lease={lease} />}
+      {canManage && !lease.moveOutDate && lease.status !== 'ended' && (
+        <TerminateForm lease={lease} />
+      )}
+      {canManage && lease.moveOutDate && lease.status !== 'ended' && (
+        <WithdrawTermination lease={lease} />
+      )}
     </div>
   )
 }

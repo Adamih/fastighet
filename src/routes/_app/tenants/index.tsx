@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useCan } from '#/features/auth/use-can'
 import { tenantKindLabels } from '#/features/leases/options'
 import { createTenantFn, tenantsQuery } from '#/features/tenants/functions'
 import { emptyTenant, TenantForm } from '#/features/tenants/tenant-form'
@@ -10,6 +11,7 @@ export const Route = createFileRoute('/_app/tenants/')({
 })
 
 function TenantsPage() {
+  const canManage = useCan()({ tenant: ['manage'] })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const queryClient = useQueryClient()
   const create = useMutation({
@@ -54,16 +56,18 @@ function TenantsPage() {
           </tbody>
         </table>
       )}
-      <section className="grid max-w-xl gap-4 rounded-lg border p-6">
-        <h2 className="font-medium text-lg">Lägg till hyresgäst</h2>
-        <TenantForm
-          defaultValues={emptyTenant}
-          submitLabel="Spara"
-          error={create.error}
-          resetAfterSubmit
-          onSubmit={(value) => create.mutateAsync({ data: value })}
-        />
-      </section>
+      {canManage && (
+        <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+          <h2 className="font-medium text-lg">Lägg till hyresgäst</h2>
+          <TenantForm
+            defaultValues={emptyTenant}
+            submitLabel="Spara"
+            error={create.error}
+            resetAfterSubmit
+            onSubmit={(value) => create.mutateAsync({ data: value })}
+          />
+        </section>
+      )}
     </div>
   )
 }

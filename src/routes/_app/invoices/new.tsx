@@ -5,6 +5,7 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Switch } from '#/components/ui/switch'
+import { useCan } from '#/features/auth/use-can'
 import { createInvoiceRunFn, invoiceRunPreviewQuery } from '#/features/invoicing/functions'
 import { isInvoiceMonth, periodLabel } from '#/features/invoicing/rules'
 import { addMonths, stockholmDate } from '#/lib/dates'
@@ -18,11 +19,12 @@ const nextMonth = () => addMonths(`${stockholmDate(Date.now()).slice(0, 7)}-01`,
 type RunResult = Awaited<ReturnType<typeof createInvoiceRunFn>>
 
 function NewInvoiceRunPage() {
+  const canCreate = useCan()({ invoice: ['manage'], lease: ['read'] })
   const [month, setMonth] = useState(nextMonth)
   const [send, setSend] = useState(true)
   const [result, setResult] = useState<RunResult | null>(null)
   const valid = isInvoiceMonth(month)
-  const preview = useQuery({ ...invoiceRunPreviewQuery(month), enabled: valid })
+  const preview = useQuery({ ...invoiceRunPreviewQuery(month), enabled: valid && canCreate })
   const queryClient = useQueryClient()
 
   const create = useMutation({
@@ -36,6 +38,8 @@ function NewInvoiceRunPage() {
   const rows = preview.data?.rows ?? []
   const pending = rows.filter((r) => !r.alreadyInvoiced)
   const pendingTotal = pending.reduce((sum, r) => sum + r.totalOre, 0)
+
+  if (!canCreate) return <p>Du saknar behörighet att skapa avier.</p>
 
   return (
     <div className="grid gap-6">

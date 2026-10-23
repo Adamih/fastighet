@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { useCan } from '#/features/auth/use-can'
 import { createPropertyFn, propertiesQuery } from '#/features/properties/functions'
 import { emptyProperty, PropertyForm } from '#/features/properties/property-form'
 
@@ -9,6 +10,7 @@ export const Route = createFileRoute('/_app/')({
 })
 
 function PropertiesPage() {
+  const canManage = useCan()({ property: ['manage'] })
   const { data: properties } = useSuspenseQuery(propertiesQuery())
   const queryClient = useQueryClient()
   const create = useMutation({
@@ -20,7 +22,9 @@ function PropertiesPage() {
     <div className="grid gap-8">
       <h1 className="font-semibold text-2xl">Fastigheter</h1>
       {properties.length === 0 ? (
-        <p className="text-muted-foreground">Inga fastigheter ännu. Lägg till den första nedan.</p>
+        <p className="text-muted-foreground">
+          Inga fastigheter ännu.{canManage && ' Lägg till den första nedan.'}
+        </p>
       ) : (
         <table className="w-full text-left text-sm">
           <thead className="border-b text-muted-foreground">
@@ -53,16 +57,18 @@ function PropertiesPage() {
           </tbody>
         </table>
       )}
-      <section className="grid max-w-xl gap-4 rounded-lg border p-6">
-        <h2 className="font-medium text-lg">Lägg till fastighet</h2>
-        <PropertyForm
-          defaultValues={emptyProperty}
-          submitLabel="Spara"
-          error={create.error}
-          resetAfterSubmit
-          onSubmit={(value) => create.mutateAsync({ data: value })}
-        />
-      </section>
+      {canManage && (
+        <section className="grid max-w-xl gap-4 rounded-lg border p-6">
+          <h2 className="font-medium text-lg">Lägg till fastighet</h2>
+          <PropertyForm
+            defaultValues={emptyProperty}
+            submitLabel="Spara"
+            error={create.error}
+            resetAfterSubmit
+            onSubmit={(value) => create.mutateAsync({ data: value })}
+          />
+        </section>
+      )}
     </div>
   )
 }

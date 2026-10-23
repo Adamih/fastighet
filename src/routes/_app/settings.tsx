@@ -19,9 +19,8 @@ export const Route = createFileRoute('/_app/settings')({
 const validator = Schema.toStandardSchemaV1(UpdateSettingsInput)
 
 function SettingsPage() {
-  const canManage = useCan()({ settings: ['manage'] })
+  const canEdit = useCan()({ settings: ['manage'] })
   const { data: settings } = useSuspenseQuery(settingsQuery())
-  const canEdit = canManage
   const queryClient = useQueryClient()
   const [saved, setSaved] = useState(false)
 
@@ -58,14 +57,14 @@ function SettingsPage() {
         <h1 className="font-semibold text-2xl">Inställningar</h1>
         <p className="text-muted-foreground">
           Uppgifterna skrivs ut på hyresavierna för {settings.organizationName}.
-          {!canEdit && ' Bara ägare och administratörer kan ändra dem.'}
+          {!canEdit && ' Du saknar behörighet att ändra dem.'}
         </p>
       </div>
       <form
         className="grid gap-6"
         onSubmit={(e) => {
           e.preventDefault()
-          void form.handleSubmit()
+          if (canEdit) void form.handleSubmit()
         }}
       >
         <fieldset disabled={!canEdit} className="grid gap-4">
@@ -85,6 +84,7 @@ function SettingsPage() {
               {(field) => (
                 <div className="flex items-center gap-3">
                   <Switch
+                    disabled={!canEdit}
                     id={field.name}
                     checked={field.state.value}
                     onCheckedChange={(checked) => field.handleChange(checked)}

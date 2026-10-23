@@ -16,7 +16,8 @@ export const Route = createFileRoute('/_app/tenants/$tenantId')({
 
 function TenantPage() {
   const { tenantId } = Route.useParams()
-  const canManage = useCan()({ tenant: ['manage'] })
+  const can = useCan()
+  const canManage = can({ tenant: ['manage'] })
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -50,35 +51,37 @@ function TenantPage() {
         <p className="text-muted-foreground">{tenantKindLabels[tenant.kind]}</p>
       </div>
 
-      <section className="grid gap-3">
-        <h2 className="font-medium text-lg">Avtal</h2>
-        {tenant.leases.length === 0 ? (
-          <p className="text-muted-foreground">Inga avtal.</p>
-        ) : (
-          <table className="w-full max-w-3xl text-left text-sm">
-            <tbody>
-              {tenant.leases.map((l) => (
-                <tr key={l.id} className="border-b">
-                  <td className="py-2 tabular-nums">
-                    <Link
-                      to="/leases/$leaseId"
-                      params={{ leaseId: l.id }}
-                      className="font-medium underline-offset-4 hover:underline"
-                    >
-                      Avtal {l.number}
-                    </Link>
-                  </td>
-                  <td className="py-2 tabular-nums">{formatPeriod(l)}</td>
-                  <td className="py-2 text-right tabular-nums">{formatRent(l)}</td>
-                  <td className="py-2 pl-4">
-                    <LeaseStatusBadge status={l.status} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+      {can({ lease: ['read'] }) && (
+        <section className="grid gap-3">
+          <h2 className="font-medium text-lg">Avtal</h2>
+          {tenant.leases.length === 0 ? (
+            <p className="text-muted-foreground">Inga avtal.</p>
+          ) : (
+            <table className="w-full max-w-3xl text-left text-sm">
+              <tbody>
+                {tenant.leases.map((l) => (
+                  <tr key={l.id} className="border-b">
+                    <td className="py-2 tabular-nums">
+                      <Link
+                        to="/leases/$leaseId"
+                        params={{ leaseId: l.id }}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        Avtal {l.number}
+                      </Link>
+                    </td>
+                    <td className="py-2 tabular-nums">{formatPeriod(l)}</td>
+                    <td className="py-2 text-right tabular-nums">{formatRent(l)}</td>
+                    <td className="py-2 pl-4">
+                      <LeaseStatusBadge status={l.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
 
       <section className="grid max-w-xl gap-4 rounded-lg border p-6">
         <h2 className="font-medium text-lg">Uppgifter</h2>
@@ -86,6 +89,7 @@ function TenantPage() {
           Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med.
         </p>
         <TenantForm
+          disabled={!canManage}
           // Remount with fresh values after a save so the form never shows stale data.
           key={JSON.stringify(tenantToInput(tenant))}
           defaultValues={tenantToInput(tenant)}

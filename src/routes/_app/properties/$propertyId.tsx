@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
+import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { createUnitFn, propertyQuery } from '#/features/properties/functions'
 import { emptyUnit, UnitForm } from '#/features/properties/unit-form'
@@ -15,6 +16,8 @@ export const Route = createFileRoute('/_app/properties/$propertyId')({
 const areaFormat = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
 
 function PropertyPage() {
+  const can = useCan()
+  const canManage = can({ property: ['manage'] })
   const { propertyId } = Route.useParams()
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
 
@@ -26,11 +29,13 @@ function PropertyPage() {
         </Link>
         <div className="flex items-center gap-3">
           <h1 className="font-semibold text-2xl">{property.designation}</h1>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
-              Ändra
-            </Link>
-          </Button>
+          {canManage && (
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
+                Ändra
+              </Link>
+            </Button>
+          )}
         </div>
         {property.name && <p className="text-muted-foreground">{property.name}</p>}
       </div>
@@ -46,7 +51,7 @@ function PropertyPage() {
                 <th className="py-2 font-medium">Objekt</th>
                 <th className="py-2 font-medium">Typ</th>
                 <th className="py-2 text-right font-medium">Yta</th>
-                <th className="py-2 pl-6 font-medium">Hyresgäst</th>
+                {can({ lease: ['read'] }) && <th className="py-2 pl-6 font-medium">Hyresgäst</th>}
                 <th className="py-2" />
               </tr>
             </thead>
@@ -58,35 +63,39 @@ function PropertyPage() {
                   <td className="py-2 text-right">
                     {u.areaSqm == null ? '–' : `${areaFormat.format(u.areaSqm)} m²`}
                   </td>
-                  <td className="py-2 pl-6">
-                    {u.occupancy ? (
-                      <span className="flex items-center gap-2">
-                        <Link
-                          to="/leases/$leaseId"
-                          params={{ leaseId: u.occupancy.leaseId }}
-                          className="underline-offset-4 hover:underline"
-                        >
-                          {u.occupancy.tenantName}
-                        </Link>
-                        <LeaseStatusBadge status={u.occupancy.status} />
-                        <span className="text-muted-foreground tabular-nums">
-                          {u.occupancy.status === 'upcoming'
-                            ? `från ${u.occupancy.startDate}`
-                            : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
+                  {can({ lease: ['read'] }) && (
+                    <td className="py-2 pl-6">
+                      {u.occupancy ? (
+                        <span className="flex items-center gap-2">
+                          <Link
+                            to="/leases/$leaseId"
+                            params={{ leaseId: u.occupancy.leaseId }}
+                            className="underline-offset-4 hover:underline"
+                          >
+                            {u.occupancy.tenantName}
+                          </Link>
+                          <LeaseStatusBadge status={u.occupancy.status} />
+                          <span className="text-muted-foreground tabular-nums">
+                            {u.occupancy.status === 'upcoming'
+                              ? `från ${u.occupancy.startDate}`
+                              : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
+                          </span>
                         </span>
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">Vakant</span>
-                    )}
-                  </td>
+                      ) : (
+                        <span className="text-muted-foreground">Vakant</span>
+                      )}
+                    </td>
+                  )}
                   <td className="py-2 text-right">
-                    <Link
-                      to="/units/$unitId/edit"
-                      params={{ unitId: u.id }}
-                      className="text-muted-foreground underline-offset-4 hover:underline"
-                    >
-                      Ändra
-                    </Link>
+                    {canManage && (
+                      <Link
+                        to="/units/$unitId/edit"
+                        params={{ unitId: u.id }}
+                        className="text-muted-foreground underline-offset-4 hover:underline"
+                      >
+                        Ändra
+                      </Link>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -95,7 +104,7 @@ function PropertyPage() {
         )}
       </section>
 
-      <CreateUnit propertyId={propertyId} />
+      {canManage && <CreateUnit propertyId={propertyId} />}
     </div>
   )
 }

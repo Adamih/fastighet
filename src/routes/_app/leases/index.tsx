@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
+import { useCan } from '#/features/auth/use-can'
 import { formatPeriod, formatRent, LeaseStatusBadge } from '#/features/leases/components'
 import { leasesQuery } from '#/features/leases/functions'
 
@@ -10,15 +11,18 @@ export const Route = createFileRoute('/_app/leases/')({
 })
 
 function LeasesPage() {
+  const canCreate = useCan()({ lease: ['manage'], tenant: ['read'], property: ['read'] })
   const { data: leases } = useSuspenseQuery(leasesQuery())
 
   return (
     <div className="grid gap-8">
       <div className="flex items-center justify-between">
         <h1 className="font-semibold text-2xl">Avtal</h1>
-        <Button asChild>
-          <Link to="/leases/new">Nytt avtal</Link>
-        </Button>
+        {canCreate && (
+          <Button asChild>
+            <Link to="/leases/new">Nytt avtal</Link>
+          </Button>
+        )}
       </div>
       {leases.length === 0 ? (
         <p className="text-muted-foreground">Inga avtal ännu.</p>

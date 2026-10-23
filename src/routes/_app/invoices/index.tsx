@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Button } from '#/components/ui/button'
+import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { invoicesQuery } from '#/features/invoicing/functions'
 import { periodLabel } from '#/features/invoicing/rules'
@@ -30,6 +31,7 @@ export const Route = createFileRoute('/_app/invoices/')({
 })
 
 function InvoicesPage() {
+  const canCreate = useCan()({ invoice: ['manage'], lease: ['read'] })
   const filter = Route.useSearch().filter ?? 'all'
   const { data: invoices } = useSuspenseQuery(invoicesQuery({ filter }))
   const outstanding = invoices
@@ -40,9 +42,11 @@ function InvoicesPage() {
     <div className="grid gap-6">
       <div className="flex items-center justify-between">
         <h1 className="font-semibold text-2xl">Avier</h1>
-        <Button asChild>
-          <Link to="/invoices/new">Skapa avier</Link>
-        </Button>
+        {canCreate && (
+          <Button asChild>
+            <Link to="/invoices/new">Skapa avier</Link>
+          </Button>
+        )}
       </div>
 
       <nav className="flex flex-wrap gap-2 text-sm">

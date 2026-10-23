@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '#/components/ui/select'
+import { useCan } from '#/features/auth/use-can'
 import { PaymentStatusBadge } from '#/features/payments/components'
 import {
   assignPaymentFn,
@@ -51,6 +52,7 @@ export const Route = createFileRoute('/_app/payments')({
 type ImportSummary = Awaited<ReturnType<typeof importPaymentsFn>>
 
 function PaymentsPage() {
+  const canImport = useCan()({ payment: ['manage'], invoice: ['manage'] })
   const filter = Route.useSearch().filter ?? 'attention'
   const { data: payments } = useSuspenseQuery(paymentsQuery(filter))
   const { data: imports } = useSuspenseQuery(paymentImportsQuery())
@@ -58,7 +60,7 @@ function PaymentsPage() {
   return (
     <div className="grid gap-8">
       <h1 className="font-semibold text-2xl">Betalningar</h1>
-      <ImportForm />
+      {canImport && <ImportForm />}
 
       <section className="grid gap-4">
         <nav className="flex flex-wrap gap-2 text-sm">
@@ -178,6 +180,10 @@ function ImportForm() {
 type PaymentRowData = Effect.Success<ReturnType<typeof listPayments>>[number]
 
 function PaymentRow({ payment }: { payment: PaymentRowData }) {
+  const can = useCan()
+  const canManage = can({ payment: ['manage'] })
+  const canBook = can({ payment: ['manage'], invoice: ['manage'] })
+  const canAssign = canBook && can({ invoice: ['read'] })
   const queryClient = useQueryClient()
   const [assigning, setAssigning] = useState(false)
   const refresh = async () => {
@@ -214,11 +220,13 @@ function PaymentRow({ payment }: { payment: PaymentRowData }) {
         </td>
         <td className="py-2 text-right">
           <span className="inline-flex gap-2">
-            {open && (
+            {canManage && open && (
               <>
-                <Button variant="outline" size="sm" onClick={() => setAssigning(!assigning)}>
-                  Koppla
-                </Button>
+                {canAssign && (
+                  <Button variant="outline" size="sm" onClick={() => setAssigning(!assigning)}>
+                    Koppla
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -229,7 +237,7 @@ function PaymentRow({ payment }: { payment: PaymentRowData }) {
                 </Button>
               </>
             )}
-            {!open && (
+            {canBook && !open && (
               <Button
                 variant="outline"
                 size="sm"
@@ -242,7 +250,7 @@ function PaymentRow({ payment }: { payment: PaymentRowData }) {
           </span>
         </td>
       </tr>
-      {open && assigning && (
+      {canAssign && open && assigning && (
         <tr className="border-b bg-muted/40">
           <td colSpan={6} className="p-3">
             <AssignToInvoice
