@@ -12,6 +12,7 @@ import {
 import { useCan } from '#/features/auth/use-can'
 import { createPropertyFn, propertiesQuery } from '#/features/properties/functions'
 import { emptyProperty, PropertyForm } from '#/features/properties/property-form'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(propertiesQuery()),
@@ -28,10 +29,33 @@ function PropertiesPage() {
   })
 
   return (
-    <div className="grid gap-6 sm:gap-8">
+    <div className={cn('grid gap-6 sm:gap-8', canManage && 'pb-20 md:pb-0')}>
       <PageHeader
         title="Fastigheter"
         subtitle={properties.length > 0 && `${properties.length} fastigheter`}
+        action={
+          canManage && (
+            <AddForm
+              title="Lägg till fastighet"
+              description="Lägenheter och lokaler lägger du till på fastighetens sida."
+            >
+              {({ idPrefix, layout, onSaved }) => (
+                <PropertyForm
+                  idPrefix={idPrefix}
+                  layout={layout}
+                  defaultValues={emptyProperty}
+                  submitLabel="Spara fastighet"
+                  error={create.error}
+                  resetAfterSubmit
+                  onSubmit={async (value) => {
+                    await create.mutateAsync({ data: value })
+                    onSaved()
+                  }}
+                />
+              )}
+            </AddForm>
+          )
+        }
       />
       {properties.length === 0 ? (
         <p className="text-muted-foreground">Inga fastigheter ännu.</p>
@@ -80,27 +104,6 @@ function PropertiesPage() {
             </tbody>
           </table>
         </>
-      )}
-      {canManage && (
-        <AddForm
-          title="Lägg till fastighet"
-          description="Lägenheter och lokaler lägger du till på fastighetens sida."
-        >
-          {({ idPrefix, layout, onSaved }) => (
-            <PropertyForm
-              idPrefix={idPrefix}
-              layout={layout}
-              defaultValues={emptyProperty}
-              submitLabel="Spara fastighet"
-              error={create.error}
-              resetAfterSubmit
-              onSubmit={async (value) => {
-                await create.mutateAsync({ data: value })
-                onSaved()
-              }}
-            />
-          )}
-        </AddForm>
       )}
     </div>
   )

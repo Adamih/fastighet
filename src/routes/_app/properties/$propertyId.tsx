@@ -13,6 +13,7 @@ import { propertySummary } from '#/features/properties/summary'
 import { emptyUnit, UnitForm } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { formatSekShort } from '#/lib/money'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/properties/$propertyId')({
   loader: ({ context, params }) =>
@@ -40,7 +41,7 @@ function PropertyPage() {
   const occupancyShare = summary.units > 0 ? summary.rented / summary.units : 0
 
   return (
-    <div className="grid gap-6 md:gap-7">
+    <div className={cn('grid gap-6 md:gap-7', canManage && 'pb-20 md:pb-0')}>
       <DetailHeader
         back={{ label: 'Fastigheter', to: '/' }}
         crumb={property.designation}
@@ -48,12 +49,15 @@ function PropertyPage() {
         meta={[property.name, address].filter(Boolean).join(' · ') || undefined}
         actions={
           canManage && (
-            <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-              <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
-                <Pencil aria-hidden="true" />
-                Ändra
-              </Link>
-            </Button>
+            <>
+              <Button variant="outline" className="flex-1 sm:flex-none" asChild>
+                <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
+                  <Pencil aria-hidden="true" />
+                  Ändra
+                </Link>
+              </Button>
+              <CreateUnit propertyId={propertyId} />
+            </>
           )
         }
       />
@@ -135,8 +139,6 @@ function PropertyPage() {
           </Panel>
         }
       />
-
-      {canManage && <CreateUnit propertyId={propertyId} />}
     </div>
   )
 }

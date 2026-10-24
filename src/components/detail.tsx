@@ -53,7 +53,7 @@ export function DetailHeader({
           {meta && <p className="text-muted-foreground text-sm">{meta}</p>}
         </div>
         {actions && (
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*]:h-11 sm:[&>*]:h-9">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto [&>*:not(.fixed)]:h-11 sm:[&>*:not(.fixed)]:h-9">
             {actions}
           </div>
         )}

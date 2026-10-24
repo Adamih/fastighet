@@ -30,7 +30,7 @@ function TenantsPage() {
   const visible = tenants.filter((t) => matchesTenant(t, query))
 
   return (
-    <div className="grid gap-5 md:gap-7">
+    <div className={cn('grid gap-5 md:gap-7', canManage && 'pb-20 md:pb-0')}>
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="grid min-w-0 gap-1">
           <h1 className="font-bold text-2xl tracking-tight md:text-3xl">Hyresgäster</h1>
@@ -38,19 +38,42 @@ function TenantsPage() {
             <p className="text-muted-foreground text-sm">{tenantCountLine(tenants)}</p>
           )}
         </div>
-        {tenants.length > 0 && (
-          <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:h-10 md:w-72">
-            <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="sr-only">Sök hyresgäst</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Sök namn, e-post eller org.nr"
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-            />
-          </label>
-        )}
+        <div className="flex w-full items-center gap-2.5 md:w-auto">
+          {tenants.length > 0 && (
+            <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:h-10 md:w-72">
+              <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+              <span className="sr-only">Sök hyresgäst</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Sök namn, e-post eller org.nr"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              />
+            </label>
+          )}
+          {canManage && (
+            <AddForm
+              title="Lägg till hyresgäst"
+              description="Koppla hyresgästen till ett avtal i nästa steg."
+            >
+              {({ idPrefix, layout, onSaved }) => (
+                <TenantForm
+                  idPrefix={idPrefix}
+                  layout={layout}
+                  defaultValues={emptyTenant}
+                  submitLabel="Spara hyresgäst"
+                  error={create.error}
+                  resetAfterSubmit
+                  onSubmit={async (value) => {
+                    await create.mutateAsync({ data: value })
+                    onSaved()
+                  }}
+                />
+              )}
+            </AddForm>
+          )}
+        </div>
       </header>
 
       <div className="grid items-start gap-6">
@@ -112,28 +135,6 @@ function TenantsPage() {
           </>
         )}
       </div>
-
-      {canManage && (
-        <AddForm
-          title="Lägg till hyresgäst"
-          description="Koppla hyresgästen till ett avtal i nästa steg."
-        >
-          {({ idPrefix, layout, onSaved }) => (
-            <TenantForm
-              idPrefix={idPrefix}
-              layout={layout}
-              defaultValues={emptyTenant}
-              submitLabel="Spara hyresgäst"
-              error={create.error}
-              resetAfterSubmit
-              onSubmit={async (value) => {
-                await create.mutateAsync({ data: value })
-                onSaved()
-              }}
-            />
-          )}
-        </AddForm>
-      )}
     </div>
   )
 }

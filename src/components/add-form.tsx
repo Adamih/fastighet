@@ -1,27 +1,21 @@
-import { Plus, X } from 'lucide-react'
-import { type ReactNode, useId, useState } from 'react'
+import { Plus } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
+import { FormDrawer } from '#/components/form-drawer'
 import { Button } from '#/components/ui/button'
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerTitle,
-  DrawerTrigger,
-} from '#/components/ui/drawer'
 
 export interface AddFormSlot {
-  /** Keeps field ids unique: the form is on the page twice (card and drawer). */
+  /** Keeps field ids unique on the page. */
   idPrefix: string
-  /** `wide` pairs fields side by side in the card; `narrow` stacks them in the drawer. */
+  /** Drawers are narrow, so forms stack their fields. */
   layout: 'wide' | 'narrow'
   /** Call after a successful save; closes the drawer. */
   onSaved: () => void
 }
 
 /**
- * "Lägg till …" for a list page: a card under the list from `md` up, and on phones a floating
- * button that opens the same form in a drawer from the bottom.
+ * "Lägg till …" for a list page: a button that opens the form in a `FormDrawer`. Place it among
+ * the page header's actions. From `md` up it is an ordinary button; on phones it floats at the
+ * bottom right, so the page should leave room below its content (`pb-20 md:pb-0`).
  */
 export function AddForm({
   title,
@@ -33,47 +27,18 @@ export function AddForm({
   children: (slot: AddFormSlot) => ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const headingId = useId()
-
   return (
     <>
-      <section
-        aria-labelledby={headingId}
-        className="hidden gap-5 rounded-xl border bg-card p-5 md:grid md:max-w-xl lg:p-6"
+      <Button
+        onClick={() => setOpen(true)}
+        className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 h-13 rounded-2xl px-5 text-[15px] shadow-lg md:static md:z-auto md:h-9 md:rounded-md md:px-4 md:text-sm md:shadow-none"
       >
-        <div className="grid gap-1">
-          <h2 id={headingId} className="font-bold text-[17px]">
-            {title}
-          </h2>
-          {description && <p className="text-[13px] text-muted-foreground">{description}</p>}
-        </div>
-        {children({ idPrefix: 'card-', layout: 'wide', onSaved: () => {} })}
-      </section>
-
-      <Drawer open={open} onOpenChange={setOpen}>
-        <DrawerTrigger asChild>
-          <Button className="fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 h-13 rounded-2xl px-5 text-[15px] shadow-lg md:hidden">
-            <Plus aria-hidden="true" />
-            {title}
-          </Button>
-        </DrawerTrigger>
-        <DrawerContent className="data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-3rem)] data-[vaul-drawer-direction=bottom]:rounded-t-2xl md:hidden">
-          <div className="mt-2 flex items-center justify-between gap-3 border-b py-2 pr-2 pl-5">
-            <DrawerTitle className="font-bold text-lg">{title}</DrawerTitle>
-            <DrawerClose asChild>
-              <Button variant="ghost" size="icon" className="size-11" aria-label="Stäng">
-                <X aria-hidden="true" />
-              </Button>
-            </DrawerClose>
-          </div>
-          <DrawerDescription className="sr-only">{description ?? title}</DrawerDescription>
-          <div className="overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            {children({ idPrefix: 'drawer-', layout: 'narrow', onSaved: () => setOpen(false) })}
-          </div>
-        </DrawerContent>
-      </Drawer>
-      {/* Room for the floating button below the last row. */}
-      <div aria-hidden="true" className="h-14 md:hidden" />
+        <Plus aria-hidden="true" />
+        {title}
+      </Button>
+      <FormDrawer open={open} onOpenChange={setOpen} title={title} description={description}>
+        {children({ idPrefix: 'add-', layout: 'narrow', onSaved: () => setOpen(false) })}
+      </FormDrawer>
     </>
   )
 }
