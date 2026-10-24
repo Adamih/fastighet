@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { DeleteButton } from '#/components/delete-button'
 import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { useCan } from '#/features/auth/use-can'
@@ -10,13 +11,14 @@ import { isIsoDate } from '#/lib/dates'
 import { oreToInput, parseSek } from '#/lib/money'
 import { rich } from '#/lib/rich'
 import { m } from '#/paraglide/messages'
-import { createLeaseFn, leasesQuery } from './functions'
+import { createLeaseFn, deleteLeaseFn, leaseQuery, leasesQuery, updateLeaseFn } from './functions'
 import {
   type InvoiceInterval,
   invoiceIntervalLabels,
   type RentInterval,
   rentIntervalLabels,
 } from './options'
+import type { LeaseView } from './program'
 
 /** What the form produces; `tenantId` is only set when the form shows the tenant picker. */
 export interface LeaseFormValues {
@@ -57,7 +59,7 @@ const wholeMonths = {
     /^\d+$/.test(value.trim()) ? undefined : m.lease_form_months_required(),
 }
 
-/** Shared by "Nytt avtal" (in a drawer, with tenant picker) and the lease edit page (tenant fixed). */
+/** Shared by the create (with tenant picker) and edit (tenant fixed) lease drawers. */
 export function LeaseForm({
   tenants,
   units,
@@ -65,7 +67,6 @@ export function LeaseForm({
   submitLabel,
   onSubmit,
   error,
-  disabled = false,
 }: {
   /** Omit to hide the tenant picker. */
   tenants?: readonly { id: string; name: string }[]
@@ -74,10 +75,8 @@ export function LeaseForm({
   submitLabel: string
   onSubmit: (value: LeaseFormValues) => Promise<unknown>
   error: Error | null
-  disabled?: boolean
 }) {
   const drawer = useFormDrawerContext()
-  const inDrawer = drawer !== null
   const form = useAppForm({
     defaultValues: {
       tenantId: defaultValues.tenantId,
@@ -115,15 +114,14 @@ export function LeaseForm({
       className="grid gap-6"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!disabled) void form.handleSubmit()
+        void form.handleSubmit().catch(() => {})
       }}
     >
-      <fieldset disabled={disabled} className="grid gap-6">
+      <fieldset className="grid gap-6">
         {tenants && (
           <form.AppField name="tenantId" validators={required(m.lease_form_tenant_required())}>
             {(field) => (
               <field.SelectField
-                disabled={disabled}
                 label={m.lease_form_tenant()}
                 placeholder={m.lease_form_tenant_placeholder()}
                 options={tenants.map((t) => ({ value: t.id, label: t.name }))}
@@ -170,7 +168,7 @@ export function LeaseForm({
 
         <section className="grid gap-4">
           <h2 className="font-medium">{m.lease_form_term()}</h2>
-          <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
+          <div className="grid gap-4">
             <form.AppField name="startDate" validators={date}>
               {(field) => <field.TextField label={m.lease_form_start()} type="date" />}
             </form.AppField>
@@ -184,7 +182,6 @@ export function LeaseForm({
           <form.AppField name="fixedTerm">
             {(field) => (
               <field.SwitchField
-                disabled={disabled}
                 label={m.lease_form_fixed_term()}
                 description={m.lease_form_fixed_term_description()}
               />
@@ -193,7 +190,7 @@ export function LeaseForm({
           <form.Subscribe selector={(s) => s.values.fixedTerm}>
             {(fixedTerm) =>
               fixedTerm && (
-                <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
+                <div className="grid gap-4">
                   <form.AppField name="endDate" validators={date}>
                     {(field) => <field.TextField label={m.lease_form_end()} type="date" />}
                   </form.AppField>
@@ -222,7 +219,7 @@ export function LeaseForm({
 
         <section className="grid gap-4">
           <h2 className="font-medium">{m.lease_form_rent_section()}</h2>
-          <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
+          <div className="grid gap-4">
             <form.AppField
               name="rent"
               validators={{
@@ -241,7 +238,6 @@ export function LeaseForm({
             <form.AppField name="rentInterval">
               {(field) => (
                 <field.SelectField
-                  disabled={disabled}
                   label={m.lease_form_rent_interval()}
                   options={optionsFrom(rentIntervalLabels)}
                 />
@@ -250,7 +246,6 @@ export function LeaseForm({
             <form.AppField name="invoiceInterval">
               {(field) => (
                 <field.SelectField
-                  disabled={disabled}
                   label={m.lease_form_invoice_interval()}
                   options={optionsFrom(invoiceIntervalLabels)}
                 />
@@ -260,7 +255,6 @@ export function LeaseForm({
           <form.AppField name="vat">
             {(field) => (
               <field.SwitchField
-                disabled={disabled}
                 label={m.lease_form_vat()}
                 description={m.lease_form_vat_description()}
               />
@@ -269,11 +263,9 @@ export function LeaseForm({
         </section>
 
         {error && <p className="text-destructive text-sm">{error.message}</p>}
-        {!disabled && (
-          <form.AppForm>
-            <form.SubmitButton>{submitLabel}</form.SubmitButton>
-          </form.AppForm>
-        )}
+        <form.AppForm>
+          <form.SubmitButton>{submitLabel}</form.SubmitButton>
+        </form.AppForm>
       </fieldset>
     </form>
   )
@@ -338,5 +330,98 @@ export function useAddLeaseDrawer(unitId?: string) {
         />
       )
     },
+  })
+}
+
+/** Fetch the unit choices only when an edit drawer is opened. */
+function EditLeaseForm({
+  lease,
+  onSubmit,
+  error,
+}: {
+  lease: LeaseView
+  onSubmit: (value: LeaseFormValues) => Promise<unknown>
+  error: Error | null
+}) {
+  const units = useQuery(unitsQuery())
+  if (units.error) return <p className="text-destructive text-sm">{units.error.message}</p>
+  if (!units.data) return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
+  return (
+    <LeaseForm
+      units={units.data}
+      defaultValues={{
+        tenantId: lease.tenant.id,
+        unitIds: lease.units.map((u) => u.id),
+        startDate: lease.startDate,
+        endDate: lease.endDate,
+        extensionMonths: lease.extensionMonths,
+        noticePeriodMonths: lease.noticePeriodMonths,
+        rentOre: lease.rentOre,
+        rentInterval: lease.rentInterval,
+        invoiceInterval: lease.invoiceInterval,
+        vat: lease.vat,
+      }}
+      submitLabel={m.common_save_changes()}
+      error={error}
+      onSubmit={onSubmit}
+    />
+  )
+}
+
+/** "Ändra" on the lease page and "Ändra avtal" in the lease list. */
+export function useEditLeaseDrawer(lease: LeaseView) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['leases'] })
+    await queryClient.invalidateQueries({ queryKey: ['properties'] })
+    await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+    await queryClient.invalidateQueries({ queryKey: ['units'] })
+  }
+  const update = useMutation({
+    mutationFn: updateLeaseFn,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(leaseQuery(lease.id).queryKey, updated)
+      await refresh()
+    },
+  })
+  const remove = useMutation({
+    mutationFn: deleteLeaseFn,
+    onSuccess: async () => {
+      await navigate({ to: '/leases' })
+      queryClient.removeQueries({ queryKey: leaseQuery(lease.id).queryKey })
+      await refresh()
+    },
+  })
+  return useFormDrawer({
+    title: m.lease_edit_title({ number: lease.number }),
+    description: m.lease_edit_intro({ tenant: lease.tenant.name }),
+    onClose: () => {
+      update.reset()
+      remove.reset()
+    },
+    form: ({ close }) => (
+      <div className="grid gap-6">
+        <EditLeaseForm
+          lease={lease}
+          error={update.error}
+          onSubmit={async ({ tenantId: _tenantId, ...value }) => {
+            await update.mutateAsync({ data: { leaseId: lease.id, ...value } })
+            close()
+          }}
+        />
+        <section className="grid gap-2 border-t pt-5 text-sm">
+          <h2 className="font-medium">{m.common_delete()}</h2>
+          <p className="text-muted-foreground">{m.lease_delete_rule()}</p>
+          <DeleteButton
+            label={m.lease_delete()}
+            question={m.lease_delete_confirm({ number: lease.number })}
+            pending={remove.isPending}
+            onConfirm={() => remove.mutate({ data: { leaseId: lease.id } })}
+          />
+          {remove.error && <p className="text-destructive">{remove.error.message}</p>}
+        </section>
+      </div>
+    ),
   })
 }

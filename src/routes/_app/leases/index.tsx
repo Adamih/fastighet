@@ -13,7 +13,7 @@ import {
 import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { leasesQuery } from '#/features/leases/functions'
-import { useAddLeaseDrawer } from '#/features/leases/lease-form'
+import { useAddLeaseDrawer, useEditLeaseDrawer } from '#/features/leases/lease-form'
 import { tenantKindLabels } from '#/features/leases/options'
 import {
   formatShortDate,
@@ -411,6 +411,7 @@ function LeaseRow({
 }
 
 function LeaseActions({ lease, canEdit }: { lease: LeaseView; canEdit: boolean }) {
+  const edit = useEditLeaseDrawer(lease)
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -429,13 +430,7 @@ function LeaseActions({ lease, canEdit }: { lease: LeaseView; canEdit: boolean }
             {m.lease_view()}
           </Link>
         </DropdownMenuItem>
-        {canEdit && (
-          <DropdownMenuItem asChild>
-            <Link to="/leases/$leaseId/edit" params={{ leaseId: lease.id }}>
-              {m.lease_edit()}
-            </Link>
-          </DropdownMenuItem>
-        )}
+        {canEdit && <DropdownMenuItem onSelect={edit.open}>{m.lease_edit()}</DropdownMenuItem>}
         <DropdownMenuItem asChild>
           <Link to="/tenants/$tenantId" params={{ tenantId: lease.tenant.id }}>
             {m.lease_view_tenant()}

@@ -1,9 +1,18 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import { Schema } from 'effect'
+import { DeleteButton } from '#/components/delete-button'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { m } from '#/paraglide/messages'
-import { createPropertyFn, propertiesQuery } from './functions'
+import {
+  createPropertyFn,
+  deletePropertyFn,
+  type getPropertyFn,
+  propertiesQuery,
+  propertyQuery,
+  updatePropertyFn,
+} from './functions'
 import { type CreatePropertyInput, CreatePropertyInput as PropertySchema } from './schemas'
 
 const validator = Schema.toStandardSchemaV1(PropertySchema)
@@ -16,22 +25,19 @@ export const emptyProperty: CreatePropertyInput = {
   city: '',
 }
 
-/** Shared by "Lägg till fastighet" (in a drawer) and the edit page. */
+/** Shared by the create and edit property drawers. */
 export function PropertyForm({
   defaultValues,
   submitLabel,
   onSubmit,
   error,
-  disabled = false,
 }: {
   defaultValues: CreatePropertyInput
   submitLabel: string
   onSubmit: (value: CreatePropertyInput) => Promise<unknown>
   error: Error | null
-  disabled?: boolean
 }) {
   const drawer = useFormDrawerContext()
-  const inDrawer = drawer !== null
   const form = useAppForm({
     defaultValues,
     validators: { onSubmit: validator },
@@ -44,11 +50,11 @@ export function PropertyForm({
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!disabled) void form.handleSubmit()
+        void form.handleSubmit().catch(() => {})
       }}
     >
-      <fieldset disabled={disabled} className="grid gap-4">
-        <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
+      <fieldset className="grid gap-4">
+        <div className="grid gap-4">
           <form.AppField name="designation">
             {(field) => (
               <field.TextField
@@ -86,11 +92,9 @@ export function PropertyForm({
           </form.AppField>
         </div>
         {error && <p className="text-destructive text-sm">{error.message}</p>}
-        {!disabled && (
-          <form.AppForm>
-            <form.SubmitButton>{submitLabel}</form.SubmitButton>
-          </form.AppForm>
-        )}
+        <form.AppForm>
+          <form.SubmitButton>{submitLabel}</form.SubmitButton>
+        </form.AppForm>
       </fieldset>
     </form>
   )
@@ -117,6 +121,76 @@ export function useAddPropertyDrawer() {
           close()
         }}
       />
+    ),
+  })
+}
+
+/** "Ändra" on a property's page. */
+export function useEditPropertyDrawer(property: Awaited<ReturnType<typeof getPropertyFn>>) {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['properties'] })
+    await queryClient.invalidateQueries({ queryKey: ['units'] })
+    await queryClient.invalidateQueries({ queryKey: ['leases'] })
+  }
+  const update = useMutation({
+    mutationFn: updatePropertyFn,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(propertyQuery(property.id).queryKey, updated)
+      await refresh()
+    },
+  })
+  const remove = useMutation({
+    mutationFn: deletePropertyFn,
+    onSuccess: async () => {
+      await navigate({ to: '/' })
+      queryClient.removeQueries({ queryKey: propertyQuery(property.id).queryKey })
+      await refresh()
+    },
+  })
+  const leased = property.units.some((u) => u.occupancy)
+  return useFormDrawer({
+    title: m.property_edit_title(),
+    onClose: () => {
+      update.reset()
+      remove.reset()
+    },
+    form: ({ close }) => (
+      <div className="grid gap-6">
+        <PropertyForm
+          defaultValues={{
+            designation: property.designation,
+            name: property.name ?? '',
+            streetAddress: property.streetAddress ?? '',
+            postalCode: property.postalCode ?? '',
+            city: property.city ?? '',
+          }}
+          submitLabel={m.common_save_changes()}
+          error={update.error}
+          onSubmit={async (value) => {
+            await update.mutateAsync({ data: { propertyId: property.id, ...value } })
+            close()
+          }}
+        />
+        <section className="grid gap-2 border-t pt-5 text-sm">
+          <h2 className="font-medium">{m.common_delete()}</h2>
+          <p className="text-muted-foreground">
+            {leased
+              ? m.property_delete_blocked()
+              : m.property_delete_warning({ count: property.units.length })}
+          </p>
+          {!leased && (
+            <DeleteButton
+              label={m.property_delete()}
+              question={m.common_delete_named({ name: property.designation })}
+              pending={remove.isPending}
+              onConfirm={() => remove.mutate({ data: { propertyId: property.id } })}
+            />
+          )}
+          {remove.error && <p className="text-destructive">{remove.error.message}</p>}
+        </section>
+      </div>
     ),
   })
 }

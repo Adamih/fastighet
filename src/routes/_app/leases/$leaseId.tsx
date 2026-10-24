@@ -42,6 +42,7 @@ import {
   shortPeriodLabel,
 } from '#/features/leases/detail'
 import { leaseQuery, leasesQuery, withdrawTerminationFn } from '#/features/leases/functions'
+import { useEditLeaseDrawer } from '#/features/leases/lease-form'
 import { invoiceIntervalLabels, tenantKindLabels } from '#/features/leases/options'
 import {
   daysUntil,
@@ -83,6 +84,7 @@ function LeasePage() {
     enabled: canReadInvoices,
   })
   const terminate = useTerminateLeaseDrawer(lease)
+  const edit = useEditLeaseDrawer(lease)
   const today = stockholmDate(Date.now())
 
   const queryClient = useQueryClient()
@@ -121,11 +123,9 @@ function LeasePage() {
           canManage && (
             <>
               {can({ property: ['read'] }) && (
-                <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-                  <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
-                    <Pencil aria-hidden="true" />
-                    {m.common_edit()}
-                  </Link>
+                <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
+                  <Pencil aria-hidden="true" />
+                  {m.common_edit()}
                 </Button>
               )}
               {open && !lease.moveOutDate && (

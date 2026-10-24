@@ -226,7 +226,7 @@ function SubmitButton({
       type="submit"
       form={drawer?.formId}
       variant={variant}
-      disabled={disabled || isSubmitting}
+      disabled={disabled || isSubmitting || drawer?.busy}
       className={cn(
         drawer ? 'h-11 w-full sm:h-10' : 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start',
         className,

@@ -8,6 +8,7 @@ import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { monthlyRentOre, unitLabel } from '#/features/leases/overview'
 import { propertyQuery } from '#/features/properties/functions'
+import { useEditPropertyDrawer } from '#/features/properties/property-form'
 import { propertySummary } from '#/features/properties/summary'
 import { useAddUnitDrawer } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
@@ -31,6 +32,7 @@ function PropertyPage() {
   const canReadLeases = can({ lease: ['read'] })
   const { propertyId } = Route.useParams()
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
+  const edit = useEditPropertyDrawer(property)
   const summary = propertySummary(property.units)
   const addUnit = useAddUnitDrawer(propertyId)
   const address = [
@@ -51,11 +53,9 @@ function PropertyPage() {
         actions={
           canManage && (
             <>
-              <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-                <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
-                  <Pencil aria-hidden="true" />
-                  {m.common_edit()}
-                </Link>
+              <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
+                <Pencil aria-hidden="true" />
+                {m.common_edit()}
               </Button>
               <Button size="fab" onClick={addUnit.open}>
                 <Plus aria-hidden="true" />

@@ -28,9 +28,6 @@ import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index
 import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
 import { Route as AppUnitsUnitIdRouteImport } from './routes/_app/units/$unitId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as AppLeasesLeaseIdEditRouteImport } from './routes/_app/leases/$leaseId_.edit'
-import { Route as AppPropertiesPropertyIdEditRouteImport } from './routes/_app/properties/$propertyId_.edit'
-import { Route as AppUnitsUnitIdEditRouteImport } from './routes/_app/units/$unitId_.edit'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -126,22 +123,6 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppLeasesLeaseIdEditRoute = AppLeasesLeaseIdEditRouteImport.update({
-  id: '/leases/$leaseId_/edit',
-  path: '/leases/$leaseId/edit',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPropertiesPropertyIdEditRoute =
-  AppPropertiesPropertyIdEditRouteImport.update({
-    id: '/properties/$propertyId_/edit',
-    path: '/properties/$propertyId/edit',
-    getParentRoute: () => AppRoute,
-  } as any)
-const AppUnitsUnitIdEditRoute = AppUnitsUnitIdEditRouteImport.update({
-  id: '/units/$unitId_/edit',
-  path: '/units/$unitId/edit',
-  getParentRoute: () => AppRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -162,9 +143,6 @@ export interface FileRoutesByFullPath {
   '/invoices/': typeof AppInvoicesIndexRoute
   '/leases/': typeof AppLeasesIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
-  '/leases/$leaseId/edit': typeof AppLeasesLeaseIdEditRoute
-  '/properties/$propertyId/edit': typeof AppPropertiesPropertyIdEditRoute
-  '/units/$unitId/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -185,9 +163,6 @@ export interface FileRoutesByTo {
   '/invoices': typeof AppInvoicesIndexRoute
   '/leases': typeof AppLeasesIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
-  '/leases/$leaseId/edit': typeof AppLeasesLeaseIdEditRoute
-  '/properties/$propertyId/edit': typeof AppPropertiesPropertyIdEditRoute
-  '/units/$unitId/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -210,9 +185,6 @@ export interface FileRoutesById {
   '/_app/invoices/': typeof AppInvoicesIndexRoute
   '/_app/leases/': typeof AppLeasesIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
-  '/_app/leases/$leaseId_/edit': typeof AppLeasesLeaseIdEditRoute
-  '/_app/properties/$propertyId_/edit': typeof AppPropertiesPropertyIdEditRoute
-  '/_app/units/$unitId_/edit': typeof AppUnitsUnitIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -235,9 +207,6 @@ export interface FileRouteTypes {
     | '/invoices/'
     | '/leases/'
     | '/tenants/'
-    | '/leases/$leaseId/edit'
-    | '/properties/$propertyId/edit'
-    | '/units/$unitId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -258,9 +227,6 @@ export interface FileRouteTypes {
     | '/invoices'
     | '/leases'
     | '/tenants'
-    | '/leases/$leaseId/edit'
-    | '/properties/$propertyId/edit'
-    | '/units/$unitId/edit'
   id:
     | '__root__'
     | '/_app'
@@ -282,9 +248,6 @@ export interface FileRouteTypes {
     | '/_app/invoices/'
     | '/_app/leases/'
     | '/_app/tenants/'
-    | '/_app/leases/$leaseId_/edit'
-    | '/_app/properties/$propertyId_/edit'
-    | '/_app/units/$unitId_/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -432,27 +395,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/leases/$leaseId_/edit': {
-      id: '/_app/leases/$leaseId_/edit'
-      path: '/leases/$leaseId/edit'
-      fullPath: '/leases/$leaseId/edit'
-      preLoaderRoute: typeof AppLeasesLeaseIdEditRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/properties/$propertyId_/edit': {
-      id: '/_app/properties/$propertyId_/edit'
-      path: '/properties/$propertyId/edit'
-      fullPath: '/properties/$propertyId/edit'
-      preLoaderRoute: typeof AppPropertiesPropertyIdEditRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/units/$unitId_/edit': {
-      id: '/_app/units/$unitId_/edit'
-      path: '/units/$unitId/edit'
-      fullPath: '/units/$unitId/edit'
-      preLoaderRoute: typeof AppUnitsUnitIdEditRouteImport
-      parentRoute: typeof AppRoute
-    }
   }
 }
 
@@ -469,9 +411,6 @@ interface AppRouteChildren {
   AppInvoicesIndexRoute: typeof AppInvoicesIndexRoute
   AppLeasesIndexRoute: typeof AppLeasesIndexRoute
   AppTenantsIndexRoute: typeof AppTenantsIndexRoute
-  AppLeasesLeaseIdEditRoute: typeof AppLeasesLeaseIdEditRoute
-  AppPropertiesPropertyIdEditRoute: typeof AppPropertiesPropertyIdEditRoute
-  AppUnitsUnitIdEditRoute: typeof AppUnitsUnitIdEditRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -487,9 +426,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppInvoicesIndexRoute: AppInvoicesIndexRoute,
   AppLeasesIndexRoute: AppLeasesIndexRoute,
   AppTenantsIndexRoute: AppTenantsIndexRoute,
-  AppLeasesLeaseIdEditRoute: AppLeasesLeaseIdEditRoute,
-  AppPropertiesPropertyIdEditRoute: AppPropertiesPropertyIdEditRoute,
-  AppUnitsUnitIdEditRoute: AppUnitsUnitIdEditRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

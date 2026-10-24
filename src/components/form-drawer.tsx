@@ -18,6 +18,8 @@ import { m } from '#/paraglide/messages'
 interface FormDrawerContextValue {
   formId: string
   footer: HTMLDivElement | null
+  busy: boolean
+  setBusy: (busy: boolean) => void
   /** Called by the form's submit button whenever its state changes. */
   report: (state: { changed: boolean; submitting: boolean }) => void
 }
@@ -81,13 +83,16 @@ export function FormDrawer({
   const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const [changed, setChanged] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [actionPending, setActionPending] = useState(false)
   const [confirming, setConfirming] = useState(false)
-  const guarded = changed || submitting
+  const busy = submitting || actionPending
+  const guarded = changed || busy
 
   useEffect(() => {
     if (!open) {
       setChanged(false)
       setSubmitting(false)
+      setActionPending(false)
       setConfirming(false)
     }
   }, [open])
@@ -96,17 +101,19 @@ export function FormDrawer({
     () => ({
       formId,
       footer,
+      busy,
+      setBusy: setActionPending,
       report: (state) => {
         setChanged(state.changed)
         setSubmitting(state.submitting)
         if (!state.changed) setConfirming(false)
       },
     }),
-    [formId, footer],
+    [formId, footer, busy],
   )
 
   const requestClose = () => {
-    if (submitting) return
+    if (busy) return
     if (changed) setConfirming(true)
     else onOpenChange(false)
   }

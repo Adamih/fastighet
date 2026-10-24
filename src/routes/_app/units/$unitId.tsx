@@ -18,6 +18,7 @@ import { formatShortDate, monthlyRentOre, unitLabel } from '#/features/leases/ov
 import { effectiveEndDate } from '#/features/leases/terms'
 import { type UnitState, unitAvailability } from '#/features/properties/availability'
 import { unitDetailQuery } from '#/features/properties/functions'
+import { useEditUnitDrawer } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
@@ -60,6 +61,7 @@ function UnitPage() {
   const canCreateLease = can({ lease: ['manage'], tenant: ['read'], property: ['read'] })
   const addLease = useAddLeaseDrawer(unitId)
   const { data: unit } = useSuspenseQuery(unitDetailQuery(unitId))
+  const edit = useEditUnitDrawer(unit)
   const today = stockholmDate(Date.now())
   const availability = unitAvailability(unit.leases, today)
   const { current, next } = availability
@@ -98,11 +100,9 @@ function UnitPage() {
         actions={
           <>
             {can({ property: ['manage'] }) && (
-              <Button variant="outline" className="flex-1 sm:flex-none" asChild>
-                <Link to="/units/$unitId/edit" params={{ unitId }}>
-                  <Pencil aria-hidden="true" />
-                  {m.common_edit()}
-                </Link>
+              <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
+                <Pencil aria-hidden="true" />
+                {m.common_edit()}
               </Button>
             )}
             {canCreateLease && availability.freeFrom && (
