@@ -15,6 +15,8 @@ import { useIsMobile } from '#/hooks/use-mobile'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
+export type FormDrawerSize = 'default' | 'wide'
+
 interface FormDrawerContextValue {
   formId: string
   footer: HTMLDivElement | null
@@ -70,12 +72,15 @@ export function FormDrawer({
   onOpenChange,
   title,
   description,
+  size = 'default',
   children,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
   description?: string
+  /** Preferred desktop width; always leaves room outside the drawer for dismissal. */
+  size?: FormDrawerSize
   children: ReactNode
 }) {
   const mobile = useIsMobile()
@@ -143,7 +148,10 @@ export function FormDrawer({
         className={cn(
           'overflow-hidden',
           'data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-3rem)] data-[vaul-drawer-direction=bottom]:rounded-t-2xl',
-          'data-[vaul-drawer-direction=right]:w-full data-[vaul-drawer-direction=right]:sm:max-w-md',
+          'data-[vaul-drawer-direction=right]:w-[calc(100dvw-3rem)]',
+          size === 'wide'
+            ? 'data-[vaul-drawer-direction=right]:sm:max-w-[37.5rem]'
+            : 'data-[vaul-drawer-direction=right]:sm:max-w-md',
         )}
       >
         <div className="mt-2 flex shrink-0 items-center justify-between gap-3 border-b py-2 pr-2 pl-5">
@@ -183,7 +191,10 @@ export function FormDrawer({
           {description ?? title}
         </DrawerDescription>
         <FormDrawerContext.Provider value={context}>
-          <div data-slot="form-drawer-body" className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div
+            data-slot="form-drawer-body"
+            className="@container/form-drawer min-h-0 flex-1 overflow-y-auto p-5"
+          >
             {children}
           </div>
           <div
@@ -204,11 +215,14 @@ export function FormDrawer({
 export function useFormDrawer({
   title,
   description,
+  size,
   form,
   onClose,
 }: {
   title: string
   description?: string
+  /** Use a wider desktop drawer for forms with more space requirements. */
+  size?: FormDrawerSize
   /** The form; call `close` after a successful save. */
   form: (drawer: { close: () => void }) => ReactNode
   /** Runs whenever the drawer closes, e.g. to clear a mutation's error for next time. */
@@ -236,12 +250,13 @@ export function useFormDrawer({
         onOpenChange={setOpen}
         title={title}
         description={description}
+        size={size}
       >
         {form({ close })}
       </FormDrawer>,
       isOpen,
     )
-  }, [host, id, isOpen, setOpen, title, description, form, close])
+  }, [host, id, isOpen, setOpen, title, description, size, form, close])
   useEffect(() => () => host.remove(id), [host, id])
 
   return { open, close, isOpen }

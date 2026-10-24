@@ -283,6 +283,7 @@ export function useAddLeaseDrawer(unitId?: string) {
     },
   })
   return useFormDrawer({
+    size: 'wide',
     title: m.lease_new(),
     onClose: create.reset,
     form: ({ close }) => {
@@ -396,6 +397,7 @@ export function useEditLeaseDrawer(lease: LeaseView) {
     },
   })
   return useFormDrawer({
+    size: 'wide',
     title: m.lease_edit_title({ number: lease.number }),
     description: m.lease_edit_intro({ tenant: lease.tenant.name }),
     onClose: () => {

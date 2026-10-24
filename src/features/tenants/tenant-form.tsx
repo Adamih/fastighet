@@ -157,6 +157,7 @@ export function useAddTenantDrawer() {
       queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }, { throwOnError: true }),
   })
   return useFormDrawer({
+    size: 'wide',
     title: m.tenant_add(),
     description: m.tenant_add_description(),
     onClose: create.reset,
@@ -188,6 +189,7 @@ export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] 
     },
   })
   return useFormDrawer({
+    size: 'wide',
     title: m.tenant_edit(),
     description: m.tenant_edit_description(),
     onClose: update.reset,

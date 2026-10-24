@@ -36,3 +36,28 @@ Shared fields link validation messages to their inputs. Server input validation 
   email retries are safe.
 
 Apply migration `0004_flimsy_captain_stacy.sql` before running this code against another database.
+
+## Drawer widths and columns
+
+Drawers use the default desktop width (28rem). Opt into a wider desktop drawer per form:
+
+```tsx
+useFormDrawer({
+  title: m.example_title(),
+  size: 'wide', // 37.5rem, about 600px
+  form: ({ close }) => <ExampleForm onDone={close} />,
+})
+```
+
+Desktop widths leave at least 3rem of the viewport outside the drawer for dismissal. Narrow
+windows use the existing mobile bottom drawer, which keeps space above it for dismissal.
+Headers, scrolling, footers and unsaved-change guards are shared by both sizes.
+
+The body is a named `form-drawer` query container. Forms own their column layout; base it on
+actual drawer space rather than viewport breakpoints, for example:
+
+```tsx
+<div className="grid gap-4 @min-[32rem]/form-drawer:grid-cols-2">
+  {/* Fields stack below 32rem of available content width. */}
+</div>
+```
