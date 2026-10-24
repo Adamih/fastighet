@@ -1,16 +1,15 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ChevronRight, Pencil } from 'lucide-react'
-import { AddForm } from '#/components/add-form'
+import { ChevronRight, Pencil, Plus } from 'lucide-react'
 import { DetailColumns, DetailHeader, FactList, Panel, StatRow } from '#/components/detail'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { monthlyRentOre, unitLabel } from '#/features/leases/overview'
-import { createUnitFn, propertyQuery } from '#/features/properties/functions'
+import { propertyQuery } from '#/features/properties/functions'
 import { propertySummary } from '#/features/properties/summary'
-import { emptyUnit, UnitForm } from '#/features/properties/unit-form'
+import { useAddUnitDrawer } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
@@ -32,6 +31,7 @@ function PropertyPage() {
   const { propertyId } = Route.useParams()
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
   const summary = propertySummary(property.units)
+  const addUnit = useAddUnitDrawer(propertyId)
   const address = [
     property.streetAddress,
     [property.postalCode, property.city].filter(Boolean).join(' '),
@@ -56,11 +56,16 @@ function PropertyPage() {
                   Ändra
                 </Link>
               </Button>
-              <CreateUnit propertyId={propertyId} />
+              <Button size="fab" onClick={addUnit.open}>
+                <Plus aria-hidden="true" />
+                Lägg till objekt
+              </Button>
             </>
           )
         }
       />
+
+      {canManage && addUnit.drawer}
 
       <StatRow>
         <StatCard label="Objekt">{summary.units}</StatCard>
@@ -200,35 +205,5 @@ function UnitRow({
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
       </Link>
     </li>
-  )
-}
-
-function CreateUnit({ propertyId }: { propertyId: string }) {
-  const queryClient = useQueryClient()
-  const create = useMutation({
-    mutationFn: createUnitFn,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: propertyQuery(propertyId).queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['units'] })
-    },
-  })
-
-  return (
-    <AddForm title="Lägg till objekt" description="Lägenheter, lokaler, parkeringar och förråd.">
-      {({ idPrefix, layout, onSaved }) => (
-        <UnitForm
-          idPrefix={idPrefix}
-          layout={layout}
-          defaultValues={emptyUnit}
-          submitLabel="Spara objekt"
-          error={create.error}
-          resetAfterSubmit
-          onSubmit={async (value) => {
-            await create.mutateAsync({ data: { propertyId, ...value } })
-            onSaved()
-          }}
-        />
-      )}
-    </AddForm>
   )
 }

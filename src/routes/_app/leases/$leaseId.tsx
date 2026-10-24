@@ -1,4 +1,3 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
@@ -26,10 +25,8 @@ import {
   PanelRow,
   StatRow,
 } from '#/components/detail'
-import { FormDrawer } from '#/components/form-drawer'
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
-import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
@@ -44,12 +41,7 @@ import {
   nextInvoicePeriod,
   shortPeriodLabel,
 } from '#/features/leases/detail'
-import {
-  leaseQuery,
-  leasesQuery,
-  terminateLeaseFn,
-  withdrawTerminationFn,
-} from '#/features/leases/functions'
+import { leaseQuery, leasesQuery, withdrawTerminationFn } from '#/features/leases/functions'
 import { invoiceIntervalLabels, tenantKindLabels } from '#/features/leases/options'
 import {
   daysUntil,
@@ -62,8 +54,9 @@ import {
   unitSummary,
 } from '#/features/leases/overview'
 import type { LeaseView } from '#/features/leases/program'
-import { earliestMoveOutDate, effectiveEndDate } from '#/features/leases/terms'
-import { isIsoDate, stockholmDate } from '#/lib/dates'
+import { useTerminateLeaseDrawer } from '#/features/leases/terminate-form'
+import { effectiveEndDate } from '#/features/leases/terms'
+import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
 
@@ -88,7 +81,7 @@ function LeasePage() {
     ...invoicesQuery({ filter: 'all', leaseId }),
     enabled: canReadInvoices,
   })
-  const [terminating, setTerminating] = useState(false)
+  const terminate = useTerminateLeaseDrawer(lease)
   const today = stockholmDate(Date.now())
 
   const queryClient = useQueryClient()
@@ -131,11 +124,7 @@ function LeasePage() {
                 </Button>
               )}
               {open && !lease.moveOutDate && (
-                <Button
-                  variant="outline"
-                  className="flex-1 sm:flex-none"
-                  onClick={() => setTerminating(true)}
-                >
+                <Button variant="outline" className="flex-1 sm:flex-none" onClick={terminate.open}>
                   <FileX aria-hidden="true" />
                   Säg upp
                 </Button>
@@ -271,16 +260,7 @@ function LeasePage() {
         }
       />
 
-      {canManage && (
-        <FormDrawer
-          open={terminating}
-          onOpenChange={setTerminating}
-          title="Säg upp avtalet"
-          description={`Avtal #${lease.number} med ${lease.tenant.name}. Uppsägningstiden är ${lease.noticePeriodMonths} månader.`}
-        >
-          <TerminateForm lease={lease} onDone={() => setTerminating(false)} />
-        </FormDrawer>
-      )}
+      {canManage && terminate.drawer}
     </div>
   )
 }
@@ -498,81 +478,5 @@ function LeaseInvoices({ invoices }: { invoices: LeaseInvoiceRow[] }) {
         </div>
       )}
     </Panel>
-  )
-}
-
-function TerminateForm({ lease, onDone }: { lease: LeaseView; onDone: () => void }) {
-  const queryClient = useQueryClient()
-  const terminate = useMutation({
-    mutationFn: terminateLeaseFn,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leasesQuery().queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['properties'] })
-      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
-      onDone()
-    },
-  })
-
-  const form = useForm({
-    defaultValues: { noticeDate: stockholmDate(Date.now()), moveOutDate: '' },
-    onSubmit: async ({ value }) => {
-      await terminate.mutateAsync({
-        data: {
-          leaseId: lease.id,
-          noticeDate: value.noticeDate,
-          moveOutDate: value.moveOutDate || null,
-        },
-      })
-    },
-  })
-
-  return (
-    <form
-      className="grid gap-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit()
-      }}
-    >
-      <div className="grid gap-4">
-        <form.Field
-          name="noticeDate"
-          validators={{
-            onSubmit: ({ value }) => (isIsoDate(value) ? undefined : 'Ange ett datum'),
-          }}
-        >
-          {(field) => <TextField field={field} label="Uppsägning mottagen" type="date" />}
-        </form.Field>
-        <form.Field name="moveOutDate">
-          {(field) => <TextField field={field} label="Annan avflyttning (valfritt)" type="date" />}
-        </form.Field>
-      </div>
-      <form.Subscribe selector={(s) => s.values.noticeDate}>
-        {(noticeDate) =>
-          isIsoDate(noticeDate) && (
-            <p className="text-sm">
-              Tidigaste avflyttning enligt avtalet:{' '}
-              <span className="font-medium tabular-nums">
-                {earliestMoveOutDate(lease, noticeDate)}
-              </span>
-              . Fyll i annan avflyttning bara om ni har kommit överens om ett tidigare datum.
-            </p>
-          )
-        }
-      </form.Subscribe>
-      {terminate.error && <p className="text-destructive text-sm">{terminate.error.message}</p>}
-      <form.Subscribe selector={(s) => s.isSubmitting}>
-        {(isSubmitting) => (
-          <Button
-            type="submit"
-            variant="destructive"
-            disabled={isSubmitting}
-            className="h-11 w-full sm:h-10"
-          >
-            Registrera uppsägning
-          </Button>
-        )}
-      </form.Subscribe>
-    </form>
   )
 }

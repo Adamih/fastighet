@@ -1,9 +1,12 @@
 import { useForm } from '@tanstack/react-form'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
+import { useFormDrawer } from '#/components/form-drawer'
 import { SegmentedControl } from '#/components/segmented-control'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
+import { createTenantFn, tenantQuery, tenantsQuery, updateTenantFn } from './functions'
 import { type CreateTenantInput, CreateTenantInput as TenantSchema } from './schemas'
 
 const validator = Schema.toStandardSchemaV1(TenantSchema)
@@ -205,4 +208,63 @@ function Optional({ children }: { children: string }) {
       {children} <span className="font-normal text-muted-foreground">(valfritt)</span>
     </span>
   )
+}
+
+/** "Lägg till hyresgäst": creates a tenant and refreshes the tenant list. */
+export function useAddTenantDrawer() {
+  const queryClient = useQueryClient()
+  const create = useMutation({
+    mutationFn: createTenantFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }),
+  })
+  return useFormDrawer({
+    title: 'Lägg till hyresgäst',
+    description: 'Koppla hyresgästen till ett avtal i nästa steg.',
+    onClose: create.reset,
+    form: ({ close }) => (
+      <TenantForm
+        idPrefix="add-tenant-"
+        layout="narrow"
+        defaultValues={emptyTenant}
+        submitLabel="Spara hyresgäst"
+        error={create.error}
+        onSubmit={async (value) => {
+          await create.mutateAsync({ data: value })
+          close()
+        }}
+      />
+    ),
+  })
+}
+
+/** "Redigera uppgifter" on the tenant page. */
+export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] & { id: string }) {
+  const queryClient = useQueryClient()
+  const update = useMutation({
+    mutationFn: updateTenantFn,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(tenantQuery(tenant.id).queryKey, updated)
+      await queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['leases'] })
+    },
+  })
+  return useFormDrawer({
+    title: 'Redigera uppgifter',
+    description:
+      'Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med.',
+    onClose: update.reset,
+    form: ({ close }) => (
+      <TenantForm
+        idPrefix="edit-tenant-"
+        layout="narrow"
+        defaultValues={tenantToInput(tenant)}
+        submitLabel="Spara ändringar"
+        error={update.error}
+        onSubmit={async (value) => {
+          await update.mutateAsync({ data: { tenantId: tenant.id, ...value } })
+          close()
+        }}
+      />
+    ),
+  })
 }

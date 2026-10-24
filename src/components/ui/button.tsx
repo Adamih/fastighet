@@ -28,6 +28,9 @@ const buttonVariants = cva(
         "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-8",
         "icon-lg": "size-10",
+        // A floating action button on phones that becomes an ordinary button from `md` up. Pages
+        // using it leave room below their content on phones (`pb-20 md:pb-0`).
+        fab: "fixed right-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 h-13 rounded-2xl px-5 text-[15px] shadow-lg md:static md:z-auto md:h-9 md:rounded-md md:px-4 md:text-sm md:shadow-none",
       },
     },
     defaultVariants: {

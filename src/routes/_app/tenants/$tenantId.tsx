@@ -11,7 +11,6 @@ import {
   PanelRow,
   StatRow,
 } from '#/components/detail'
-import { FormDrawer } from '#/components/form-drawer'
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
@@ -23,8 +22,8 @@ import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
 import { tenantKindLabels } from '#/features/leases/options'
 import { formatShortDate, monthlyRentOre } from '#/features/leases/overview'
-import { deleteTenantFn, tenantQuery, updateTenantFn } from '#/features/tenants/functions'
-import { TenantForm, tenantToInput } from '#/features/tenants/tenant-form'
+import { deleteTenantFn, tenantQuery } from '#/features/tenants/functions'
+import { useEditTenantDrawer } from '#/features/tenants/tenant-form'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 
@@ -41,19 +40,10 @@ function TenantPage() {
   const { data: tenant } = useSuspenseQuery(tenantQuery(tenantId))
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [editing, setEditing] = useState(false)
+  const edit = useEditTenantDrawer(tenant)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const today = stockholmDate(Date.now())
 
-  const update = useMutation({
-    mutationFn: updateTenantFn,
-    onSuccess: async (updated) => {
-      queryClient.setQueryData(tenantQuery(tenantId).queryKey, updated)
-      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
-      await queryClient.invalidateQueries({ queryKey: ['leases'] })
-      setEditing(false)
-    },
-  })
   const remove = useMutation({
     mutationFn: deleteTenantFn,
     onSuccess: async () => {
@@ -97,11 +87,7 @@ function TenantPage() {
         actions={
           canManage && (
             <>
-              <Button
-                variant="outline"
-                className="flex-1 sm:flex-none"
-                onClick={() => setEditing(true)}
-              >
+              <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
                 <Pencil aria-hidden="true" />
                 Redigera uppgifter
               </Button>
@@ -305,25 +291,7 @@ function TenantPage() {
         }
       />
 
-      {canManage && (
-        <FormDrawer
-          open={editing}
-          onOpenChange={setEditing}
-          title="Redigera uppgifter"
-          description="Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med."
-        >
-          <TenantForm
-            idPrefix="edit-"
-            layout="narrow"
-            // Remount with fresh values after a save so the form never shows stale data.
-            key={JSON.stringify(tenantToInput(tenant))}
-            defaultValues={tenantToInput(tenant)}
-            submitLabel="Spara ändringar"
-            error={update.error}
-            onSubmit={(value) => update.mutateAsync({ data: { tenantId, ...value } })}
-          />
-        </FormDrawer>
-      )}
+      {canManage && edit.drawer}
     </div>
   )
 }

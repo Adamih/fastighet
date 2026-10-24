@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 import { Button } from '#/components/ui/button'
 import {
   Drawer,
@@ -54,4 +54,40 @@ export function FormDrawer({
       </DrawerContent>
     </Drawer>
   )
+}
+
+/**
+ * Owns a `FormDrawer`'s open state. Returns `open` for any button's `onClick` and the `drawer`
+ * element, which the page renders once. Features define these hooks next to their forms (e.g.
+ * `useAddTenantDrawer` in `tenant-form.tsx`), so pages only place a button and the drawer.
+ */
+export function useFormDrawer({
+  title,
+  description,
+  form,
+  onClose,
+}: {
+  title: string
+  description?: string
+  /** The form; call `close` after a successful save. */
+  form: (drawer: { close: () => void }) => ReactNode
+  /** Runs whenever the drawer closes, e.g. to clear a mutation's error for next time. */
+  onClose?: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const setOpen = useCallback(
+    (next: boolean) => {
+      setIsOpen(next)
+      if (!next) onClose?.()
+    },
+    [onClose],
+  )
+  const open = useCallback(() => setOpen(true), [setOpen])
+  const close = useCallback(() => setOpen(false), [setOpen])
+  const drawer = (
+    <FormDrawer open={isOpen} onOpenChange={setOpen} title={title} description={description}>
+      {form({ close })}
+    </FormDrawer>
+  )
+  return { open, close, isOpen, drawer }
 }

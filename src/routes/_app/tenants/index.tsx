@@ -1,14 +1,14 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ChevronRight, Search } from 'lucide-react'
+import { ChevronRight, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
-import { AddForm } from '#/components/add-form'
 import { InitialsAvatar } from '#/components/initials-avatar'
+import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { tenantKindLabels } from '#/features/leases/options'
-import { createTenantFn, tenantsQuery } from '#/features/tenants/functions'
+import { tenantsQuery } from '#/features/tenants/functions'
 import { leaseLine, matchesTenant, tenantCountLine } from '#/features/tenants/overview'
-import { emptyTenant, TenantForm } from '#/features/tenants/tenant-form'
+import { useAddTenantDrawer } from '#/features/tenants/tenant-form'
 import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/tenants/')({
@@ -22,11 +22,7 @@ function TenantsPage() {
   const canManage = useCan()({ tenant: ['manage'] })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const [query, setQuery] = useState('')
-  const queryClient = useQueryClient()
-  const create = useMutation({
-    mutationFn: createTenantFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }),
-  })
+  const addTenant = useAddTenantDrawer()
   const visible = tenants.filter((t) => matchesTenant(t, query))
 
   return (
@@ -53,28 +49,14 @@ function TenantsPage() {
             </label>
           )}
           {canManage && (
-            <AddForm
-              title="Lägg till hyresgäst"
-              description="Koppla hyresgästen till ett avtal i nästa steg."
-            >
-              {({ idPrefix, layout, onSaved }) => (
-                <TenantForm
-                  idPrefix={idPrefix}
-                  layout={layout}
-                  defaultValues={emptyTenant}
-                  submitLabel="Spara hyresgäst"
-                  error={create.error}
-                  resetAfterSubmit
-                  onSubmit={async (value) => {
-                    await create.mutateAsync({ data: value })
-                    onSaved()
-                  }}
-                />
-              )}
-            </AddForm>
+            <Button size="fab" onClick={addTenant.open}>
+              <Plus aria-hidden="true" />
+              Lägg till hyresgäst
+            </Button>
           )}
         </div>
       </header>
+      {canManage && addTenant.drawer}
 
       <div className="grid items-start gap-6">
         {tenants.length === 0 ? (

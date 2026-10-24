@@ -1,7 +1,10 @@
 import { useForm } from '@tanstack/react-form'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useFormDrawer } from '#/components/form-drawer'
 import { optionsFrom, SelectField } from '#/components/select-field'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
+import { createUnitFn, propertyQuery } from './functions'
 import { type UnitKind, unitKindLabels } from './unit-kinds'
 
 export interface UnitValues {
@@ -130,4 +133,34 @@ export function UnitForm({
       </fieldset>
     </form>
   )
+}
+
+/** "Lägg till objekt" on a property's page. */
+export function useAddUnitDrawer(propertyId: string) {
+  const queryClient = useQueryClient()
+  const create = useMutation({
+    mutationFn: createUnitFn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: propertyQuery(propertyId).queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['units'] })
+    },
+  })
+  return useFormDrawer({
+    title: 'Lägg till objekt',
+    description: 'Lägenheter, lokaler, parkeringar och förråd.',
+    onClose: create.reset,
+    form: ({ close }) => (
+      <UnitForm
+        idPrefix="add-unit-"
+        layout="narrow"
+        defaultValues={emptyUnit}
+        submitLabel="Spara objekt"
+        error={create.error}
+        onSubmit={async (value) => {
+          await create.mutateAsync({ data: { propertyId, ...value } })
+          close()
+        }}
+      />
+    ),
+  })
 }

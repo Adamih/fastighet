@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { AddForm } from '#/components/add-form'
+import { Plus } from 'lucide-react'
 import {
   desktopTableClass,
   MobileList,
@@ -9,9 +9,10 @@ import {
   RowMeta,
   RowTitle,
 } from '#/components/responsive'
+import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
-import { createPropertyFn, propertiesQuery } from '#/features/properties/functions'
-import { emptyProperty, PropertyForm } from '#/features/properties/property-form'
+import { propertiesQuery } from '#/features/properties/functions'
+import { useAddPropertyDrawer } from '#/features/properties/property-form'
 import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/')({
@@ -22,11 +23,7 @@ export const Route = createFileRoute('/_app/')({
 function PropertiesPage() {
   const canManage = useCan()({ property: ['manage'] })
   const { data: properties } = useSuspenseQuery(propertiesQuery())
-  const queryClient = useQueryClient()
-  const create = useMutation({
-    mutationFn: createPropertyFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: propertiesQuery().queryKey }),
-  })
+  const addProperty = useAddPropertyDrawer()
 
   return (
     <div className={cn('grid gap-6 sm:gap-8', canManage && 'pb-20 md:pb-0')}>
@@ -35,28 +32,14 @@ function PropertiesPage() {
         subtitle={properties.length > 0 && `${properties.length} fastigheter`}
         action={
           canManage && (
-            <AddForm
-              title="Lägg till fastighet"
-              description="Lägenheter och lokaler lägger du till på fastighetens sida."
-            >
-              {({ idPrefix, layout, onSaved }) => (
-                <PropertyForm
-                  idPrefix={idPrefix}
-                  layout={layout}
-                  defaultValues={emptyProperty}
-                  submitLabel="Spara fastighet"
-                  error={create.error}
-                  resetAfterSubmit
-                  onSubmit={async (value) => {
-                    await create.mutateAsync({ data: value })
-                    onSaved()
-                  }}
-                />
-              )}
-            </AddForm>
+            <Button size="fab" onClick={addProperty.open}>
+              <Plus aria-hidden="true" />
+              Lägg till fastighet
+            </Button>
           )
         }
       />
+      {canManage && addProperty.drawer}
       {properties.length === 0 ? (
         <p className="text-muted-foreground">Inga fastigheter ännu.</p>
       ) : (

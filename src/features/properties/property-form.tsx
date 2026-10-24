@@ -1,7 +1,10 @@
 import { useForm } from '@tanstack/react-form'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
+import { useFormDrawer } from '#/components/form-drawer'
 import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
+import { createPropertyFn, propertiesQuery } from './functions'
 import { type CreatePropertyInput, CreatePropertyInput as PropertySchema } from './schemas'
 
 const validator = Schema.toStandardSchemaV1(PropertySchema)
@@ -128,4 +131,31 @@ export function PropertyForm({
       </fieldset>
     </form>
   )
+}
+
+/** "Lägg till fastighet": creates a property and refreshes the property list. */
+export function useAddPropertyDrawer() {
+  const queryClient = useQueryClient()
+  const create = useMutation({
+    mutationFn: createPropertyFn,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: propertiesQuery().queryKey }),
+  })
+  return useFormDrawer({
+    title: 'Lägg till fastighet',
+    description: 'Lägenheter och lokaler lägger du till på fastighetens sida.',
+    onClose: create.reset,
+    form: ({ close }) => (
+      <PropertyForm
+        idPrefix="add-property-"
+        layout="narrow"
+        defaultValues={emptyProperty}
+        submitLabel="Spara fastighet"
+        error={create.error}
+        onSubmit={async (value) => {
+          await create.mutateAsync({ data: value })
+          close()
+        }}
+      />
+    ),
+  })
 }
