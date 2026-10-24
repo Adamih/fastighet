@@ -7,6 +7,10 @@ import { unitsQuery } from '#/features/properties/functions'
 import { tenantsQuery } from '#/features/tenants/functions'
 
 export const Route = createFileRoute('/_app/leases/new')({
+  // `unitId` preselects a unit, e.g. from the unit page's "Nytt avtal".
+  validateSearch: (search): { unitId?: string } => ({
+    unitId: typeof search.unitId === 'string' ? search.unitId : undefined,
+  }),
   loader: ({ context }) =>
     Promise.all([
       context.queryClient.ensureQueryData(tenantsQuery()),
@@ -19,6 +23,7 @@ function NewLeasePage() {
   const canCreate = useCan()({ lease: ['manage'], tenant: ['read'], property: ['read'] })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const { data: units } = useSuspenseQuery(unitsQuery())
+  const { unitId } = Route.useSearch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -61,7 +66,10 @@ function NewLeasePage() {
       <LeaseForm
         tenants={tenants}
         units={units}
-        defaultValues={emptyLease}
+        defaultValues={{
+          ...emptyLease,
+          unitIds: unitId && units.some((u) => u.id === unitId) ? [unitId] : [],
+        }}
         submitLabel="Skapa avtal"
         error={create.error}
         onSubmit={(value) => create.mutateAsync({ data: value })}

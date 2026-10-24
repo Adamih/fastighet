@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { lease, tenant } from '#/db/schema'
+import { invoice, lease, tenant } from '#/db/schema'
+import { invoiceStatus } from '#/features/invoicing/rules'
 import { leaseStatus } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -61,13 +62,40 @@ const loadTenant = (tenantId: string) =>
     }
   })
 
-/** The tenant with their leases, newest first; the leases only for those who may read leases. */
+/**
+ * The tenant with their leases and invoices, newest first; the leases only for those who may
+ * read leases, the invoices only for those who may read invoices.
+ */
 export const getTenant = (tenantId: string) =>
   Effect.gen(function* () {
     yield* requirePermission(read)
     const found = yield* loadTenant(tenantId)
     const showLeases = yield* hasPermission({ lease: ['read'] })
-    return { ...found, leases: showLeases ? found.leases : [] }
+    const showInvoices = yield* hasPermission({ invoice: ['read'] })
+    const invoices = showInvoices
+      ? yield* orgQuery((db, organizationId) =>
+          db.query.invoice.findMany({
+            columns: {
+              id: true,
+              number: true,
+              periodStart: true,
+              periodEnd: true,
+              dueDate: true,
+              totalOre: true,
+              paidOn: true,
+              voidedAt: true,
+            },
+            where: and(eq(invoice.tenantId, found.id), eq(invoice.organizationId, organizationId)),
+            orderBy: desc(invoice.number),
+          }),
+        )
+      : []
+    const on = yield* today
+    return {
+      ...found,
+      leases: showLeases ? found.leases : [],
+      invoices: invoices.map((i) => ({ ...i, status: invoiceStatus(i, on) })),
+    }
   })
 
 const normalize = (input: CreateTenantInput) => ({

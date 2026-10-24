@@ -2,7 +2,7 @@ import { and, count, desc, eq, inArray, min, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, lease, leaseUnit, tenant, unit } from '#/db/schema'
 import type { Permissions } from '#/lib/permissions'
-import { requirePermission } from '#/server/authorize'
+import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
@@ -28,6 +28,7 @@ const toView = (row: LeaseRow, on: string) => ({
       id: unit.id,
       label: unit.label,
       kind: unit.kind,
+      areaSqm: unit.areaSqm,
       propertyId: unit.property.id,
       designation: unit.property.designation,
     }))
@@ -63,7 +64,16 @@ export const getLease = (leaseId: string) =>
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'lease', id: leaseId })
-    return toView(row, yield* today)
+    // Contact details are tenant data, shown only to those who may read tenants.
+    const contact = (yield* hasPermission({ tenant: ['read'] }))
+      ? yield* orgQuery((db, organizationId) =>
+          db.query.tenant.findFirst({
+            columns: { email: true, phone: true },
+            where: and(eq(tenant.id, row.tenantId), eq(tenant.organizationId, organizationId)),
+          }),
+        )
+      : undefined
+    return { ...toView(row, yield* today), contact: contact ?? null }
   })
 
 /**

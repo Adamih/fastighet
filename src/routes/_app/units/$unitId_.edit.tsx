@@ -10,7 +10,7 @@ import {
 } from '#/features/properties/functions'
 import { UnitForm } from '#/features/properties/unit-form'
 
-export const Route = createFileRoute('/_app/units/$unitId/edit')({
+export const Route = createFileRoute('/_app/units/$unitId_/edit')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(unitQuery(params.unitId)),
   component: EditUnitPage,
 })
@@ -33,7 +33,7 @@ function EditUnitPage() {
     mutationFn: updateUnitFn,
     onSuccess: async () => {
       await refresh()
-      await backToProperty()
+      await navigate({ to: '/units/$unitId', params: { unitId } })
     },
   })
   const remove = useMutation({
@@ -49,11 +49,11 @@ function EditUnitPage() {
     <div className="grid max-w-xl gap-8">
       <div className="grid gap-1">
         <Link
-          to="/properties/$propertyId"
-          params={{ propertyId: unit.propertyId }}
+          to="/units/$unitId"
+          params={{ unitId }}
           className="text-muted-foreground text-sm hover:underline"
         >
-          ← {unit.property.designation}
+          ← Objekt {unit.label}
         </Link>
         <h1 className="font-semibold text-2xl">Ändra objekt {unit.label}</h1>
       </div>

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { leaseUnit, property, unit } from '#/db/schema'
-import { occupyingLease } from '#/features/leases/terms'
+import { leaseStatus, occupyingLease } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -70,6 +70,9 @@ export const getProperty = (propertyId: string) =>
           status: occupant.status,
           startDate: occupant.lease.startDate,
           moveOutDate: occupant.lease.moveOutDate,
+          rentOre: occupant.lease.rentOre,
+          rentInterval: occupant.lease.rentInterval,
+          vat: occupant.lease.vat,
         },
       }
     })
@@ -186,6 +189,41 @@ export const getUnit = (unitId: string) =>
     if (!row) return yield* new NotFound({ entity: 'unit', id: unitId })
     const leased = yield* leasedUnitLabels([row.id])
     return { ...row, hasLeases: leased.length > 0 }
+  })
+
+/**
+ * A unit for its own page: its property and every lease it has been on, newest first. The
+ * leases only for those who may read leases.
+ */
+export const getUnitDetail = (unitId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const row = yield* orgQuery((db, organizationId) =>
+      db.query.unit.findFirst({
+        where: and(eq(unit.id, unitId), eq(unit.organizationId, organizationId)),
+        with: {
+          property: { columns: { id: true, designation: true, name: true } },
+          leases: {
+            with: {
+              lease: { with: { tenant: { columns: { id: true, name: true, kind: true } } } },
+            },
+          },
+        },
+      }),
+    )
+    if (!row) return yield* new NotFound({ entity: 'unit', id: unitId })
+    const { leases, ...found } = row
+    const on = yield* today
+    const showLeases = yield* hasPermission({ lease: ['read'] })
+    return {
+      ...found,
+      hasLeases: leases.length > 0,
+      leases: showLeases
+        ? leases
+            .map(({ lease }) => ({ ...lease, status: leaseStatus(lease, on) }))
+            .sort((a, b) => b.startDate.localeCompare(a.startDate))
+        : [],
+    }
   })
 
 export const updateUnit = (input: UpdateUnitInput) =>

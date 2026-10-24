@@ -9,6 +9,7 @@ import {
   deleteUnit,
   getProperty,
   getUnit,
+  getUnitDetail,
   listProperties,
   listUnits,
   updateProperty,
@@ -51,6 +52,10 @@ export const getUnitFn = createServerFn({ method: 'GET' })
   .validator(std(UnitIdInput))
   .handler(({ data }) => runApp(getUnit(data.unitId)))
 
+export const getUnitDetailFn = createServerFn({ method: 'GET' })
+  .validator(std(UnitIdInput))
+  .handler(({ data }) => runApp(getUnitDetail(data.unitId)))
+
 export const createUnitFn = createServerFn({ method: 'POST' })
   .validator(std(CreateUnitInput))
   .handler(({ data }) => runApp(createUnit(data)))
@@ -75,4 +80,9 @@ export const propertyQuery = (propertyId: string) =>
 export const unitQuery = (unitId: string) =>
   queryOptions({ queryKey: ['units', unitId], queryFn: () => getUnitFn({ data: { unitId } }) })
 
+export const unitDetailQuery = (unitId: string) =>
+  queryOptions({
+    queryKey: ['units', unitId, 'detail'],
+    queryFn: () => getUnitDetailFn({ data: { unitId } }),
+  })
 export const unitsQuery = () => queryOptions({ queryKey: ['units'], queryFn: () => listUnitsFn() })

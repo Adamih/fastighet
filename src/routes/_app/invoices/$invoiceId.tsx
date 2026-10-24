@@ -1,11 +1,40 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import {
+  AlertCircle,
+  Ban,
+  Check,
+  CircleCheck,
+  Copy,
+  FilePlus,
+  type LucideIcon,
+  Mail,
+  Printer,
+  Send,
+  Undo2,
+} from 'lucide-react'
 import { useState } from 'react'
+import {
+  DetailColumns,
+  type DetailEvent,
+  DetailHeader,
+  EventList,
+  type EventTone,
+  MoreActions,
+  Panel,
+  PanelRow,
+} from '#/components/detail'
 import { Button } from '#/components/ui/button'
+import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import {
+  type InvoiceEvent,
+  type InvoiceEventKind,
+  invoiceEvents,
+} from '#/features/invoicing/detail'
 import {
   emailInvoiceFn,
   invoiceQuery,
@@ -15,9 +44,11 @@ import {
 } from '#/features/invoicing/functions'
 import type { InvoiceView } from '#/features/invoicing/program'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
+import { daysUntil, inDays } from '#/features/leases/overview'
 import { PaymentStatusBadge } from '#/features/payments/components'
 import { stockholmDate } from '#/lib/dates'
-import { formatSek } from '#/lib/money'
+import { formatSek, formatSekShort } from '#/lib/money'
+import { cn } from '#/lib/utils'
 
 export const Route = createFileRoute('/_app/invoices/$invoiceId')({
   loader: ({ context, params }) =>
@@ -28,56 +59,16 @@ export const Route = createFileRoute('/_app/invoices/$invoiceId')({
 function InvoicePage() {
   const { invoiceId } = Route.useParams()
   const { data: invoice } = useSuspenseQuery(invoiceQuery(invoiceId))
-
-  return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-center gap-3 print:hidden">
-        <Link to="/invoices" className="text-muted-foreground text-sm hover:underline">
-          ← Avier
-        </Link>
-        <InvoiceStatusBadge status={invoice.status} />
-        {invoice.sentAt && (
-          <span className="text-muted-foreground text-sm">
-            Skickad {stockholmDate(invoice.sentAt.getTime())} till {invoice.recipientEmail}
-          </span>
-        )}
-      </div>
-      <InvoiceActions invoice={invoice} />
-      <PrintableInvoice invoice={invoice} />
-      {invoice.payments.length > 0 && (
-        <section className="grid max-w-3xl gap-2 print:hidden">
-          <h2 className="font-medium text-lg">Inbetalningar</h2>
-          <ul className="grid gap-1 text-sm">
-            {invoice.payments.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="tabular-nums">{p.bookingDate}</span>
-                <span className="tabular-nums">{formatSek(p.amountOre)}</span>
-                <span className="text-muted-foreground">{p.payerName}</span>
-                <PaymentStatusBadge status={p.status} />
-                {p.marksInvoicePaid && (
-                  <span className="text-muted-foreground text-xs">markerade avin betald</span>
-                )}
-              </li>
-            ))}
-          </ul>
-          <Link to="/payments" search={{ filter: 'all' }} className="text-sm underline">
-            Alla betalningar
-          </Link>
-        </section>
-      )}
-    </div>
-  )
-}
-
-function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
-  const canManage = useCan()({ invoice: ['manage'] })
+  const can = useCan()
+  const canManage = can({ invoice: ['manage'] })
   const queryClient = useQueryClient()
-  const [paidOn, setPaidOn] = useState(() => stockholmDate(Date.now()))
-  const [confirmVoid, setConfirmVoid] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [confirmVoid, setConfirmVoid] = useState(false)
+  const today = stockholmDate(Date.now())
 
   const onDone = async () => {
     await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    await queryClient.invalidateQueries({ queryKey: ['payments'] })
   }
   const email = useMutation({
     mutationFn: emailInvoiceFn,
@@ -86,83 +77,295 @@ function InvoiceActions({ invoice }: { invoice: InvoiceView }) {
       await onDone()
     },
   })
-  const pay = useMutation({ mutationFn: markInvoicePaidFn, onSuccess: onDone })
   const unpay = useMutation({ mutationFn: unmarkInvoicePaidFn, onSuccess: onDone })
-  const voidIt = useMutation({ mutationFn: voidInvoiceFn, onSuccess: onDone })
-  const error = email.error ?? pay.error ?? unpay.error ?? voidIt.error
+  const voidIt = useMutation({
+    mutationFn: voidInvoiceFn,
+    onSuccess: async () => {
+      setConfirmVoid(false)
+      await onDone()
+    },
+  })
+  const error = email.error ?? unpay.error ?? voidIt.error
   const data = { invoiceId: invoice.id }
   const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
+  const period = periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })
 
   return (
-    <section className="grid gap-3 print:hidden">
-      <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-end [&_button]:h-11 sm:[&_button]:h-9">
-        <Button variant="outline" onClick={() => window.print()}>
-          Skriv ut
-        </Button>
-        {canManage && invoice.status !== 'void' && invoice.recipientEmail && (
-          <Button
-            variant="outline"
-            disabled={email.isPending}
-            onClick={() => email.mutate({ data })}
-          >
-            {invoice.sentAt ? 'Skicka igen' : 'Skicka e-post'}
-          </Button>
-        )}
-        {canManage && open && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:flex">
-            <div className="grid gap-1.5">
-              <Label htmlFor="paidOn">Betald den</Label>
-              <Input
-                id="paidOn"
-                type="date"
-                value={paidOn}
-                className="h-11 w-full sm:h-9 sm:w-40"
-                onChange={(e) => setPaidOn(e.target.value)}
-              />
-            </div>
-            <Button
-              disabled={pay.isPending}
-              onClick={() => pay.mutate({ data: { ...data, paidOn } })}
-            >
-              Registrera betalning
-            </Button>
-          </div>
-        )}
-        {canManage && invoice.status === 'paid' && (
-          <Button
-            variant="outline"
-            disabled={unpay.isPending}
-            onClick={() => unpay.mutate({ data })}
-          >
-            Ångra betalning ({invoice.paidOn})
-          </Button>
-        )}
-        {canManage &&
-          open &&
-          (confirmVoid ? (
-            <span className="flex flex-wrap items-center gap-2">
-              <span className="w-full text-sm sm:w-auto">Makulera avi {invoice.number}?</span>
-              <Button
-                variant="destructive"
-                disabled={voidIt.isPending}
-                onClick={() => voidIt.mutate({ data })}
+    <div className="grid gap-6 md:gap-7">
+      <DetailHeader
+        className="print:hidden"
+        back={{ label: 'Avier', to: '/invoices' }}
+        crumb={`Avi #${invoice.number}`}
+        title={`Avi #${invoice.number}`}
+        badge={<InvoiceStatusBadge status={invoice.status} />}
+        meta={
+          <>
+            {period} · {invoice.recipientName} ·{' '}
+            {can({ lease: ['read'] }) ? (
+              <Link
+                to="/leases/$leaseId"
+                params={{ leaseId: invoice.lease.id }}
+                className="underline-offset-4 hover:text-foreground hover:underline"
               >
-                Makulera
-              </Button>
-              <Button variant="outline" onClick={() => setConfirmVoid(false)}>
-                Avbryt
-              </Button>
-            </span>
-          ) : (
-            <Button variant="outline" onClick={() => setConfirmVoid(true)}>
-              Makulera
+                Avtal #{invoice.lease.number}
+              </Link>
+            ) : (
+              `Avtal #${invoice.lease.number}`
+            )}
+          </>
+        }
+        actions={
+          <>
+            <Button
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              onClick={() => window.print()}
+            >
+              <Printer aria-hidden="true" />
+              Skriv ut
             </Button>
-          ))}
-      </div>
-      {notice && !error && (
-        <p className="text-emerald-700 text-sm dark:text-emerald-300">{notice}</p>
+            {canManage && invoice.status !== 'void' && invoice.recipientEmail && (
+              <Button
+                variant="outline"
+                className="flex-1 sm:flex-none"
+                disabled={email.isPending}
+                onClick={() => email.mutate({ data })}
+              >
+                <Send aria-hidden="true" />
+                {invoice.sentAt ? 'Skicka igen' : 'Skicka e-post'}
+              </Button>
+            )}
+            {canManage && (open || invoice.status === 'paid') && (
+              <MoreActions label={`Fler åtgärder för avi ${invoice.number}`}>
+                {invoice.status === 'paid' && (
+                  <DropdownMenuItem
+                    disabled={unpay.isPending}
+                    onSelect={() => unpay.mutate({ data })}
+                  >
+                    <Undo2 aria-hidden="true" />
+                    Ångra betalning
+                  </DropdownMenuItem>
+                )}
+                {open && (
+                  <DropdownMenuItem variant="destructive" onSelect={() => setConfirmVoid(true)}>
+                    <Ban aria-hidden="true" />
+                    Makulera avi
+                  </DropdownMenuItem>
+                )}
+              </MoreActions>
+            )}
+          </>
+        }
+      />
+
+      <DetailColumns
+        sideFirst
+        main={
+          <div className="rounded-xl bg-muted/50 p-2 sm:p-6 print:bg-transparent print:p-0">
+            <PrintableInvoice invoice={invoice} />
+          </div>
+        }
+        side={
+          <div className="grid gap-4 print:hidden">
+            {confirmVoid && (
+              <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                <p>Makulera avi {invoice.number}? Den behåller sitt nummer men ska inte betalas.</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-11 flex-1 sm:h-9"
+                    onClick={() => setConfirmVoid(false)}
+                  >
+                    Avbryt
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    className="h-11 flex-1 sm:h-9"
+                    disabled={voidIt.isPending}
+                    onClick={() => voidIt.mutate({ data })}
+                  >
+                    Makulera
+                  </Button>
+                </div>
+              </section>
+            )}
+            {notice && !error && (
+              <p className="flex items-center gap-2 text-[13px] text-emerald-700 dark:text-emerald-300">
+                <Check aria-hidden="true" className="size-4" />
+                {notice}
+              </p>
+            )}
+            {error && <p className="text-destructive text-sm">{error.message}</p>}
+            <AmountPanel invoice={invoice} today={today} canManage={canManage} onDone={onDone} />
+            <Panel title="Händelser">
+              <EventList
+                events={invoiceEvents(
+                  {
+                    status: invoice.status,
+                    createdOn: invoice.issueDate,
+                    sentOn: invoice.sentAt ? stockholmDate(invoice.sentAt.getTime()) : null,
+                    dueDate: invoice.dueDate,
+                    paidOn: invoice.paidOn,
+                    voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
+                  },
+                  today,
+                ).map((e) => eventView(e, invoice.recipientEmail))}
+              />
+            </Panel>
+            {can({ payment: ['read'] }) && (
+              <Panel
+                title="Inbetalningar"
+                action={
+                  <Link
+                    to="/payments"
+                    search={{ filter: 'all' }}
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Alla betalningar
+                  </Link>
+                }
+              >
+                {invoice.payments.length === 0 ? (
+                  <p className="text-[13px] text-muted-foreground">
+                    Ingen inbetalning har matchats mot avin.
+                  </p>
+                ) : (
+                  <div>
+                    {invoice.payments.map((p) => (
+                      <PanelRow key={p.id}>
+                        <span className="grid min-w-0 gap-0.5">
+                          <span className="font-semibold tabular-nums">
+                            {formatSekShort(p.amountOre)}
+                          </span>
+                          <span className="truncate text-muted-foreground">
+                            {p.bookingDate} · {p.payerName}
+                          </span>
+                        </span>
+                        <PaymentStatusBadge status={p.status} />
+                      </PanelRow>
+                    ))}
+                  </div>
+                )}
+              </Panel>
+            )}
+          </div>
+        }
+      />
+    </div>
+  )
+}
+
+const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
+  created: [FilePlus, 'neutral'],
+  sent: [Mail, 'neutral'],
+  fellDue: [AlertCircle, 'bad'],
+  paid: [CircleCheck, 'good'],
+  voided: [Ban, 'neutral'],
+}
+
+function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
+  const [icon, tone] = eventIcons[e.kind]
+  const text = {
+    created: 'Utfärdad',
+    sent: email ? `Skickad till ${email}` : 'Skickad',
+    fellDue: 'Förföll obetald',
+    paid: 'Betald',
+    voided: 'Makulerad',
+  }[e.kind]
+  return { key: e.kind, icon, tone, text, date: e.date }
+}
+
+/** What is owed and how to settle it. */
+function AmountPanel({
+  invoice,
+  today,
+  canManage,
+  onDone,
+}: {
+  invoice: InvoiceView
+  today: string
+  canManage: boolean
+  onDone: () => Promise<void>
+}) {
+  const [paidOn, setPaidOn] = useState(today)
+  const [copied, setCopied] = useState(false)
+  const pay = useMutation({ mutationFn: markInvoicePaidFn, onSuccess: onDone })
+  const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
+  const days = daysUntil(today, invoice.dueDate)
+  const status = {
+    overdue: `Förföll för ${-days} ${-days === 1 ? 'dag' : 'dagar'} sedan`,
+    unpaid: days === 0 ? 'Förfaller i dag' : `Förfaller ${inDays(days)}`,
+    paid: `Betald ${invoice.paidOn}`,
+    void: 'Makulerad – ska inte betalas',
+  }[invoice.status]
+
+  return (
+    <section
+      aria-label="Belopp"
+      className={cn(
+        'grid gap-3 rounded-xl border bg-card p-4 md:p-5',
+        invoice.status === 'overdue' && 'border-destructive/40',
       )}
-      {error && <p className="text-destructive text-sm">{error.message}</p>}
+    >
+      <div className="grid gap-0.5">
+        <span
+          className={cn(
+            'font-medium text-[13px]',
+            invoice.status === 'overdue'
+              ? 'text-destructive'
+              : invoice.status === 'paid'
+                ? 'text-emerald-700 dark:text-emerald-300'
+                : 'text-muted-foreground',
+          )}
+        >
+          {status}
+        </span>
+        <span
+          className={cn(
+            'font-bold text-3xl tabular-nums tracking-tight',
+            invoice.status === 'void' && 'text-muted-foreground line-through',
+          )}
+        >
+          {formatSekShort(invoice.totalOre)}
+        </span>
+        <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
+          {open ? 'att betala' : 'belopp'} · OCR{' '}
+          <span className="font-medium text-foreground tabular-nums">{invoice.ocr}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            aria-label={copied ? 'OCR-numret kopierat' : 'Kopiera OCR-numret'}
+            onClick={async () => {
+              await navigator.clipboard.writeText(invoice.ocr)
+              setCopied(true)
+              setTimeout(() => setCopied(false), 2000)
+            }}
+          >
+            {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+          </Button>
+        </span>
+      </div>
+      {canManage && open && (
+        <div className="grid gap-2 border-t pt-3">
+          <Label htmlFor="paidOn">Betald den</Label>
+          <Input
+            id="paidOn"
+            type="date"
+            value={paidOn}
+            className="h-11 sm:h-9"
+            onChange={(e) => setPaidOn(e.target.value)}
+          />
+          <Button
+            className="h-11 w-full sm:h-10"
+            disabled={pay.isPending}
+            onClick={() => pay.mutate({ data: { invoiceId: invoice.id, paidOn } })}
+          >
+            Registrera betalning
+          </Button>
+          {pay.error && <p className="text-destructive text-sm">{pay.error.message}</p>}
+        </div>
+      )}
     </section>
   )
 }
@@ -174,7 +377,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
   const period = periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })
 
   return (
-    <article className="grid max-w-3xl gap-6 rounded-lg border p-4 sm:gap-8 sm:p-8 print:border-0 print:p-0">
+    <article className="mx-auto grid w-full max-w-3xl gap-6 rounded-lg border bg-card p-4 shadow-sm sm:gap-8 sm:p-8 print:max-w-none print:border-0 print:p-0 print:shadow-none">
       <header className="flex flex-wrap justify-between gap-6">
         <div>
           <p className="font-semibold text-lg">{seller.organizationName}</p>

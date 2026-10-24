@@ -1,13 +1,18 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
+import { ChevronRight, Pencil } from 'lucide-react'
 import { AddForm } from '#/components/add-form'
-import { desktopTableClass, MobileList, RowMeta, RowTitle } from '#/components/responsive'
+import { DetailColumns, DetailHeader, FactList, Panel, StatRow } from '#/components/detail'
+import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
+import { monthlyRentOre, unitLabel } from '#/features/leases/overview'
 import { createUnitFn, propertyQuery } from '#/features/properties/functions'
+import { propertySummary } from '#/features/properties/summary'
 import { emptyUnit, UnitForm } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
+import { formatSekShort } from '#/lib/money'
 
 export const Route = createFileRoute('/_app/properties/$propertyId')({
   loader: ({ context, params }) =>
@@ -17,135 +22,182 @@ export const Route = createFileRoute('/_app/properties/$propertyId')({
 
 const areaFormat = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
 
+type Unit = (typeof Route.types.loaderData)['units'][number]
+
 function PropertyPage() {
   const can = useCan()
   const canManage = can({ property: ['manage'] })
+  const canReadLeases = can({ lease: ['read'] })
   const { propertyId } = Route.useParams()
   const { data: property } = useSuspenseQuery(propertyQuery(propertyId))
+  const summary = propertySummary(property.units)
+  const address = [
+    property.streetAddress,
+    [property.postalCode, property.city].filter(Boolean).join(' '),
+  ]
+    .filter(Boolean)
+    .join(', ')
+  const occupancyShare = summary.units > 0 ? summary.rented / summary.units : 0
 
   return (
-    <div className="grid gap-6 sm:gap-8">
-      <div className="grid gap-1">
-        <Link to="/" className="text-muted-foreground text-sm hover:underline">
-          ← Fastigheter
-        </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-start">
-          <h1 className="min-w-0 font-semibold text-2xl">{property.designation}</h1>
-          {canManage && (
-            <Button variant="outline" size="sm" className="h-11 sm:h-8" asChild>
+    <div className="grid gap-6 md:gap-7">
+      <DetailHeader
+        back={{ label: 'Fastigheter', to: '/' }}
+        crumb={property.designation}
+        title={property.designation}
+        meta={[property.name, address].filter(Boolean).join(' · ') || undefined}
+        actions={
+          canManage && (
+            <Button variant="outline" className="flex-1 sm:flex-none" asChild>
               <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
+                <Pencil aria-hidden="true" />
                 Ändra
               </Link>
             </Button>
-          )}
-        </div>
-        {property.name && <p className="text-muted-foreground">{property.name}</p>}
-      </div>
+          )
+        }
+      />
 
-      <section className="grid gap-3">
-        <h2 className="font-medium text-lg">Objekt</h2>
-        {property.units.length === 0 ? (
-          <p className="text-muted-foreground">Inga objekt ännu.</p>
-        ) : (
+      <StatRow>
+        <StatCard label="Objekt">{summary.units}</StatCard>
+        {canReadLeases ? (
           <>
-            {/* Rows are not links here: each has its own tenant link and edit button. */}
-            <MobileList>
-              {property.units.map((u) => (
-                <li key={u.id} className="flex min-h-14 items-center gap-3 px-4 py-3">
-                  <span className="grid min-w-0 flex-1 gap-1">
-                    <RowTitle>{u.label}</RowTitle>
-                    <RowMeta>
-                      {unitKindLabels[u.kind]}
-                      {u.areaSqm != null && ` · ${areaFormat.format(u.areaSqm)} m²`}
-                    </RowMeta>
-                    {can({ lease: ['read'] }) &&
-                      (u.occupancy ? (
-                        <span className="flex flex-wrap items-center gap-2 text-sm">
-                          <Link
-                            to="/leases/$leaseId"
-                            params={{ leaseId: u.occupancy.leaseId }}
-                            className="underline-offset-4 hover:underline"
-                          >
-                            {u.occupancy.tenantName}
-                          </Link>
-                          <LeaseStatusBadge status={u.occupancy.status} />
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">Vakant</span>
-                      ))}
-                  </span>
-                  {canManage && (
-                    <Button variant="outline" size="sm" className="h-11" asChild>
-                      <Link to="/units/$unitId/edit" params={{ unitId: u.id }}>
-                        Ändra
-                      </Link>
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </MobileList>
-            <table className={desktopTableClass}>
-              <thead className="border-b text-muted-foreground">
-                <tr>
-                  <th className="py-2 font-medium">Objekt</th>
-                  <th className="py-2 font-medium">Typ</th>
-                  <th className="py-2 text-right font-medium">Yta</th>
-                  {can({ lease: ['read'] }) && <th className="py-2 pl-6 font-medium">Hyresgäst</th>}
-                  <th className="py-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {property.units.map((u) => (
-                  <tr key={u.id} className="border-b">
-                    <td className="py-2 font-medium">{u.label}</td>
-                    <td className="py-2">{unitKindLabels[u.kind]}</td>
-                    <td className="py-2 text-right">
-                      {u.areaSqm == null ? '–' : `${areaFormat.format(u.areaSqm)} m²`}
-                    </td>
-                    {can({ lease: ['read'] }) && (
-                      <td className="py-2 pl-6">
-                        {u.occupancy ? (
-                          <span className="flex items-center gap-2">
-                            <Link
-                              to="/leases/$leaseId"
-                              params={{ leaseId: u.occupancy.leaseId }}
-                              className="underline-offset-4 hover:underline"
-                            >
-                              {u.occupancy.tenantName}
-                            </Link>
-                            <LeaseStatusBadge status={u.occupancy.status} />
-                            <span className="text-muted-foreground tabular-nums">
-                              {u.occupancy.status === 'upcoming'
-                                ? `från ${u.occupancy.startDate}`
-                                : u.occupancy.moveOutDate && `till ${u.occupancy.moveOutDate}`}
-                            </span>
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">Vakant</span>
-                        )}
-                      </td>
-                    )}
-                    <td className="py-2 text-right">
-                      {canManage && (
-                        <Link
-                          to="/units/$unitId/edit"
-                          params={{ unitId: u.id }}
-                          className="text-muted-foreground underline-offset-4 hover:underline"
-                        >
-                          Ändra
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <StatCard
+              label="Uthyrt"
+              hint={
+                <span
+                  role="img"
+                  aria-label={`${Math.round(occupancyShare * 100)} % uthyrt`}
+                  className="mt-1 block h-1.5 overflow-hidden rounded-full bg-muted"
+                >
+                  <span
+                    className="block h-1.5 rounded-full bg-emerald-600"
+                    style={{ width: `${Math.round(occupancyShare * 100)}%` }}
+                  />
+                </span>
+              }
+            >
+              {summary.rented} av {summary.units}
+            </StatCard>
+            <StatCard label="Hyra" hint={summary.vat ? 'exkl. moms' : 'gällande avtal'}>
+              {formatSekShort(summary.monthlyRentOre)}
+              <span className="font-medium text-muted-foreground text-sm"> /mån</span>
+            </StatCard>
           </>
+        ) : (
+          <StatCard label="Ort">{property.city ?? '–'}</StatCard>
         )}
-      </section>
+        <StatCard label="Yta">
+          {summary.areaSqm > 0 ? `${areaFormat.format(summary.areaSqm)} m²` : '–'}
+        </StatCard>
+      </StatRow>
+
+      <DetailColumns
+        main={
+          <section aria-labelledby="units" className="overflow-hidden rounded-xl border bg-card">
+            <h2 id="units" className="border-b px-4 py-3 font-semibold text-[15px] md:px-5">
+              Objekt{' '}
+              <span className="font-medium text-muted-foreground tabular-nums">
+                {property.units.length}
+              </span>
+            </h2>
+            {property.units.length === 0 ? (
+              <p className="px-4 py-6 text-[13px] text-muted-foreground md:px-5">
+                Inga objekt ännu.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {property.units.map((u) => (
+                  <UnitRow
+                    key={u.id}
+                    unit={u}
+                    showOccupancy={canReadLeases}
+                    shared={
+                      !!u.occupancy &&
+                      property.units.filter((o) => o.occupancy?.leaseId === u.occupancy?.leaseId)
+                        .length > 1
+                    }
+                  />
+                ))}
+              </ul>
+            )}
+          </section>
+        }
+        side={
+          <Panel title="Uppgifter">
+            <FactList
+              facts={[
+                ['Beteckning', property.designation],
+                ['Namn', property.name ?? '–'],
+                ['Adress', address || '–'],
+              ]}
+            />
+          </Panel>
+        }
+      />
 
       {canManage && <CreateUnit propertyId={propertyId} />}
     </div>
+  )
+}
+
+/** One unit: label and size on the left, who rents it on the right. Opens the unit page. */
+function UnitRow({
+  unit,
+  showOccupancy,
+  shared,
+}: {
+  unit: Unit
+  showOccupancy: boolean
+  /** The lease also covers other units here, so its rent isn't this unit's alone. */
+  shared: boolean
+}) {
+  const o = unit.occupancy
+  return (
+    <li>
+      <Link
+        to="/units/$unitId"
+        params={{ unitId: unit.id }}
+        className="flex min-h-14 items-center gap-3 px-4 py-3 text-[13px] text-foreground hover:bg-muted/40 hover:text-foreground md:px-5"
+      >
+        <span className="grid min-w-0 flex-1 gap-1.5 sm:flex sm:items-center sm:justify-between sm:gap-3">
+          <span className="grid min-w-0 gap-0.5">
+            <span className="font-semibold text-sm">{unitLabel(unit)}</span>
+            <span className="truncate text-muted-foreground">
+              {[
+                unitKindLabels[unit.kind],
+                unit.areaSqm != null && `${areaFormat.format(unit.areaSqm)} m²`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+          </span>
+          {showOccupancy &&
+            (o ? (
+              <span className="grid min-w-0 gap-0.5 sm:justify-items-end sm:text-right">
+                <span className="flex min-w-0 items-center gap-2 sm:flex-row-reverse">
+                  <LeaseStatusBadge status={o.status} />
+                  <span className="truncate">{o.tenantName}</span>
+                </span>
+                <span className="truncate text-muted-foreground tabular-nums">
+                  {o.status === 'upcoming'
+                    ? `från ${o.startDate}`
+                    : o.moveOutDate
+                      ? `till ${o.moveOutDate}`
+                      : shared
+                        ? `Avtal #${o.number}, flera objekt`
+                        : `${formatSekShort(monthlyRentOre(o))} /mån`}
+                </span>
+              </span>
+            ) : (
+              <span className="justify-self-start rounded-full bg-muted px-2.5 py-0.5 font-semibold text-muted-foreground text-xs">
+                Vakant
+              </span>
+            ))}
+        </span>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+      </Link>
+    </li>
   )
 }
 
