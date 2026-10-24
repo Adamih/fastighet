@@ -1,4 +1,5 @@
 import { daysUntil, inDays } from '#/features/leases/overview'
+import { m } from '#/paraglide/messages'
 import type { InvoiceStatus } from './rules'
 import type { InvoiceFilter } from './schemas'
 
@@ -23,13 +24,13 @@ export const matchesFilter = (status: InvoiceStatus, filter: InvoiceFilter) =>
   filter === 'all' || status === filter || (filter === 'unpaid' && status === 'overdue')
 
 /** "1 avi", "3 avier" */
-export const invoiceCount = (count: number) => `${count} ${count === 1 ? 'avi' : 'avier'}`
+export const invoiceCount = (count: number): string => m.invoice_count({ count })
 
 /** "i dag", "i går", "23 dagar sen" */
 export function daysAgo(days: number): string {
-  if (days === 0) return 'i dag'
-  if (days === 1) return 'i går'
-  return `${days} dagar sen`
+  if (days === 0) return m.common_today()
+  if (days === 1) return m.common_yesterday()
+  return m.common_days_ago({ days })
 }
 
 /** How the due date relates to today, for open invoices: "om 5 dagar", "23 dagar sen". */

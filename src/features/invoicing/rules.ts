@@ -9,6 +9,7 @@ import {
   minDate,
 } from '#/lib/dates'
 import { isLuhnValid, luhnCheckDigit } from '#/lib/luhn'
+import { m } from '#/paraglide/messages'
 
 // Pure invoicing rules, shared by the server (runs) and the client (previews and labels).
 
@@ -114,10 +115,18 @@ export function invoiceStatus(
 }
 
 export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
-  unpaid: 'Obetald',
-  overdue: 'Förfallen',
-  paid: 'Betald',
-  void: 'Makulerad',
+  get unpaid() {
+    return m.invoice_status_unpaid()
+  },
+  get overdue() {
+    return m.invoice_status_overdue()
+  },
+  get paid() {
+    return m.invoice_status_paid()
+  },
+  get void() {
+    return m.invoice_status_void()
+  },
 }
 
 const monthName = new Intl.DateTimeFormat('sv-SE', { month: 'long', timeZone: 'UTC' })

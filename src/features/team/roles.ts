@@ -1,5 +1,6 @@
 import { authClient } from '#/lib/auth-client'
 import type { roles as permissionRoles } from '#/lib/permissions'
+import { m } from '#/paraglide/messages'
 
 // UI controls mirror Better Auth endpoints, including their creator-role protections.
 
@@ -7,9 +8,15 @@ export const roles = ['owner', 'admin', 'member'] as const
 export type Role = (typeof roles)[number]
 
 export const roleLabels: Record<string, string> = {
-  owner: 'Ägare',
-  admin: 'Administratör',
-  member: 'Medlem',
+  get owner() {
+    return m.role_owner()
+  },
+  get admin() {
+    return m.role_admin()
+  },
+  get member() {
+    return m.role_member()
+  },
 }
 
 export const invitableRoles = ['member', 'admin'] as const

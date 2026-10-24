@@ -1,29 +1,51 @@
-// Client-safe enums and Swedish labels for tenants and leases.
+import { m } from '#/paraglide/messages'
+// Client-safe enums and their labels for tenants and leases. Labels are getters, so each read
+// follows the current language.
 
 export const tenantKinds = ['person', 'company'] as const
 export type TenantKind = (typeof tenantKinds)[number]
 export const tenantKindLabels: Record<TenantKind, string> = {
-  person: 'Privatperson',
-  company: 'Företag',
+  get person() {
+    return m.tenant_kind_person()
+  },
+  get company() {
+    return m.tenant_kind_company()
+  },
 }
 
 export const rentIntervals = ['monthly', 'yearly'] as const
 export type RentInterval = (typeof rentIntervals)[number]
 export const rentIntervalLabels: Record<RentInterval, string> = {
-  monthly: 'per månad',
-  yearly: 'per år',
+  get monthly() {
+    return m.rent_interval_monthly()
+  },
+  get yearly() {
+    return m.rent_interval_yearly()
+  },
 }
 
 export const invoiceIntervals = ['monthly', 'quarterly'] as const
 export type InvoiceInterval = (typeof invoiceIntervals)[number]
 export const invoiceIntervalLabels: Record<InvoiceInterval, string> = {
-  monthly: 'Månadsvis',
-  quarterly: 'Kvartalsvis',
+  get monthly() {
+    return m.invoice_interval_monthly()
+  },
+  get quarterly() {
+    return m.invoice_interval_quarterly()
+  },
 }
 
 export const leaseStatusLabels = {
-  upcoming: 'Kommande',
-  active: 'Gällande',
-  terminated: 'Uppsagt',
-  ended: 'Avslutat',
-} as const
+  get upcoming() {
+    return m.lease_status_upcoming()
+  },
+  get active() {
+    return m.lease_status_active()
+  },
+  get terminated() {
+    return m.lease_status_terminated()
+  },
+  get ended() {
+    return m.lease_status_ended()
+  },
+}

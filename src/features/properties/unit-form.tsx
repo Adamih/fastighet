@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer } from '#/components/form-drawer'
+import { m } from '#/paraglide/messages'
 import { createUnitFn, propertyQuery } from './functions'
 import { type UnitKind, unitKindLabels } from './unit-kinds'
 
@@ -52,15 +53,15 @@ export function UnitForm({
           <form.AppField
             name="label"
             validators={{
-              onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange objektsnummer'),
+              onSubmit: ({ value }) => (value.trim() ? undefined : m.unit_form_label_required()),
             }}
           >
-            {(field) => <field.TextField label="Objektsnummer" placeholder="1001" />}
+            {(field) => <field.TextField label={m.unit_form_label()} placeholder="1001" />}
           </form.AppField>
           <form.AppField name="kind">
             {(field) => (
               <field.SelectField
-                label="Typ"
+                label={m.common_kind()}
                 disabled={disabled}
                 options={optionsFrom(unitKindLabels)}
               />
@@ -74,13 +75,13 @@ export function UnitForm({
               const area = parseArea(value)
               return area === null || (Number.isFinite(area) && area > 0)
                 ? undefined
-                : 'Ange yta i m², t.ex. 72,5'
+                : m.unit_form_area_invalid()
             },
           }}
         >
           {(field) => (
             <field.TextField
-              label={<Optional>Yta (m²)</Optional>}
+              label={<Optional>{m.unit_form_area()}</Optional>}
               placeholder="72,5"
               inputMode="decimal"
             />
@@ -108,13 +109,13 @@ export function useAddUnitDrawer(propertyId: string) {
     },
   })
   return useFormDrawer({
-    title: 'Lägg till objekt',
-    description: 'Lägenheter, lokaler, parkeringar och förråd.',
+    title: m.unit_add(),
+    description: m.unit_add_description(),
     onClose: create.reset,
     form: ({ close }) => (
       <UnitForm
         defaultValues={emptyUnit}
-        submitLabel="Spara objekt"
+        submitLabel={m.unit_save()}
         error={create.error}
         onSubmit={async (value) => {
           await create.mutateAsync({ data: { propertyId, ...value } })

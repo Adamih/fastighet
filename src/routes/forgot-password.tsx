@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useAppForm } from '#/components/form'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
+import { rich } from '#/lib/rich'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/forgot-password')({ component: ForgotPasswordPage })
 
@@ -25,12 +27,11 @@ function ForgotPasswordPage() {
 
   return (
     <main className="mx-auto grid max-w-sm gap-6 px-4 py-16">
-      <h1 className="font-semibold text-2xl">Glömt lösenordet</h1>
+      <h1 className="font-semibold text-2xl">{m.forgot_title()}</h1>
       {sentTo ? (
         // Same answer whether or not the account exists, so the page cannot be used to probe.
         <p>
-          Om det finns ett konto för <span className="font-medium">{sentTo}</span> har vi skickat en
-          länk för att välja ett nytt lösenord.
+          {rich((email) => m.forgot_sent({ email }), <span className="font-medium">{sentTo}</span>)}
         </p>
       ) : (
         <form
@@ -41,25 +42,26 @@ function ForgotPasswordPage() {
             void form.handleSubmit()
           }}
         >
-          <p className="text-muted-foreground text-sm">
-            Ange din e-postadress så skickar vi en länk för att välja ett nytt lösenord.
-          </p>
+          <p className="text-muted-foreground text-sm">{m.forgot_intro()}</p>
           <form.AppField
             name="email"
             validators={{
-              onSubmit: ({ value }) => (value.includes('@') ? undefined : 'Ange din e-postadress'),
+              onSubmit: ({ value }) =>
+                value.includes('@') ? undefined : m.forgot_email_required(),
             }}
           >
-            {(field) => <field.TextField label="E-post" type="email" autoComplete="email" />}
+            {(field) => (
+              <field.TextField label={m.common_email()} type="email" autoComplete="email" />
+            )}
           </form.AppField>
           {error && <p className="text-destructive text-sm">{error}</p>}
           <form.AppForm>
-            <form.SubmitButton className="sm:h-10 sm:w-full">Skicka länk</form.SubmitButton>
+            <form.SubmitButton className="sm:h-10 sm:w-full">{m.forgot_submit()}</form.SubmitButton>
           </form.AppForm>
         </form>
       )}
       <Link to="/login" className="text-muted-foreground text-sm underline">
-        Tillbaka till inloggningen
+        {m.auth_back_to_login()}
       </Link>
     </main>
   )

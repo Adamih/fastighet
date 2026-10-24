@@ -1,0 +1,397 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "auth_back_to_login": "Tillbaka till inloggningen",
+  "auth_error_email_not_verified": "Du behöver bekräfta din e-postadress. Vi har skickat en ny länk till din inkorg.",
+  "auth_error_email_verification_required_before_accepting_or_rejecting_invitation": "Bekräfta din e-postadress innan du svarar på inbjudan",
+  "auth_error_fallback": "Något gick fel. Försök igen.",
+  "auth_error_invalid_email": "Ogiltig e-postadress",
+  "auth_error_invalid_email_or_password": "Fel e-postadress eller lösenord",
+  "auth_error_invalid_password": "Fel lösenord",
+  "auth_error_invalid_token": "Länken är ogiltig eller har gått ut",
+  "auth_error_invitation_limit_reached": "Gränsen för antal inbjudningar är nådd",
+  "auth_error_invitation_not_found": "Inbjudan finns inte, har gått ut eller har redan använts",
+  "auth_error_inviter_is_no_longer_a_member_of_the_organization": "Personen som bjöd in dig är inte längre med i företaget",
+  "auth_error_member_not_found": "Användaren finns inte längre i företaget",
+  "auth_error_password_too_long": "Lösenordet är för långt",
+  "auth_error_password_too_short": "Lösenordet måste vara minst 8 tecken",
+  "auth_error_too_many_requests": "För många försök. Vänta en stund och försök igen.",
+  "auth_error_user_already_exists": "Det finns redan ett konto med den e-postadressen",
+  "auth_error_user_is_already_a_member_of_this_organization": "Personen är redan med i företaget",
+  "auth_error_user_is_already_invited_to_this_organization": "Personen har redan en väntande inbjudan",
+  "auth_error_you_are_not_allowed_to_delete_this_member": "Du har inte behörighet att ta bort den här användaren",
+  "auth_error_you_are_not_allowed_to_invite_users_to_this_organization": "Du har inte behörighet att bjuda in användare",
+  "auth_error_you_are_not_allowed_to_update_this_member": "Du har inte behörighet att ändra den här användaren",
+  "auth_error_you_are_not_the_recipient_of_the_invitation": "Inbjudan gäller en annan e-postadress än den du är inloggad med",
+  "auth_error_you_cannot_leave_the_organization_as_the_only_owner": "Företaget måste ha minst en ägare",
+  "common_actions": "Åtgärder",
+  "common_address": "Adress",
+  "common_cancel": "Avbryt",
+  "common_city": "Ort",
+  "common_close": "Stäng",
+  "common_date_required": "Ange ett datum",
+  "common_days_ago": [
+    {
+      "declarations": [
+        "input days",
+        "local daysPlural = days: plural"
+      ],
+      "selectors": [
+        "daysPlural"
+      ],
+      "match": {
+        "daysPlural=one": "{days} dag sen",
+        "daysPlural=other": "{days} dagar sen"
+      }
+    }
+  ],
+  "common_delete": "Ta bort",
+  "common_edit": "Ändra",
+  "common_email": "E-post",
+  "common_excl_vat": "exkl. moms",
+  "common_from_date": "från {date}",
+  "common_in_days": [
+    {
+      "declarations": [
+        "input days",
+        "local daysPlural = days: plural"
+      ],
+      "selectors": [
+        "daysPlural"
+      ],
+      "match": {
+        "daysPlural=one": "om {days} dag",
+        "daysPlural=other": "om {days} dagar"
+      }
+    }
+  ],
+  "common_kind": "Typ",
+  "common_months_short": "{months} mån",
+  "common_more_actions_for": "Fler åtgärder för {name}",
+  "common_name": "Namn",
+  "common_name_required": "Ange ett namn",
+  "common_no": "Nej",
+  "common_organization_number": "Organisationsnummer",
+  "common_organization_number_short": "Org.nr",
+  "common_outstanding": "Utestående",
+  "common_per_month": "/mån",
+  "common_per_year": "/år",
+  "common_phone": "Telefon",
+  "common_postal_code": "Postnummer",
+  "common_rent": "Hyra",
+  "common_save_changes": "Spara ändringar",
+  "common_show_all": "Visa alla {count}",
+  "common_show_fewer": "Visa färre",
+  "common_street_address": "Gatuadress",
+  "common_today": "i dag",
+  "common_tomorrow": "i morgon",
+  "common_view": "Visa",
+  "common_view_named": "Visa {name}",
+  "common_yesterday": "i går",
+  "detail_breadcrumb_label": "Sökväg",
+  "detail_events": "Händelser",
+  "detail_no_events": "Inget har hänt ännu.",
+  "detail_stats_label": "Nyckeltal",
+  "forgot_email_required": "Ange din e-postadress",
+  "forgot_intro": "Ange din e-postadress så skickar vi en länk för att välja ett nytt lösenord.",
+  "forgot_sent": "Om det finns ett konto för {email} har vi skickat en länk för att välja ett nytt lösenord.",
+  "forgot_submit": "Skicka länk",
+  "forgot_title": "Glömt lösenordet",
+  "form_discard": "Släng ändringar",
+  "form_keep_editing": "Fortsätt redigera",
+  "form_optional": "(valfritt)",
+  "form_unsaved_label": "Osparade ändringar",
+  "form_unsaved_question": "Du har osparade ändringar. Vill du slänga dem?",
+  "invitation_accept": "Acceptera inbjudan",
+  "invitation_body": "{inviter} har bjudit in dig som {role}.",
+  "invitation_broken": "Inbjudan fungerar inte",
+  "invitation_decline": "Avböj",
+  "invitation_switch_account": "Logga ut och byt konto",
+  "invitation_title": "Gå med i {organization}",
+  "invoice_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} avi",
+        "countPlural=other": "{count} avier"
+      }
+    }
+  ],
+  "invoice_count_overdue": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} avi förfallen",
+        "countPlural=other": "{count} avier förfallna"
+      }
+    }
+  ],
+  "invoice_count_unpaid": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} avi obetald",
+        "countPlural=other": "{count} avier obetalda"
+      }
+    }
+  ],
+  "invoice_interval_monthly": "Månadsvis",
+  "invoice_interval_quarterly": "Kvartalsvis",
+  "invoice_list_empty": "Inga avier ännu.",
+  "invoice_none_unpaid": "Inga obetalda avier",
+  "invoice_status_overdue": "Förfallen",
+  "invoice_status_paid": "Betald",
+  "invoice_status_unpaid": "Obetald",
+  "invoice_status_void": "Makulerad",
+  "lease_card_period_open": "Från {start} · tillsvidare",
+  "lease_end_date": "Slutdatum",
+  "lease_end_date_renews": "Slutdatum, förlängs",
+  "lease_event_created": "Avtalet registrerades",
+  "lease_event_invoice_paid": "Avi #{number} betalades",
+  "lease_event_invoice_sent": "Avi #{number} skickades",
+  "lease_event_notice_given": "Avtalet sades upp",
+  "lease_extension": "Förlängning",
+  "lease_fact_end": "Slut",
+  "lease_fact_start": "Start",
+  "lease_form_end": "Avtalet löper till",
+  "lease_form_extension": "Förlängning (månader)",
+  "lease_form_extension_invalid": "Ange antal månader eller lämna tomt",
+  "lease_form_extension_placeholder": "Tomt = ingen förlängning",
+  "lease_form_fixed_term": "Tidsbestämt avtal",
+  "lease_form_fixed_term_description": "Avtalet har ett slutdatum och kan förlängas automatiskt.",
+  "lease_form_invoice_interval": "Avisering",
+  "lease_form_months_required": "Ange antal månader",
+  "lease_form_notice_period": "Uppsägningstid (månader)",
+  "lease_form_notice_period_hint": "Bostäder har normalt 3 månaders uppsägningstid, lokaler 9 månader.",
+  "lease_form_rent": "Belopp (kr)",
+  "lease_form_rent_interval": "Avser",
+  "lease_form_rent_invalid": "Ange ett belopp, t.ex. 8 450",
+  "lease_form_rent_section": "Hyra",
+  "lease_form_start": "Tillträde",
+  "lease_form_tenant": "Hyresgäst",
+  "lease_form_tenant_placeholder": "Välj hyresgäst",
+  "lease_form_tenant_required": "Välj en hyresgäst",
+  "lease_form_term": "Avtalstid",
+  "lease_form_units": "Objekt",
+  "lease_form_units_required": "Välj minst ett objekt",
+  "lease_form_vat": "Momspliktig uthyrning",
+  "lease_form_vat_description": "25 % moms läggs på hyran.",
+  "lease_list_empty": "Inga avtal ännu.",
+  "lease_move_out": "Avflyttning",
+  "lease_next_invoice": "Nästa avi",
+  "lease_no_end_date": "Ingen slutdag",
+  "lease_note_ended": "Avslutat {date}",
+  "lease_note_ends": "Upphör {when}",
+  "lease_note_renews": "Förlängs {months} mån om ej uppsagt",
+  "lease_note_running": "Löpande",
+  "lease_note_starts": "Startar {when}",
+  "lease_notice_period": "Uppsägningstid",
+  "lease_number": "Avtal #{number}",
+  "lease_open_ended": "Tillsvidare",
+  "lease_period_open": "{start} → tillsvidare",
+  "lease_period_open_dash": "{start} – tillsvidare",
+  "lease_period_renewing": "{start} – {end} (förlängs {months} mån)",
+  "lease_plus_vat": "+ moms",
+  "lease_progress_aria": "{percent} % av avtalstiden har gått",
+  "lease_progress_percent": "{percent} % av tiden",
+  "lease_progress_status": "Status",
+  "lease_progress_title": "Avtalets gång",
+  "lease_renews": "Förlängs",
+  "lease_renews_hint": "med {months} mån om ej uppsagt",
+  "lease_since": "sedan {date}",
+  "lease_status_active": "Gällande",
+  "lease_status_ended": "Avslutat",
+  "lease_status_terminated": "Uppsagt",
+  "lease_status_upcoming": "Kommande",
+  "lease_term_label": "Löptid",
+  "lease_terminate": "Säg upp",
+  "lease_units_count": "Objekt ({count})",
+  "lease_vat": "Moms",
+  "lease_vat_yes": "Ja, 25 %",
+  "lease_withdraw_termination": "Ångra uppsägning",
+  "login_check_inbox": "Kolla din inkorg",
+  "login_check_inbox_body": "Vi har skickat en länk till {email}. Klicka på den för att bekräfta din e-postadress och logga in.",
+  "login_check_inbox_hint": "Inget mejl? Kolla skräpposten, eller försök logga in så skickar vi en ny länk.",
+  "login_failed": "Inloggningen misslyckades",
+  "login_forgot_password": "Glömt lösenordet?",
+  "login_password": "Lösenord",
+  "login_sign_in": "Logga in",
+  "login_sign_up": "Skapa konto",
+  "login_switch_to_sign_in": "Har du redan ett konto? Logga in",
+  "login_switch_to_sign_up": "Inget konto? Skapa ett",
+  "nav_close": "Stäng navigationen",
+  "nav_invoices": "Avier",
+  "nav_leases": "Avtal",
+  "nav_main_label": "Huvudnavigation",
+  "nav_open": "Öppna navigationen",
+  "nav_payments": "Betalningar",
+  "nav_properties": "Fastigheter",
+  "nav_settings": "Inställningar",
+  "nav_sheet_description": "Gå till en sida eller logga ut.",
+  "nav_sheet_title": "Navigation",
+  "nav_sign_out": "Logga ut",
+  "nav_sign_out_failed": "Utloggningen misslyckades",
+  "nav_signing_out": "Loggar ut…",
+  "nav_team": "Användare",
+  "nav_tenants": "Hyresgäster",
+  "nav_toggle": "Visa eller dölj navigationen",
+  "onboarding_failed": "Kunde inte skapa företaget",
+  "onboarding_intro": "Fastigheter, objekt och användare hör till ett företag. Du kan bjuda in kollegor senare.",
+  "onboarding_submit": "Fortsätt",
+  "onboarding_title": "Skapa ditt företag",
+  "property_add": "Lägg till fastighet",
+  "property_add_description": "Lägenheter och lokaler lägger du till på fastighetens sida.",
+  "property_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} fastighet",
+        "countPlural=other": "{count} fastigheter"
+      }
+    }
+  ],
+  "property_designation": "Beteckning",
+  "property_form_designation": "Fastighetsbeteckning",
+  "property_list_empty": "Inga fastigheter ännu.",
+  "property_save": "Spara fastighet",
+  "rent_interval_monthly": "per månad",
+  "rent_interval_yearly": "per år",
+  "rent_unit_with_vat": "{interval} + moms",
+  "reset_done": "Lösenordet är bytt",
+  "reset_done_body": "Du har loggats ut överallt. Logga in med ditt nya lösenord.",
+  "reset_link_broken": "Länken fungerar inte",
+  "reset_mismatch": "Lösenorden matchar inte",
+  "reset_new_password": "Nytt lösenord",
+  "reset_repeat_password": "Upprepa lösenordet",
+  "reset_send_new_link": "Skicka en ny länk",
+  "reset_submit": "Spara lösenord",
+  "reset_title": "Välj nytt lösenord",
+  "role_admin": "Administratör",
+  "role_member": "Medlem",
+  "role_owner": "Ägare",
+  "settings_missing_address": "Adressen är inte komplett – den skrivs ut som avsändare på avin.",
+  "settings_missing_bankgiro": "Bankgiro saknas – hyresgäster kan inte betala med OCR förrän det är ifyllt.",
+  "settings_missing_email": "E-post för frågor saknas – hyresgäster ser inte vart de ska vända sig.",
+  "settings_missing_organization_number": "Organisationsnummer saknas – det måste stå på en faktura.",
+  "tenant_add": "Lägg till hyresgäst",
+  "tenant_add_description": "Koppla hyresgästen till ett avtal i nästa steg.",
+  "tenant_add_email": "Lägg till e-post",
+  "tenant_add_email_for": "Lägg till e-post för {name}",
+  "tenant_contact": "Kontakt",
+  "tenant_count_companies": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} företag",
+        "countPlural=other": "{count} företag"
+      }
+    }
+  ],
+  "tenant_count_people": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} privatperson",
+        "countPlural=other": "{count} privatpersoner"
+      }
+    }
+  ],
+  "tenant_delete": "Ta bort hyresgäst",
+  "tenant_delete_confirm": "Ta bort {name}? Det går inte att ångra.",
+  "tenant_delivery_email_hint": "skickas med e-post",
+  "tenant_delivery_print": "Utskrift",
+  "tenant_delivery_print_hint": "saknar e-post – skrivs ut",
+  "tenant_edit": "Redigera uppgifter",
+  "tenant_edit_description": "Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med.",
+  "tenant_form_billing_address": "Fakturaadress",
+  "tenant_form_company_name": "Företagsnamn",
+  "tenant_form_email_hint": "Avier skickas hit. Utan e-post kan avier inte mejlas.",
+  "tenant_form_kind": "Typ av hyresgäst",
+  "tenant_form_organization_number_hint": "10 siffror, med eller utan bindestreck",
+  "tenant_form_person_name_placeholder": "För- och efternamn",
+  "tenant_kind_company": "Företag",
+  "tenant_kind_person": "Privatperson",
+  "tenant_lease_line": "Avtal {leases}",
+  "tenant_leases_current": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} aktuellt",
+        "countPlural=other": "{count} aktuella"
+      }
+    }
+  ],
+  "tenant_leases_none": "Inga",
+  "tenant_leases_total": "{count} totalt",
+  "tenant_list_empty": "Inga hyresgäster ännu.",
+  "tenant_list_no_match": "Inga hyresgäster matchar.",
+  "tenant_missing_email": "Saknar e-post",
+  "tenant_missing_email_consequence": "avier kan inte skickas",
+  "tenant_no_contact": "Ingen e-post eller telefon.",
+  "tenant_recent_invoices": "Senaste avier",
+  "tenant_save": "Spara hyresgäst",
+  "tenant_search_label": "Sök hyresgäst",
+  "tenant_search_placeholder": "Sök namn, e-post eller org.nr",
+  "terminate_description": "Avtal #{number} med {tenant}. Uppsägningstiden är {months} månader.",
+  "terminate_earliest_move_out": "Tidigaste avflyttning enligt avtalet: {date}. Fyll i annan avflyttning bara om ni har kommit överens om ett tidigare datum.",
+  "terminate_move_out": "Annan avflyttning",
+  "terminate_notice_date": "Uppsägning mottagen",
+  "terminate_submit": "Registrera uppsägning",
+  "terminate_title": "Säg upp avtalet",
+  "unit_add": "Lägg till objekt",
+  "unit_add_description": "Lägenheter, lokaler, parkeringar och förråd.",
+  "unit_form_area": "Yta (m²)",
+  "unit_form_area_invalid": "Ange yta i m², t.ex. 72,5",
+  "unit_form_label": "Objektsnummer",
+  "unit_form_label_required": "Ange objektsnummer",
+  "unit_kind_apartment": "Bostad",
+  "unit_kind_commercial": "Lokal",
+  "unit_kind_parking": "Parkering",
+  "unit_kind_storage": "Förråd",
+  "unit_prefix_apartment": "Lgh",
+  "unit_prefix_commercial": "Lokal",
+  "unit_prefix_parking": "P-plats",
+  "unit_prefix_storage": "Förråd",
+  "unit_save": "Spara objekt"
+}

@@ -17,7 +17,7 @@ import { Button } from '#/components/ui/button'
 import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
-import { invoiceCount, invoiceOverview } from '#/features/invoicing/overview'
+import { invoiceOverview } from '#/features/invoicing/overview'
 import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
 import { tenantKindLabels } from '#/features/leases/options'
@@ -26,6 +26,7 @@ import { deleteTenantFn, tenantQuery } from '#/features/tenants/functions'
 import { useEditTenantDrawer } from '#/features/tenants/tenant-form'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/tenants/$tenantId')({
   loader: ({ context, params }) =>
@@ -69,7 +70,7 @@ function TenantPage() {
   return (
     <div className="grid gap-6 md:gap-7">
       <DetailHeader
-        back={{ label: 'Hyresgäster', to: '/tenants' }}
+        back={{ label: m.nav_tenants(), to: '/tenants' }}
         crumb={tenant.name}
         title={
           <span className="flex items-center gap-3">
@@ -89,13 +90,13 @@ function TenantPage() {
             <>
               <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
                 <Pencil aria-hidden="true" />
-                Redigera uppgifter
+                {m.tenant_edit()}
               </Button>
               {tenant.leases.length === 0 && can({ lease: ['read'] }) && (
-                <MoreActions label={`Fler åtgärder för ${tenant.name}`}>
+                <MoreActions label={m.common_more_actions_for({ name: tenant.name })}>
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmDelete(true)}>
                     <Trash2 aria-hidden="true" />
-                    Ta bort hyresgäst
+                    {m.tenant_delete()}
                   </DropdownMenuItem>
                 </MoreActions>
               )}
@@ -106,14 +107,14 @@ function TenantPage() {
 
       {confirmDelete && (
         <section className="flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-          <span className="min-w-0 flex-1">Ta bort {tenant.name}? Det går inte att ångra.</span>
+          <span className="min-w-0 flex-1">{m.tenant_delete_confirm({ name: tenant.name })}</span>
           <div className="flex w-full gap-2 sm:w-auto">
             <Button
               variant="outline"
               className="h-11 flex-1 sm:h-9"
               onClick={() => setConfirmDelete(false)}
             >
-              Avbryt
+              {m.common_cancel()}
             </Button>
             <Button
               variant="destructive"
@@ -121,7 +122,7 @@ function TenantPage() {
               disabled={remove.isPending}
               onClick={() => remove.mutate({ data: { tenantId } })}
             >
-              Ta bort
+              {m.common_delete()}
             </Button>
           </div>
           {remove.error && (
@@ -132,49 +133,51 @@ function TenantPage() {
 
       <StatRow>
         <StatCard
-          label="Avtal"
+          label={m.nav_leases()}
           hint={
-            tenant.leases.length > current.length ? `${tenant.leases.length} totalt` : undefined
+            tenant.leases.length > current.length
+              ? m.tenant_leases_total({ count: tenant.leases.length })
+              : undefined
           }
         >
           {current.length === 0
-            ? 'Inga'
-            : `${current.length} ${current.length === 1 ? 'aktuellt' : 'aktuella'}`}
+            ? m.tenant_leases_none()
+            : m.tenant_leases_current({ count: current.length })}
         </StatCard>
         <StatCard
-          label="Hyra"
+          label={m.common_rent()}
           hint={
             running.length === 0 && firstStart
-              ? `från ${formatShortDate(firstStart)}`
+              ? m.common_from_date({ date: formatShortDate(firstStart) })
               : rentLeases.some((l) => l.vat)
-                ? 'exkl. moms'
+                ? m.common_excl_vat()
                 : undefined
           }
         >
           {formatSekShort(rent)}
-          <span className="font-medium text-muted-foreground text-sm"> /mån</span>
+          <span className="font-medium text-muted-foreground text-sm"> {m.common_per_month()}</span>
         </StatCard>
         {can({ invoice: ['read'] }) && (
           <StatCard
-            label="Utestående"
+            label={m.common_outstanding()}
             tone={invoices.overdue.count > 0 ? 'danger' : 'default'}
             hint={
               invoices.overdue.count > 0
-                ? `${invoiceCount(invoices.overdue.count)} förfallen`
+                ? m.invoice_count_overdue({ count: invoices.overdue.count })
                 : invoices.outstanding.count > 0
-                  ? `${invoiceCount(invoices.outstanding.count)} obetald`
-                  : 'Inga obetalda avier'
+                  ? m.invoice_count_unpaid({ count: invoices.outstanding.count })
+                  : m.invoice_none_unpaid()
             }
           >
             {formatSekShort(invoices.outstanding.totalOre)}
           </StatCard>
         )}
         <StatCard
-          label="Avier"
-          hint={tenant.email ? 'skickas med e-post' : 'saknar e-post – skrivs ut'}
+          label={m.nav_invoices()}
+          hint={tenant.email ? m.tenant_delivery_email_hint() : m.tenant_delivery_print_hint()}
           hintClass={tenant.email ? undefined : 'text-amber-700 dark:text-amber-300'}
         >
-          {tenant.email ? 'E-post' : 'Utskrift'}
+          {tenant.email ? m.common_email() : m.tenant_delivery_print()}
         </StatCard>
       </StatRow>
 
@@ -182,9 +185,9 @@ function TenantPage() {
         main={
           <>
             {can({ lease: ['read'] }) && (
-              <Panel title="Avtal">
+              <Panel title={m.nav_leases()}>
                 {tenant.leases.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">Inga avtal ännu.</p>
+                  <p className="text-[13px] text-muted-foreground">{m.lease_list_empty()}</p>
                 ) : (
                   <div>
                     {tenant.leases.map((l) => (
@@ -195,7 +198,7 @@ function TenantPage() {
                             params={{ leaseId: l.id }}
                             className="font-semibold underline-offset-4 hover:underline"
                           >
-                            Avtal #{l.number}
+                            {m.lease_number({ number: l.number })}
                           </Link>
                           <span className="truncate text-muted-foreground tabular-nums">
                             {formatPeriod(l)}
@@ -205,7 +208,10 @@ function TenantPage() {
                           <span className="hidden font-semibold tabular-nums sm:inline">
                             {formatSekShort(l.rentOre)}
                             <span className="font-normal text-muted-foreground">
-                              {l.rentInterval === 'monthly' ? ' /mån' : ' /år'}
+                              {' '}
+                              {l.rentInterval === 'monthly'
+                                ? m.common_per_month()
+                                : m.common_per_year()}
                             </span>
                           </span>
                           <LeaseStatusBadge status={l.status} />
@@ -217,9 +223,9 @@ function TenantPage() {
               </Panel>
             )}
             {can({ invoice: ['read'] }) && (
-              <Panel title="Senaste avier">
+              <Panel title={m.tenant_recent_invoices()}>
                 {tenant.invoices.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">Inga avier ännu.</p>
+                  <p className="text-[13px] text-muted-foreground">{m.invoice_list_empty()}</p>
                 ) : (
                   <div>
                     {tenant.invoices.slice(0, 6).map((i) => (
@@ -249,7 +255,7 @@ function TenantPage() {
           </>
         }
         side={
-          <Panel title="Kontakt">
+          <Panel title={m.tenant_contact()}>
             {tenant.email || tenant.phone ? (
               <div className="grid gap-1.5 text-[13px]">
                 {tenant.email && (
@@ -273,17 +279,17 @@ function TenantPage() {
               </div>
             ) : (
               <p className="text-[13px] text-amber-700 dark:text-amber-300">
-                Ingen e-post eller telefon.
+                {m.tenant_no_contact()}
               </p>
             )}
             <div className="border-t pt-3">
               <FactList
                 facts={[
-                  ['Typ', tenantKindLabels[tenant.kind]],
+                  [m.common_kind(), tenantKindLabels[tenant.kind]],
                   ...(tenant.organizationNumber
-                    ? ([['Org.nr', tenant.organizationNumber]] as const)
+                    ? ([[m.common_organization_number_short(), tenant.organizationNumber]] as const)
                     : []),
-                  ['Fakturaadress', address.join(', ') || '–'],
+                  [m.tenant_form_billing_address(), address.join(', ') || '–'],
                 ]}
               />
             </div>

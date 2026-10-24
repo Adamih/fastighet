@@ -2,6 +2,7 @@ import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form
 import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
 import { isIsoDate } from '#/lib/dates'
 import { oreToInput, parseSek } from '#/lib/money'
+import { m } from '#/paraglide/messages'
 import {
   type InvoiceInterval,
   invoiceIntervalLabels,
@@ -40,11 +41,12 @@ const required = (message: string) => ({
   onSubmit: ({ value }: { value: string }) => (value.trim() ? undefined : message),
 })
 const date = {
-  onSubmit: ({ value }: { value: string }) => (isIsoDate(value) ? undefined : 'Ange ett datum'),
+  onSubmit: ({ value }: { value: string }) =>
+    isIsoDate(value) ? undefined : m.common_date_required(),
 }
 const wholeMonths = {
   onSubmit: ({ value }: { value: string }) =>
-    /^\d+$/.test(value.trim()) ? undefined : 'Ange antal månader',
+    /^\d+$/.test(value.trim()) ? undefined : m.lease_form_months_required(),
 }
 
 /** Shared by "Nytt avtal" (with tenant picker) and the lease edit page (tenant fixed). */
@@ -107,12 +109,12 @@ export function LeaseForm({
     >
       <fieldset disabled={disabled} className="grid gap-6">
         {tenants && (
-          <form.AppField name="tenantId" validators={required('Välj en hyresgäst')}>
+          <form.AppField name="tenantId" validators={required(m.lease_form_tenant_required())}>
             {(field) => (
               <field.SelectField
                 disabled={disabled}
-                label="Hyresgäst"
-                placeholder="Välj hyresgäst"
+                label={m.lease_form_tenant()}
+                placeholder={m.lease_form_tenant_placeholder()}
                 options={tenants.map((t) => ({ value: t.id, label: t.name }))}
               />
             )}
@@ -122,12 +124,12 @@ export function LeaseForm({
         <form.AppField
           name="unitIds"
           validators={{
-            onSubmit: ({ value }) => (value.length > 0 ? undefined : 'Välj minst ett objekt'),
+            onSubmit: ({ value }) => (value.length > 0 ? undefined : m.lease_form_units_required()),
           }}
         >
           {(field) => (
             <fieldset className="grid gap-2">
-              <legend className="mb-1 font-medium text-sm">Objekt</legend>
+              <legend className="mb-1 font-medium text-sm">{m.lease_form_units()}</legend>
               <div className="grid max-h-64 gap-1 overflow-y-auto rounded-md border p-3">
                 {units.map((u) => (
                   <label key={u.id} className="flex items-center gap-2 text-sm">
@@ -156,24 +158,24 @@ export function LeaseForm({
         </form.AppField>
 
         <section className="grid gap-4">
-          <h2 className="font-medium">Avtalstid</h2>
+          <h2 className="font-medium">{m.lease_form_term()}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <form.AppField name="startDate" validators={date}>
-              {(field) => <field.TextField label="Tillträde" type="date" />}
+              {(field) => <field.TextField label={m.lease_form_start()} type="date" />}
             </form.AppField>
             <form.AppField name="noticePeriodMonths" validators={wholeMonths}>
-              {(field) => <field.TextField label="Uppsägningstid (månader)" inputMode="numeric" />}
+              {(field) => (
+                <field.TextField label={m.lease_form_notice_period()} inputMode="numeric" />
+              )}
             </form.AppField>
           </div>
-          <p className="text-muted-foreground text-sm">
-            Bostäder har normalt 3 månaders uppsägningstid, lokaler 9 månader.
-          </p>
+          <p className="text-muted-foreground text-sm">{m.lease_form_notice_period_hint()}</p>
           <form.AppField name="fixedTerm">
             {(field) => (
               <field.SwitchField
                 disabled={disabled}
-                label="Tidsbestämt avtal"
-                description="Avtalet har ett slutdatum och kan förlängas automatiskt."
+                label={m.lease_form_fixed_term()}
+                description={m.lease_form_fixed_term_description()}
               />
             )}
           </form.AppField>
@@ -182,7 +184,7 @@ export function LeaseForm({
               fixedTerm && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <form.AppField name="endDate" validators={date}>
-                    {(field) => <field.TextField label="Avtalet löper till" type="date" />}
+                    {(field) => <field.TextField label={m.lease_form_end()} type="date" />}
                   </form.AppField>
                   <form.AppField
                     name="extensionMonths"
@@ -190,13 +192,13 @@ export function LeaseForm({
                       onSubmit: ({ value }) =>
                         value.trim() === '' || /^[1-9]\d*$/.test(value.trim())
                           ? undefined
-                          : 'Ange antal månader eller lämna tomt',
+                          : m.lease_form_extension_invalid(),
                     }}
                   >
                     {(field) => (
                       <field.TextField
-                        label={<Optional>Förlängning (månader)</Optional>}
-                        placeholder="Tomt = ingen förlängning"
+                        label={<Optional>{m.lease_form_extension()}</Optional>}
+                        placeholder={m.lease_form_extension_placeholder()}
                         inputMode="numeric"
                       />
                     )}
@@ -208,24 +210,28 @@ export function LeaseForm({
         </section>
 
         <section className="grid gap-4">
-          <h2 className="font-medium">Hyra</h2>
+          <h2 className="font-medium">{m.lease_form_rent_section()}</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <form.AppField
               name="rent"
               validators={{
                 onSubmit: ({ value }) =>
-                  parseSek(value) === null ? 'Ange ett belopp, t.ex. 8 450' : undefined,
+                  parseSek(value) === null ? m.lease_form_rent_invalid() : undefined,
               }}
             >
               {(field) => (
-                <field.TextField label="Belopp (kr)" placeholder="8 450" inputMode="decimal" />
+                <field.TextField
+                  label={m.lease_form_rent()}
+                  placeholder="8 450"
+                  inputMode="decimal"
+                />
               )}
             </form.AppField>
             <form.AppField name="rentInterval">
               {(field) => (
                 <field.SelectField
                   disabled={disabled}
-                  label="Avser"
+                  label={m.lease_form_rent_interval()}
                   options={optionsFrom(rentIntervalLabels)}
                 />
               )}
@@ -234,7 +240,7 @@ export function LeaseForm({
               {(field) => (
                 <field.SelectField
                   disabled={disabled}
-                  label="Avisering"
+                  label={m.lease_form_invoice_interval()}
                   options={optionsFrom(invoiceIntervalLabels)}
                 />
               )}
@@ -244,8 +250,8 @@ export function LeaseForm({
             {(field) => (
               <field.SwitchField
                 disabled={disabled}
-                label="Momspliktig uthyrning"
-                description="25 % moms läggs på hyran."
+                label={m.lease_form_vat()}
+                description={m.lease_form_vat_description()}
               />
             )}
           </form.AppField>

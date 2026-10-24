@@ -1,5 +1,6 @@
 import { isValidBankgiro, vatNumberFor } from '#/features/invoicing/rules'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
+import { m } from '#/paraglide/messages'
 
 // Pure rules for the seller details printed on invoices. Shared by the server (emails and
 // printed invoices) and the settings page (preview and readiness check).
@@ -57,22 +58,22 @@ export function settingsReadiness(draft: SettingsDraft): ReadinessItem[] {
     {
       key: 'bankgiro',
       done: isValidBankgiro(draft.bankgiro),
-      missing: 'Bankgiro saknas – hyresgäster kan inte betala med OCR förrän det är ifyllt.',
+      missing: m.settings_missing_bankgiro(),
     },
     {
       key: 'organizationNumber',
       done: isValidOrganizationNumber(draft.organizationNumber),
-      missing: 'Organisationsnummer saknas – det måste stå på en faktura.',
+      missing: m.settings_missing_organization_number(),
     },
     {
       key: 'address',
       done: filled(draft.streetAddress) && filled(draft.postalCode) && filled(draft.city),
-      missing: 'Adressen är inte komplett – den skrivs ut som avsändare på avin.',
+      missing: m.settings_missing_address(),
     },
     {
       key: 'email',
       done: filled(draft.email),
-      missing: 'E-post för frågor saknas – hyresgäster ser inte vart de ska vända sig.',
+      missing: m.settings_missing_email(),
     },
   ]
 }

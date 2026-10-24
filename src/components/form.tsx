@@ -14,6 +14,7 @@ import {
 } from '#/components/ui/select'
 import { Switch } from '#/components/ui/switch'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 // The app's form kit, built on TanStack Form's `createFormHook`. Forms call `useAppForm` and
 // render fields as `<form.AppField name="email">{(f) => <f.TextField label="E-post" />}</…>`
@@ -43,7 +44,7 @@ export const optionsFrom = (labels: Record<string, string>) =>
 export function Optional({ children }: { children: ReactNode }) {
   return (
     <span>
-      {children} <span className="font-normal text-muted-foreground">(valfritt)</span>
+      {children} <span className="font-normal text-muted-foreground">{m.form_optional()}</span>
     </span>
   )
 }

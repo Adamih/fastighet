@@ -1,6 +1,7 @@
 import { unitLabel } from '#/features/leases/overview'
 import type { LeaseStatus } from '#/features/leases/terms'
 import type { UnitKind } from '#/features/properties/unit-kinds'
+import { m } from '#/paraglide/messages'
 
 // Pure presentation rules for the tenant list: the count line, the lease column and search. Shared by the desktop table and the phone list.
 
@@ -9,8 +10,8 @@ export function tenantCountLine(tenants: readonly { kind: 'person' | 'company' }
   const people = tenants.filter((t) => t.kind === 'person').length
   const companies = tenants.length - people
   return [
-    people > 0 && `${people} ${people === 1 ? 'privatperson' : 'privatpersoner'}`,
-    companies > 0 && `${companies} företag`,
+    people > 0 && m.tenant_count_people({ count: people }),
+    companies > 0 && m.tenant_count_companies({ count: companies }),
   ]
     .filter(Boolean)
     .join(' · ')

@@ -14,6 +14,7 @@ import { useCan } from '#/features/auth/use-can'
 import { propertiesQuery } from '#/features/properties/functions'
 import { useAddPropertyDrawer } from '#/features/properties/property-form'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(propertiesQuery()),
@@ -28,20 +29,20 @@ function PropertiesPage() {
   return (
     <div className={cn('grid gap-6 sm:gap-8', canManage && 'pb-20 md:pb-0')}>
       <PageHeader
-        title="Fastigheter"
-        subtitle={properties.length > 0 && `${properties.length} fastigheter`}
+        title={m.nav_properties()}
+        subtitle={properties.length > 0 && m.property_count({ count: properties.length })}
         action={
           canManage && (
             <Button size="fab" onClick={addProperty.open}>
               <Plus aria-hidden="true" />
-              Lägg till fastighet
+              {m.property_add()}
             </Button>
           )
         }
       />
       {canManage && addProperty.drawer}
       {properties.length === 0 ? (
-        <p className="text-muted-foreground">Inga fastigheter ännu.</p>
+        <p className="text-muted-foreground">{m.property_list_empty()}</p>
       ) : (
         <>
           <MobileList>
@@ -59,9 +60,9 @@ function PropertiesPage() {
           <table className={desktopTableClass}>
             <thead className="border-b text-muted-foreground">
               <tr>
-                <th className="py-2 font-medium">Beteckning</th>
-                <th className="py-2 font-medium">Namn</th>
-                <th className="py-2 font-medium">Adress</th>
+                <th className="py-2 font-medium">{m.property_designation()}</th>
+                <th className="py-2 font-medium">{m.common_name()}</th>
+                <th className="py-2 font-medium">{m.common_address()}</th>
               </tr>
             </thead>
             <tbody>

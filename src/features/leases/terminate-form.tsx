@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer } from '#/components/form-drawer'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
+import { m } from '#/paraglide/messages'
 import { leasesQuery, terminateLeaseFn } from './functions'
 import type { LeaseView } from './program'
 import { earliestMoveOutDate } from './terms'
@@ -38,30 +39,28 @@ export function TerminateForm({
       <form.AppField
         name="noticeDate"
         validators={{
-          onSubmit: ({ value }) => (isIsoDate(value) ? undefined : 'Ange ett datum'),
+          onSubmit: ({ value }) => (isIsoDate(value) ? undefined : m.common_date_required()),
         }}
       >
-        {(field) => <field.TextField label="Uppsägning mottagen" type="date" />}
+        {(field) => <field.TextField label={m.terminate_notice_date()} type="date" />}
       </form.AppField>
       <form.AppField name="moveOutDate">
-        {(field) => <field.TextField label={<Optional>Annan avflyttning</Optional>} type="date" />}
+        {(field) => (
+          <field.TextField label={<Optional>{m.terminate_move_out()}</Optional>} type="date" />
+        )}
       </form.AppField>
       <form.Subscribe selector={(s) => s.values.noticeDate}>
         {(noticeDate) =>
           isIsoDate(noticeDate) && (
             <p className="text-sm">
-              Tidigaste avflyttning enligt avtalet:{' '}
-              <span className="font-medium tabular-nums">
-                {earliestMoveOutDate(lease, noticeDate)}
-              </span>
-              . Fyll i annan avflyttning bara om ni har kommit överens om ett tidigare datum.
+              {m.terminate_earliest_move_out({ date: earliestMoveOutDate(lease, noticeDate) })}
             </p>
           )
         }
       </form.Subscribe>
       {error && <p className="text-destructive text-sm">{error.message}</p>}
       <form.AppForm>
-        <form.SubmitButton variant="destructive">Registrera uppsägning</form.SubmitButton>
+        <form.SubmitButton variant="destructive">{m.terminate_submit()}</form.SubmitButton>
       </form.AppForm>
     </form>
   )
@@ -79,8 +78,12 @@ export function useTerminateLeaseDrawer(lease: LeaseView) {
     },
   })
   return useFormDrawer({
-    title: 'Säg upp avtalet',
-    description: `Avtal #${lease.number} med ${lease.tenant.name}. Uppsägningstiden är ${lease.noticePeriodMonths} månader.`,
+    title: m.terminate_title(),
+    description: m.terminate_description({
+      number: lease.number,
+      tenant: lease.tenant.name,
+      months: lease.noticePeriodMonths,
+    }),
     onClose: terminate.reset,
     form: ({ close }) => (
       <TerminateForm

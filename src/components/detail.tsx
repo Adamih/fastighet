@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 // Layout pieces shared by the detail pages (lease, invoice, tenant, property, unit): a header
 // with status and actions, a row of key figures, and a main column next to a side column.
@@ -35,7 +36,7 @@ export function DetailHeader({
   return (
     <header className={cn('grid gap-3', className)}>
       <nav
-        aria-label="Sökväg"
+        aria-label={m.detail_breadcrumb_label()}
         className="flex items-center gap-1 text-[13px] text-muted-foreground"
       >
         <Link {...link} className="hover:text-foreground hover:underline">
@@ -79,7 +80,10 @@ export function MoreActions({ label, children }: { label: string; children: Reac
 /** Key figures: two per row on phones, four from `md` up. */
 export function StatRow({ children }: { children: ReactNode }) {
   return (
-    <section aria-label="Nyckeltal" className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:gap-4">
+    <section
+      aria-label={m.detail_stats_label()}
+      className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:gap-4"
+    >
       {children}
     </section>
   )
@@ -166,7 +170,7 @@ const toneClass: Record<EventTone, string> = {
 /** Things that happened, newest first. */
 export function EventList({ events }: { events: readonly DetailEvent[] }) {
   if (events.length === 0) {
-    return <p className="text-[13px] text-muted-foreground">Inget har hänt ännu.</p>
+    return <p className="text-[13px] text-muted-foreground">{m.detail_no_events()}</p>
   }
   return (
     <ol className="grid gap-3">

@@ -12,6 +12,7 @@ import { Button } from '#/components/ui/button'
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '#/components/ui/drawer'
 import { useIsMobile } from '#/hooks/use-mobile'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 interface FormDrawerContextValue {
   /** Called by the form's submit button whenever its state changes. */
@@ -108,7 +109,7 @@ export function FormDrawer({
             variant="ghost"
             size="icon"
             className="size-11"
-            aria-label="Stäng"
+            aria-label={m.common_close()}
             onClick={requestClose}
           >
             <X aria-hidden="true" />
@@ -117,20 +118,20 @@ export function FormDrawer({
         {confirming && (
           <div
             role="alertdialog"
-            aria-label="Osparade ändringar"
+            aria-label={m.form_unsaved_label()}
             className="grid gap-2.5 border-b bg-amber-50 px-5 py-3 text-amber-900 text-sm dark:bg-amber-950 dark:text-amber-100"
           >
-            <span>Du har osparade ändringar. Vill du slänga dem?</span>
+            <span>{m.form_unsaved_question()}</span>
             <div className="flex gap-2">
               <Button
                 variant="outline"
                 className="h-11 flex-1 sm:h-9"
                 onClick={() => setConfirming(false)}
               >
-                Fortsätt redigera
+                {m.form_keep_editing()}
               </Button>
               <Button variant="destructive" className="h-11 flex-1 sm:h-9" onClick={discard}>
-                Släng ändringar
+                {m.form_discard()}
               </Button>
             </div>
           </div>

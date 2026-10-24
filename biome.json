@@ -11,6 +11,7 @@
       "scripts/**",
       "*.ts",
       "!src/routeTree.gen.ts",
+      "!src/paraglide",
       "!src/styles.css",
       "!src/components/ui",
       "!worker-configuration.d.ts"

@@ -31,7 +31,7 @@ import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { invoicesQuery, type listInvoicesFn } from '#/features/invoicing/functions'
-import { invoiceCount, invoiceOverview } from '#/features/invoicing/overview'
+import { invoiceOverview } from '#/features/invoicing/overview'
 import { periodLabel } from '#/features/invoicing/rules'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import {
@@ -59,6 +59,7 @@ import { effectiveEndDate } from '#/features/leases/terms'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/leases/$leaseId')({
   loader: ({ context, params }) => {
@@ -105,11 +106,15 @@ function LeasePage() {
   return (
     <div className="grid gap-6 md:gap-7">
       <DetailHeader
-        back={{ label: 'Avtal', to: '/leases' }}
-        crumb={`Avtal #${lease.number}`}
+        back={{ label: m.nav_leases(), to: '/leases' }}
+        crumb={m.lease_number({ number: lease.number })}
         title={lease.tenant.name}
         badge={<LeaseStatusBadge status={lease.status} />}
-        meta={[`Avtal #${lease.number}`, units.designations, units.labels.join(', ')]
+        meta={[
+          m.lease_number({ number: lease.number }),
+          units.designations,
+          units.labels.join(', '),
+        ]
           .filter(Boolean)
           .join(' · ')}
         actions={
@@ -119,14 +124,14 @@ function LeasePage() {
                 <Button variant="outline" className="flex-1 sm:flex-none" asChild>
                   <Link to="/leases/$leaseId/edit" params={{ leaseId }}>
                     <Pencil aria-hidden="true" />
-                    Ändra
+                    {m.common_edit()}
                   </Link>
                 </Button>
               )}
               {open && !lease.moveOutDate && (
                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={terminate.open}>
                   <FileX aria-hidden="true" />
-                  Säg upp
+                  {m.lease_terminate()}
                 </Button>
               )}
               {open && lease.moveOutDate && (
@@ -137,7 +142,7 @@ function LeasePage() {
                   onClick={() => withdraw.mutate({ data: { leaseId } })}
                 >
                   <Undo2 aria-hidden="true" />
-                  Ångra uppsägning
+                  {m.lease_withdraw_termination()}
                 </Button>
               )}
             </>
@@ -151,11 +156,11 @@ function LeasePage() {
       <DetailColumns
         main={
           <>
-            <Panel title="Avtalets gång">
+            <Panel title={m.lease_progress_title()}>
               <LeaseProgress lease={lease} timeline={timeline} />
             </Panel>
             {canReadInvoices && <LeaseInvoices invoices={invoices} />}
-            <Panel title="Händelser">
+            <Panel title={m.detail_events()}>
               <EventList
                 events={leaseEvents(
                   { ...lease, createdOn: stockholmDate(lease.createdAt.getTime()) },
@@ -168,7 +173,7 @@ function LeasePage() {
         }
         side={
           <>
-            <Panel title="Hyresgäst">
+            <Panel title={m.lease_form_tenant()}>
               <div className="flex items-center gap-3">
                 <InitialsAvatar name={lease.tenant.name} square={lease.tenant.kind === 'company'} />
                 <div className="grid min-w-0 gap-0.5 text-[13px]">
@@ -207,7 +212,13 @@ function LeasePage() {
                 </div>
               )}
             </Panel>
-            <Panel title={lease.units.length === 1 ? 'Objekt' : `Objekt (${lease.units.length})`}>
+            <Panel
+              title={
+                lease.units.length === 1
+                  ? m.lease_form_units()
+                  : m.lease_units_count({ count: lease.units.length })
+              }
+            >
               <div>
                 {lease.units.map((u) => (
                   <PanelRow key={u.id}>
@@ -239,20 +250,30 @@ function LeasePage() {
             <Panel title="Villkor">
               <FactList
                 facts={[
-                  ['Start', lease.startDate],
-                  ['Slut', effectiveEndDate(lease) ?? lease.endDate ?? 'Tillsvidare'],
+                  [m.lease_fact_start(), lease.startDate],
                   [
-                    'Hyra',
-                    `${formatSekShort(lease.rentOre)} ${lease.rentInterval === 'monthly' ? '/mån' : '/år'}${lease.vat ? ' + moms' : ''}`,
+                    m.lease_fact_end(),
+                    effectiveEndDate(lease) ?? lease.endDate ?? m.lease_open_ended(),
                   ],
-                  ['Avisering', invoiceIntervalLabels[lease.invoiceInterval]],
-                  ['Uppsägningstid', `${lease.noticePeriodMonths} mån`],
                   [
-                    'Förlängning',
-                    lease.endDate && lease.extensionMonths ? `${lease.extensionMonths} mån` : '–',
+                    m.common_rent(),
+                    `${formatSekShort(lease.rentOre)} ${lease.rentInterval === 'monthly' ? m.common_per_month() : m.common_per_year()}${lease.vat ? ` ${m.lease_plus_vat()}` : ''}`,
                   ],
-                  ['Moms', lease.vat ? 'Ja, 25 %' : 'Nej'],
-                  ...(lease.noticeDate ? ([['Uppsagt', lease.noticeDate]] as const) : []),
+                  [m.lease_form_invoice_interval(), invoiceIntervalLabels[lease.invoiceInterval]],
+                  [
+                    m.lease_notice_period(),
+                    m.common_months_short({ months: lease.noticePeriodMonths }),
+                  ],
+                  [
+                    m.lease_extension(),
+                    lease.endDate && lease.extensionMonths
+                      ? m.common_months_short({ months: lease.extensionMonths })
+                      : '–',
+                  ],
+                  [m.lease_vat(), lease.vat ? m.lease_vat_yes() : m.common_no()],
+                  ...(lease.noticeDate
+                    ? ([[m.lease_status_terminated(), lease.noticeDate]] as const)
+                    : []),
                 ]}
               />
             </Panel>
@@ -284,37 +305,43 @@ function LeaseStats({
   const [dateLabel, dateValue, dateHint, dateTone] =
     lease.status === 'upcoming'
       ? [
-          'Tillträde',
+          m.lease_form_start(),
           formatShortDate(lease.startDate),
           inDays(daysUntil(today, lease.startDate)),
           toneText.upcoming,
         ]
       : lease.status === 'ended'
-        ? ['Avslutat', end ? formatShortDate(end) : '–', end ?? '', undefined]
+        ? [m.lease_status_ended(), end ? formatShortDate(end) : '–', end ?? '', undefined]
         : end
           ? [
-              lease.moveOutDate ? 'Avflyttning' : 'Slutdatum',
+              lease.moveOutDate ? m.lease_move_out() : m.lease_end_date(),
               formatShortDate(end),
               inDays(daysUntil(today, end)),
               toneText.ending,
             ]
           : lease.endDate
             ? [
-                'Förlängs',
+                m.lease_renews(),
                 formatShortDate(lease.endDate),
-                `med ${lease.extensionMonths} mån om ej uppsagt`,
+                m.lease_renews_hint({ months: lease.extensionMonths ?? 0 }),
                 undefined,
               ]
-            : ['Löptid', 'Tillsvidare', `sedan ${lease.startDate}`, undefined]
+            : [
+                m.lease_term_label(),
+                m.lease_open_ended(),
+                m.lease_since({ date: lease.startDate }),
+                undefined,
+              ]
 
   const overview = invoiceOverview(invoices, today)
   const next = lease.status !== 'ended' ? nextInvoicePeriod(lease, invoices, today) : null
   return (
     <StatRow>
-      <StatCard label="Hyra" hint={lease.vat ? 'exkl. moms' : undefined}>
+      <StatCard label={m.common_rent()} hint={lease.vat ? m.common_excl_vat() : undefined}>
         {formatSekShort(lease.rentOre)}
         <span className="font-medium text-muted-foreground text-sm">
-          {lease.rentInterval === 'monthly' ? ' /mån' : ' /år'}
+          {' '}
+          {lease.rentInterval === 'monthly' ? m.common_per_month() : m.common_per_year()}
         </span>
       </StatCard>
       <StatCard label={dateLabel} hint={dateHint} hintClass={dateTone}>
@@ -323,20 +350,20 @@ function LeaseStats({
       {can({ invoice: ['read'] }) ? (
         <>
           <StatCard
-            label="Utestående"
+            label={m.common_outstanding()}
             tone={overview.overdue.count > 0 ? 'danger' : 'default'}
             hint={
               overview.overdue.count > 0
-                ? `${invoiceCount(overview.overdue.count)} förfallen`
+                ? m.invoice_count_overdue({ count: overview.overdue.count })
                 : overview.outstanding.count > 0
-                  ? `${invoiceCount(overview.outstanding.count)} obetald`
-                  : 'Inga obetalda avier'
+                  ? m.invoice_count_unpaid({ count: overview.outstanding.count })
+                  : m.invoice_none_unpaid()
             }
           >
             {formatSekShort(overview.outstanding.totalOre)}
           </StatCard>
           <StatCard
-            label="Nästa avi"
+            label={m.lease_next_invoice()}
             hint={next ? invoiceIntervalLabels[lease.invoiceInterval] : undefined}
           >
             {next ? shortPeriodLabel(next) : '–'}
@@ -344,8 +371,12 @@ function LeaseStats({
         </>
       ) : (
         <>
-          <StatCard label="Uppsägningstid">{lease.noticePeriodMonths} mån</StatCard>
-          <StatCard label="Avisering">{invoiceIntervalLabels[lease.invoiceInterval]}</StatCard>
+          <StatCard label={m.lease_notice_period()}>
+            {m.common_months_short({ months: lease.noticePeriodMonths })}
+          </StatCard>
+          <StatCard label={m.lease_form_invoice_interval()}>
+            {invoiceIntervalLabels[lease.invoiceInterval]}
+          </StatCard>
         </>
       )}
     </StatRow>
@@ -369,13 +400,15 @@ const toneBar: Record<TimelineTone, string> = {
 function LeaseProgress({ lease, timeline }: { lease: LeaseView; timeline: Timeline }) {
   const end = effectiveEndDate(lease)
   const milestones: [string, string][] = [
-    [lease.startDate, 'Tillträde'],
-    ...(lease.noticeDate ? ([[lease.noticeDate, 'Uppsagt']] as [string, string][]) : []),
+    [lease.startDate, m.lease_form_start()],
+    ...(lease.noticeDate
+      ? ([[lease.noticeDate, m.lease_status_terminated()]] as [string, string][])
+      : []),
     end
-      ? [end, lease.moveOutDate ? 'Avflyttning' : 'Slutdatum']
+      ? [end, lease.moveOutDate ? m.lease_move_out() : m.lease_end_date()]
       : lease.endDate
-        ? [lease.endDate, 'Slutdatum, förlängs']
-        : ['Tillsvidare', 'Ingen slutdag'],
+        ? [lease.endDate, m.lease_end_date_renews()]
+        : [m.lease_open_ended(), m.lease_no_end_date()],
   ]
   return (
     <div className="grid gap-3">
@@ -384,7 +417,7 @@ function LeaseProgress({ lease, timeline }: { lease: LeaseView; timeline: Timeli
       ) : (
         <span
           role="img"
-          aria-label={`${Math.round(timeline.progress * 100)} % av avtalstiden har gått`}
+          aria-label={m.lease_progress_aria({ percent: Math.round(timeline.progress * 100) })}
           className="block h-1.5 overflow-hidden rounded-full bg-muted"
         >
           <span
@@ -404,8 +437,8 @@ function LeaseProgress({ lease, timeline }: { lease: LeaseView; timeline: Timeli
           <span className={cn('font-medium', toneText[timeline.tone])}>{timeline.note}</span>
           <span className="text-muted-foreground">
             {timeline.progress === null
-              ? 'Status'
-              : `${Math.round(timeline.progress * 100)} % av tiden`}
+              ? m.lease_progress_status()
+              : m.lease_progress_percent({ percent: Math.round(timeline.progress * 100) })}
           </span>
         </li>
       </ol>
@@ -425,12 +458,12 @@ const eventIcons: Record<LeaseEventKind, [LucideIcon, EventTone]> = {
 function eventView(e: LeaseEvent): DetailEvent {
   const [icon, tone] = eventIcons[e.kind]
   const text = {
-    created: 'Avtalet registrerades',
-    started: 'Tillträde',
-    noticeGiven: 'Avtalet sades upp',
-    movedOut: 'Avflyttning',
-    invoiceSent: `Avi #${e.invoiceNumber} skickades`,
-    invoicePaid: `Avi #${e.invoiceNumber} betalades`,
+    created: m.lease_event_created(),
+    started: m.lease_form_start(),
+    noticeGiven: m.lease_event_notice_given(),
+    movedOut: m.lease_move_out(),
+    invoiceSent: m.lease_event_invoice_sent({ number: e.invoiceNumber ?? 0 }),
+    invoicePaid: m.lease_event_invoice_paid({ number: e.invoiceNumber ?? 0 }),
   }[e.kind]
   return { key: `${e.kind}-${e.date}-${e.invoiceNumber ?? ''}`, icon, tone, text, date: e.date }
 }
@@ -448,13 +481,13 @@ function LeaseInvoices({ invoices }: { invoices: LeaseInvoiceRow[] }) {
             onClick={() => setAll((a) => !a)}
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
-            {all ? 'Visa färre' : `Visa alla ${invoices.length}`}
+            {all ? m.common_show_fewer() : m.common_show_all({ count: invoices.length })}
           </button>
         )
       }
     >
       {invoices.length === 0 ? (
-        <p className="text-[13px] text-muted-foreground">Inga avier ännu.</p>
+        <p className="text-[13px] text-muted-foreground">{m.invoice_list_empty()}</p>
       ) : (
         <div>
           {shown.map((i) => (

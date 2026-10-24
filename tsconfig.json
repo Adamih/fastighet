@@ -16,6 +16,8 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,
+    /* Paraglide generates typed JavaScript (src/paraglide) */
+    "allowJs": true,
 
     /* Linting */
     "skipLibCheck": true,

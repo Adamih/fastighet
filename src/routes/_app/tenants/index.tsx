@@ -10,6 +10,7 @@ import { tenantsQuery } from '#/features/tenants/functions'
 import { leaseLine, matchesTenant, tenantCountLine } from '#/features/tenants/overview'
 import { useAddTenantDrawer } from '#/features/tenants/tenant-form'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/tenants/')({
   loader: ({ context }) => context.queryClient.ensureQueryData(tenantsQuery()),
@@ -29,7 +30,7 @@ function TenantsPage() {
     <div className={cn('grid gap-5 md:gap-7', canManage && 'pb-20 md:pb-0')}>
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="grid min-w-0 gap-1">
-          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">Hyresgäster</h1>
+          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">{m.nav_tenants()}</h1>
           {tenants.length > 0 && (
             <p className="text-muted-foreground text-sm">{tenantCountLine(tenants)}</p>
           )}
@@ -38,12 +39,12 @@ function TenantsPage() {
           {tenants.length > 0 && (
             <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:h-10 md:w-72">
               <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-              <span className="sr-only">Sök hyresgäst</span>
+              <span className="sr-only">{m.tenant_search_label()}</span>
               <input
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Sök namn, e-post eller org.nr"
+                placeholder={m.tenant_search_placeholder()}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
               />
             </label>
@@ -51,7 +52,7 @@ function TenantsPage() {
           {canManage && (
             <Button size="fab" onClick={addTenant.open}>
               <Plus aria-hidden="true" />
-              Lägg till hyresgäst
+              {m.tenant_add()}
             </Button>
           )}
         </div>
@@ -60,10 +61,10 @@ function TenantsPage() {
 
       <div className="grid items-start gap-6">
         {tenants.length === 0 ? (
-          <p className="text-muted-foreground">Inga hyresgäster ännu.</p>
+          <p className="text-muted-foreground">{m.tenant_list_empty()}</p>
         ) : visible.length === 0 ? (
           <p className="py-6 text-center text-muted-foreground text-sm">
-            Inga hyresgäster matchar.
+            {m.tenant_list_no_match()}
           </p>
         ) : (
           <>
@@ -99,11 +100,11 @@ function TenantsPage() {
               <table className="w-full border-collapse text-left text-[13px] lg:text-sm">
                 <thead>
                   <tr className="border-b text-muted-foreground text-xs">
-                    <th className={th}>Namn</th>
-                    <th className={th}>Kontakt</th>
-                    <th className={cn(th, 'hidden lg:table-cell')}>Avtal</th>
+                    <th className={th}>{m.common_name()}</th>
+                    <th className={th}>{m.tenant_contact()}</th>
+                    <th className={cn(th, 'hidden lg:table-cell')}>{m.nav_leases()}</th>
                     <th className={th}>
-                      <span className="sr-only">Åtgärder</span>
+                      <span className="sr-only">{m.common_actions()}</span>
                     </th>
                   </tr>
                 </thead>
@@ -139,7 +140,7 @@ function TenantMeta({ tenant }: { tenant: Tenant }) {
   if (tenant.email) {
     return <span className="truncate text-[13px] text-muted-foreground">{tenant.email}</span>
   }
-  return <span className={missingEmailClass}>Saknar e-post</span>
+  return <span className={missingEmailClass}>{m.tenant_missing_email()}</span>
 }
 
 function TenantRow({ tenant, canManage }: { tenant: Tenant; canManage: boolean }) {
@@ -166,7 +167,7 @@ function TenantRow({ tenant, canManage }: { tenant: Tenant; canManage: boolean }
             {/* Below lg the lease column folds in here. */}
             {leases && (
               <span className="whitespace-nowrap text-muted-foreground text-xs lg:hidden">
-                Avtal {leases}
+                {m.tenant_lease_line({ leases })}
               </span>
             )}
           </div>
@@ -182,7 +183,8 @@ function TenantRow({ tenant, canManage }: { tenant: Tenant; canManage: boolean }
           </span>
         ) : (
           <span className={missingEmailClass}>
-            Saknar e-post<span className="hidden lg:inline"> · avier kan inte skickas</span>
+            {m.tenant_missing_email()}
+            <span className="hidden lg:inline"> · {m.tenant_missing_email_consequence()}</span>
           </span>
         )}
       </td>
@@ -193,10 +195,14 @@ function TenantRow({ tenant, canManage }: { tenant: Tenant; canManage: boolean }
         <Link
           to="/tenants/$tenantId"
           params={{ tenantId: tenant.id }}
-          aria-label={`${addEmail ? 'Lägg till e-post för' : 'Visa'} ${tenant.name}`}
+          aria-label={
+            addEmail
+              ? m.tenant_add_email_for({ name: tenant.name })
+              : m.common_view_named({ name: tenant.name })
+          }
           className="font-semibold text-[13px] underline-offset-4 hover:underline"
         >
-          {addEmail ? 'Lägg till e-post' : 'Visa'}
+          {addEmail ? m.tenant_add_email() : m.common_view()}
         </Link>
       </td>
     </tr>

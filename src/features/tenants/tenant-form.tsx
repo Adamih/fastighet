@@ -3,6 +3,7 @@ import { Schema } from 'effect'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer } from '#/components/form-drawer'
 import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
+import { m } from '#/paraglide/messages'
 import { createTenantFn, tenantQuery, tenantsQuery, updateTenantFn } from './functions'
 import { type CreateTenantInput, CreateTenantInput as TenantSchema } from './schemas'
 
@@ -69,7 +70,7 @@ export function TenantForm({
       <form.AppField name="kind">
         {(field) => (
           <field.SegmentedField
-            label="Typ av hyresgäst"
+            label={m.tenant_form_kind()}
             options={tenantKinds.map((k) => ({ value: k, label: tenantKindLabels[k] }))}
           />
         )}
@@ -80,9 +81,11 @@ export function TenantForm({
             <form.AppField name="name">
               {(field) => (
                 <field.TextField
-                  label={kind === 'company' ? 'Företagsnamn' : 'Namn'}
+                  label={kind === 'company' ? m.tenant_form_company_name() : m.common_name()}
                   autoComplete={kind === 'company' ? 'organization' : 'name'}
-                  placeholder={kind === 'company' ? undefined : 'För- och efternamn'}
+                  placeholder={
+                    kind === 'company' ? undefined : m.tenant_form_person_name_placeholder()
+                  }
                 />
               )}
             </form.AppField>
@@ -90,10 +93,10 @@ export function TenantForm({
               <form.AppField name="organizationNumber">
                 {(field) => (
                   <field.TextField
-                    label="Organisationsnummer"
+                    label={m.common_organization_number()}
                     placeholder="556677-8899"
                     inputMode="numeric"
-                    hint="10 siffror, med eller utan bindestreck"
+                    hint={m.tenant_form_organization_number_hint()}
                   />
                 )}
               </form.AppField>
@@ -104,22 +107,26 @@ export function TenantForm({
       <form.AppField name="email">
         {(field) => (
           <field.TextField
-            label="E-post"
+            label={m.common_email()}
             type="email"
             autoComplete="email"
-            hint="Avier skickas hit. Utan e-post kan avier inte mejlas."
+            hint={m.tenant_form_email_hint()}
           />
         )}
       </form.AppField>
       <form.AppField name="phone">
         {(field) => (
-          <field.TextField label={<Optional>Telefon</Optional>} type="tel" autoComplete="tel" />
+          <field.TextField
+            label={<Optional>{m.common_phone()}</Optional>}
+            type="tel"
+            autoComplete="tel"
+          />
         )}
       </form.AppField>
       <form.AppField name="streetAddress">
         {(field) => (
           <field.TextField
-            label={<Optional>Fakturaadress</Optional>}
+            label={<Optional>{m.tenant_form_billing_address()}</Optional>}
             autoComplete="street-address"
           />
         )}
@@ -127,11 +134,15 @@ export function TenantForm({
       <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
         <form.AppField name="postalCode">
           {(field) => (
-            <field.TextField label="Postnummer" inputMode="numeric" autoComplete="postal-code" />
+            <field.TextField
+              label={m.common_postal_code()}
+              inputMode="numeric"
+              autoComplete="postal-code"
+            />
           )}
         </form.AppField>
         <form.AppField name="city">
-          {(field) => <field.TextField label="Ort" autoComplete="address-level2" />}
+          {(field) => <field.TextField label={m.common_city()} autoComplete="address-level2" />}
         </form.AppField>
       </div>
       {error && <p className="text-destructive text-sm">{error.message}</p>}
@@ -150,13 +161,13 @@ export function useAddTenantDrawer() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }),
   })
   return useFormDrawer({
-    title: 'Lägg till hyresgäst',
-    description: 'Koppla hyresgästen till ett avtal i nästa steg.',
+    title: m.tenant_add(),
+    description: m.tenant_add_description(),
     onClose: create.reset,
     form: ({ close }) => (
       <TenantForm
         defaultValues={emptyTenant}
-        submitLabel="Spara hyresgäst"
+        submitLabel={m.tenant_save()}
         error={create.error}
         onSubmit={async (value) => {
           await create.mutateAsync({ data: value })
@@ -179,14 +190,13 @@ export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] 
     },
   })
   return useFormDrawer({
-    title: 'Redigera uppgifter',
-    description:
-      'Ändringar gäller nya avier. Redan skapade avier behåller uppgifterna de skapades med.',
+    title: m.tenant_edit(),
+    description: m.tenant_edit_description(),
     onClose: update.reset,
     form: ({ close }) => (
       <TenantForm
         defaultValues={tenantToInput(tenant)}
-        submitLabel="Spara ändringar"
+        submitLabel={m.common_save_changes()}
         error={update.error}
         onSubmit={async (value) => {
           await update.mutateAsync({ data: { tenantId: tenant.id, ...value } })

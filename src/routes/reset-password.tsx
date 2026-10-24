@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAppForm } from '#/components/form'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
+import { m } from '#/paraglide/messages'
 
 // Better Auth's emailed link checks the token and redirects here with ?token=… (or ?error=…).
 export const Route = createFileRoute('/reset-password')({
@@ -32,10 +33,10 @@ function ResetPasswordPage() {
   if (linkError || !token) {
     return (
       <main className="mx-auto grid max-w-sm gap-4 px-4 py-16">
-        <h1 className="font-semibold text-2xl">Länken fungerar inte</h1>
-        <p>Länken är ogiltig eller har gått ut.</p>
+        <h1 className="font-semibold text-2xl">{m.reset_link_broken()}</h1>
+        <p>{m.auth_error_invalid_token()}</p>
         <Link to="/forgot-password" className="underline">
-          Skicka en ny länk
+          {m.reset_send_new_link()}
         </Link>
       </main>
     )
@@ -44,10 +45,10 @@ function ResetPasswordPage() {
   if (done) {
     return (
       <main className="mx-auto grid max-w-sm gap-4 px-4 py-16">
-        <h1 className="font-semibold text-2xl">Lösenordet är bytt</h1>
-        <p>Du har loggats ut överallt. Logga in med ditt nya lösenord.</p>
+        <h1 className="font-semibold text-2xl">{m.reset_done()}</h1>
+        <p>{m.reset_done_body()}</p>
         <Link to="/login" className="underline">
-          Logga in
+          {m.login_sign_in()}
         </Link>
       </main>
     )
@@ -55,7 +56,7 @@ function ResetPasswordPage() {
 
   return (
     <main className="mx-auto grid max-w-sm gap-6 px-4 py-16">
-      <h1 className="font-semibold text-2xl">Välj nytt lösenord</h1>
+      <h1 className="font-semibold text-2xl">{m.reset_title()}</h1>
       <form
         method="post"
         className="grid gap-4"
@@ -68,25 +69,27 @@ function ResetPasswordPage() {
           name="password"
           validators={{
             onSubmit: ({ value }) =>
-              value.length >= 8 ? undefined : 'Lösenordet måste vara minst 8 tecken',
+              value.length >= 8 ? undefined : m.auth_error_password_too_short(),
           }}
         >
           {(field) => (
-            <field.TextField label="Nytt lösenord" type="password" autoComplete="new-password" />
+            <field.TextField
+              label={m.reset_new_password()}
+              type="password"
+              autoComplete="new-password"
+            />
           )}
         </form.AppField>
         <form.AppField
           name="confirm"
           validators={{
             onSubmit: ({ value, fieldApi }) =>
-              value === fieldApi.form.getFieldValue('password')
-                ? undefined
-                : 'Lösenorden matchar inte',
+              value === fieldApi.form.getFieldValue('password') ? undefined : m.reset_mismatch(),
           }}
         >
           {(field) => (
             <field.TextField
-              label="Upprepa lösenordet"
+              label={m.reset_repeat_password()}
               type="password"
               autoComplete="new-password"
             />
@@ -94,7 +97,7 @@ function ResetPasswordPage() {
         </form.AppField>
         {error && <p className="text-destructive text-sm">{error}</p>}
         <form.AppForm>
-          <form.SubmitButton className="sm:h-10 sm:w-full">Spara lösenord</form.SubmitButton>
+          <form.SubmitButton className="sm:h-10 sm:w-full">{m.reset_submit()}</form.SubmitButton>
         </form.AppForm>
       </form>
     </main>

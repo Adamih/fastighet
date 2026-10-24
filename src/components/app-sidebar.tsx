@@ -27,17 +27,18 @@ import { useCan } from '#/features/auth/use-can'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import type { Permissions } from '#/lib/permissions'
+import { m } from '#/paraglide/messages'
 
 const navigation = [
-  { title: 'Fastigheter', to: '/', icon: Building2, permission: { property: ['read'] } },
-  { title: 'Hyresgäster', to: '/tenants', icon: Users, permission: { tenant: ['read'] } },
-  { title: 'Avtal', to: '/leases', icon: FileText, permission: { lease: ['read'] } },
-  { title: 'Avier', to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
-  { title: 'Betalningar', to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
-  { title: 'Användare', to: '/team', icon: UserRoundCog, permission: undefined },
-  { title: 'Inställningar', to: '/settings', icon: Settings, permission: { settings: ['read'] } },
+  { title: m.nav_properties, to: '/', icon: Building2, permission: { property: ['read'] } },
+  { title: m.nav_tenants, to: '/tenants', icon: Users, permission: { tenant: ['read'] } },
+  { title: m.nav_leases, to: '/leases', icon: FileText, permission: { lease: ['read'] } },
+  { title: m.nav_invoices, to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
+  { title: m.nav_payments, to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
+  { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined },
+  { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
 ] as const satisfies readonly {
-  title: string
+  title: () => string
   to: string
   icon: typeof Building2
   permission: Permissions | undefined
@@ -60,7 +61,7 @@ export function AppSidebar() {
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>
-            <nav aria-label="Huvudnavigation">
+            <nav aria-label={m.nav_main_label()}>
               <SidebarMenu>
                 {navigation.map((item) => {
                   if (item.permission && !can(item.permission)) return null
@@ -83,7 +84,7 @@ export function AppSidebar() {
                           onClick={() => setOpenMobile(false)}
                         >
                           <item.icon aria-hidden="true" />
-                          <span>{item.title}</span>
+                          <span>{item.title()}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -111,13 +112,13 @@ export function AppSidebar() {
                   setOpenMobile(false)
                   await router.navigate({ to: '/login' })
                 } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : 'Utloggningen misslyckades')
+                  setError(cause instanceof Error ? cause.message : m.nav_sign_out_failed())
                   setSigningOut(false)
                 }
               }}
             >
               <LogOut aria-hidden="true" />
-              <span>{signingOut ? 'Loggar ut…' : 'Logga ut'}</span>
+              <span>{signingOut ? m.nav_signing_out() : m.nav_sign_out()}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

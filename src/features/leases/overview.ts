@@ -1,6 +1,7 @@
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import { daysBetweenInclusive } from '#/lib/dates'
-import type { RentInterval } from './options'
+import { m } from '#/paraglide/messages'
+import { type RentInterval, rentIntervalLabels } from './options'
 import { effectiveEndDate, type LeaseStatus, type LeaseTerms } from './terms'
 
 // Pure presentation rules for the lease list: the period line, progress bar, status note,
@@ -8,10 +9,18 @@ import { effectiveEndDate, type LeaseStatus, type LeaseTerms } from './terms'
 
 /** Short unit labels as they are written on Swedish contracts. */
 const unitPrefix: Record<UnitKind, string> = {
-  apartment: 'Lgh',
-  commercial: 'Lokal',
-  parking: 'P-plats',
-  storage: 'Förråd',
+  get apartment() {
+    return m.unit_prefix_apartment()
+  },
+  get commercial() {
+    return m.unit_prefix_commercial()
+  },
+  get parking() {
+    return m.unit_prefix_parking()
+  },
+  get storage() {
+    return m.unit_prefix_storage()
+  },
 }
 
 export const unitLabel = (unit: { kind: UnitKind; label: string }) =>
@@ -32,9 +41,9 @@ export const daysUntil = (today: string, date: string) =>
   date >= today ? daysBetweenInclusive(today, date) - 1 : -(daysBetweenInclusive(date, today) - 1)
 
 export function inDays(days: number): string {
-  if (days === 0) return 'i dag'
-  if (days === 1) return 'i morgon'
-  return `om ${days} dagar`
+  if (days === 0) return m.common_today()
+  if (days === 1) return m.common_tomorrow()
+  return m.common_in_days({ days })
 }
 
 const shortDate = new Intl.DateTimeFormat('sv-SE', {
@@ -64,8 +73,12 @@ export function leaseTimeline(
   today: string,
 ): Timeline {
   const end = effectiveEndDate(lease) ?? lease.endDate
-  const period = `${lease.startDate} → ${end ?? 'tillsvidare'}`
-  const cardPeriod = end ? `${lease.startDate} – ${end}` : `Från ${lease.startDate} · tillsvidare`
+  const period = end
+    ? `${lease.startDate} → ${end}`
+    : m.lease_period_open({ start: lease.startDate })
+  const cardPeriod = end
+    ? `${lease.startDate} – ${end}`
+    : m.lease_card_period_open({ start: lease.startDate })
   const progress =
     end && lease.status !== 'upcoming'
       ? Math.min(
@@ -83,19 +96,25 @@ export function leaseTimeline(
       period,
       cardPeriod,
       progress: null,
-      note: `Startar ${inDays(daysUntil(today, lease.startDate))}`,
+      note: m.lease_note_starts({ when: inDays(daysUntil(today, lease.startDate)) }),
       tone: 'upcoming',
     }
   }
   if (lease.status === 'ended') {
-    return { period, cardPeriod, progress: 1, note: `Avslutat ${end}`, tone: 'neutral' }
+    return {
+      period,
+      cardPeriod,
+      progress: 1,
+      note: m.lease_note_ended({ date: end ?? '' }),
+      tone: 'neutral',
+    }
   }
   if (lease.moveOutDate) {
     return {
       period,
       cardPeriod,
       progress,
-      note: `Upphör ${inDays(daysUntil(today, lease.moveOutDate))}`,
+      note: m.lease_note_ends({ when: inDays(daysUntil(today, lease.moveOutDate)) }),
       tone: 'ending',
     }
   }
@@ -104,7 +123,7 @@ export function leaseTimeline(
       period,
       cardPeriod,
       progress,
-      note: `Förlängs ${lease.extensionMonths} mån om ej uppsagt`,
+      note: m.lease_note_renews({ months: lease.extensionMonths }),
       tone: 'renewing',
     }
   }
@@ -113,16 +132,18 @@ export function leaseTimeline(
       period,
       cardPeriod,
       progress,
-      note: `Upphör ${inDays(daysUntil(today, lease.endDate))}`,
+      note: m.lease_note_ends({ when: inDays(daysUntil(today, lease.endDate)) }),
       tone: 'ending',
     }
   }
-  return { period, cardPeriod, progress: null, note: 'Löpande', tone: 'neutral' }
+  return { period, cardPeriod, progress: null, note: m.lease_note_running(), tone: 'neutral' }
 }
 
 /** "per månad", "per år + moms" */
 export const rentUnit = (lease: { rentInterval: RentInterval; vat: boolean }) =>
-  `${lease.rentInterval === 'monthly' ? 'per månad' : 'per år'}${lease.vat ? ' + moms' : ''}`
+  lease.vat
+    ? m.rent_unit_with_vat({ interval: rentIntervalLabels[lease.rentInterval] })
+    : rentIntervalLabels[lease.rentInterval]
 
 /** Rent per month excluding VAT; yearly rent is divided by twelve and rounded to the öre. */
 export const monthlyRentOre = (lease: { rentOre: number; rentInterval: RentInterval }) =>

@@ -1,6 +1,6 @@
-import { formatSek } from '#/lib/money'
 import { cn } from '#/lib/utils'
-import { leaseStatusLabels, type RentInterval, rentIntervalLabels } from './options'
+import { m } from '#/paraglide/messages'
+import { leaseStatusLabels } from './options'
 import type { LeaseStatus } from './terms'
 
 const statusStyles: Record<LeaseStatus, string> = {
@@ -31,10 +31,6 @@ export function LeaseStatusBadge({ status }: { status: LeaseStatus }) {
   )
 }
 
-export function formatRent(lease: { rentOre: number; rentInterval: RentInterval; vat: boolean }) {
-  return `${formatSek(lease.rentOre)} ${rentIntervalLabels[lease.rentInterval]}${lease.vat ? ' + moms' : ''}`
-}
-
 export function formatPeriod(lease: {
   startDate: string
   endDate: string | null
@@ -42,7 +38,13 @@ export function formatPeriod(lease: {
   moveOutDate: string | null
 }) {
   if (lease.moveOutDate) return `${lease.startDate} – ${lease.moveOutDate}`
-  if (!lease.endDate) return `${lease.startDate} – tillsvidare`
-  const extension = lease.extensionMonths ? ` (förlängs ${lease.extensionMonths} mån)` : ''
-  return `${lease.startDate} – ${lease.endDate}${extension}`
+  if (!lease.endDate) return m.lease_period_open_dash({ start: lease.startDate })
+  if (lease.extensionMonths) {
+    return m.lease_period_renewing({
+      start: lease.startDate,
+      end: lease.endDate,
+      months: lease.extensionMonths,
+    })
+  }
+  return `${lease.startDate} – ${lease.endDate}`
 }
