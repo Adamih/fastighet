@@ -1,14 +1,11 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Schema } from 'effect'
 import { AlertTriangle, Check, CircleCheck, FileText, Lock } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { Optional, useAppForm } from '#/components/form'
 import { PageHeader } from '#/components/responsive'
-import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
-import { Label } from '#/components/ui/label'
-import { Switch } from '#/components/ui/switch'
 import { useCan } from '#/features/auth/use-can'
 import { vatNumberFor } from '#/features/invoicing/rules'
 import { settingsQuery, updateSettingsFn } from '#/features/settings/functions'
@@ -56,9 +53,11 @@ function SettingsPage() {
     },
   })
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: baseline,
     validators: { onSubmit: validator },
+    // Any edit hides the "Sparat" note from the previous save.
+    listeners: { onChange: () => setSaved(false) },
     onSubmit: async ({ value, formApi }) => {
       const updated = await save.mutateAsync({ data: value })
       // The server normalises (e.g. "5050 1055" → "5050-1055"); start over from what it stored.
@@ -93,7 +92,6 @@ function SettingsPage() {
           e.preventDefault()
           if (canEdit) void form.handleSubmit()
         }}
-        onChange={() => setSaved(false)}
       >
         <fieldset disabled={!canEdit} className="grid">
           <Section title="Företag" description="Säljaruppgifter som måste stå på en faktura.">
@@ -101,114 +99,87 @@ function SettingsPage() {
               <span className="font-medium text-sm">Företagsnamn</span>
               <span className="text-sm">{settings.organizationName}</span>
             </div>
-            <form.Field name="organizationNumber">
+            <form.AppField name="organizationNumber">
               {(field) => (
-                <div className="grid gap-1.5">
-                  <TextField
-                    field={field}
-                    label="Organisationsnummer"
-                    placeholder="556677-8899"
-                    inputMode="numeric"
-                  />
-                  {isValidOrganizationNumber(field.state.value) && (
-                    <Note tone="ok">Momsreg.nr {vatNumberFor(field.state.value)}</Note>
-                  )}
-                </div>
+                <field.TextField
+                  label="Organisationsnummer"
+                  placeholder="556677-8899"
+                  inputMode="numeric"
+                  hint={
+                    isValidOrganizationNumber(field.state.value) && (
+                      <Note tone="ok">Momsreg.nr {vatNumberFor(field.state.value)}</Note>
+                    )
+                  }
+                />
               )}
-            </form.Field>
-            <form.Field name="fSkatt">
-              {(field) => (
-                <div className="flex items-center justify-between gap-4 border-t pt-4">
-                  <div className="grid gap-0.5">
-                    <Label htmlFor={field.name}>Godkänd för F-skatt</Label>
-                    <span className="text-muted-foreground text-xs">
-                      Skrivs ut som ”Godkänd för F-skatt” på avin.
-                    </span>
-                  </div>
-                  <Switch
-                    id={field.name}
+            </form.AppField>
+            <div className="border-t pt-4">
+              <form.AppField name="fSkatt">
+                {(field) => (
+                  <field.SwitchField
                     disabled={!canEdit}
-                    checked={field.state.value}
-                    onCheckedChange={(checked) => {
-                      field.handleChange(checked)
-                      setSaved(false)
-                    }}
+                    label="Godkänd för F-skatt"
+                    description="Skrivs ut som ”Godkänd för F-skatt” på avin."
                   />
-                </div>
-              )}
-            </form.Field>
+                )}
+              </form.AppField>
+            </div>
           </Section>
 
           <Section
             title="Betalning"
             description="Vart hyran betalas. OCR-numret byggs av avins nummer."
           >
-            <form.Field name="bankgiro">
+            <form.AppField name="bankgiro">
               {(field) => (
-                <div className="grid gap-1.5">
-                  <TextField
-                    field={field}
-                    label="Bankgiro"
-                    placeholder="5050-1055"
-                    inputMode="numeric"
-                  />
-                  {!field.state.value.trim() && (
-                    <Note tone="warn">Krävs för att avier ska kunna betalas</Note>
-                  )}
-                </div>
+                <field.TextField
+                  label="Bankgiro"
+                  placeholder="5050-1055"
+                  inputMode="numeric"
+                  hint={
+                    !field.state.value.trim() && (
+                      <Note tone="warn">Krävs för att avier ska kunna betalas</Note>
+                    )
+                  }
+                />
               )}
-            </form.Field>
+            </form.AppField>
           </Section>
 
           <Section
             title="Adress och kontakt"
             description="Visas i avins sidfot så att hyresgäster vet vem de ska fråga."
           >
-            <form.Field name="streetAddress">
-              {(field) => (
-                <TextField field={field} label="Gatuadress" autoComplete="street-address" />
-              )}
-            </form.Field>
+            <form.AppField name="streetAddress">
+              {(field) => <field.TextField label="Gatuadress" autoComplete="street-address" />}
+            </form.AppField>
             <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
-              <form.Field name="postalCode">
+              <form.AppField name="postalCode">
                 {(field) => (
-                  <TextField
-                    field={field}
+                  <field.TextField
                     label="Postnummer"
                     inputMode="numeric"
                     autoComplete="postal-code"
                   />
                 )}
-              </form.Field>
-              <form.Field name="city">
-                {(field) => <TextField field={field} label="Ort" autoComplete="address-level2" />}
-              </form.Field>
+              </form.AppField>
+              <form.AppField name="city">
+                {(field) => <field.TextField label="Ort" autoComplete="address-level2" />}
+              </form.AppField>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <form.Field name="email">
+              <form.AppField name="email">
                 {(field) => (
-                  <TextField
-                    field={field}
+                  <field.TextField
                     label="E-post för frågor"
                     type="email"
                     placeholder="hyra@foretag.se"
                   />
                 )}
-              </form.Field>
-              <form.Field name="phone">
-                {(field) => (
-                  <TextField
-                    field={field}
-                    label={
-                      <span>
-                        Telefon{' '}
-                        <span className="font-normal text-muted-foreground">(valfritt)</span>
-                      </span>
-                    }
-                    type="tel"
-                  />
-                )}
-              </form.Field>
+              </form.AppField>
+              <form.AppField name="phone">
+                {(field) => <field.TextField label={<Optional>Telefon</Optional>} type="tel" />}
+              </form.AppField>
             </div>
           </Section>
 

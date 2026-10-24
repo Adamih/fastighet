@@ -1,8 +1,6 @@
-import { useForm } from '@tanstack/react-form'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
+import { useAppForm } from '#/components/form'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 
@@ -20,7 +18,7 @@ function ResetPasswordPage() {
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: { password: '', confirm: '' },
     onSubmit: async ({ value }) => {
       if (!token) return
@@ -66,7 +64,7 @@ function ResetPasswordPage() {
           void form.handleSubmit()
         }}
       >
-        <form.Field
+        <form.AppField
           name="password"
           validators={{
             onSubmit: ({ value }) =>
@@ -74,15 +72,10 @@ function ResetPasswordPage() {
           }}
         >
           {(field) => (
-            <TextField
-              field={field}
-              label="Nytt lösenord"
-              type="password"
-              autoComplete="new-password"
-            />
+            <field.TextField label="Nytt lösenord" type="password" autoComplete="new-password" />
           )}
-        </form.Field>
-        <form.Field
+        </form.AppField>
+        <form.AppField
           name="confirm"
           validators={{
             onSubmit: ({ value, fieldApi }) =>
@@ -92,22 +85,17 @@ function ResetPasswordPage() {
           }}
         >
           {(field) => (
-            <TextField
-              field={field}
+            <field.TextField
               label="Upprepa lösenordet"
               type="password"
               autoComplete="new-password"
             />
           )}
-        </form.Field>
+        </form.AppField>
         {error && <p className="text-destructive text-sm">{error}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting}>
-              Spara lösenord
-            </Button>
-          )}
-        </form.Subscribe>
+        <form.AppForm>
+          <form.SubmitButton className="sm:h-10 sm:w-full">Spara lösenord</form.SubmitButton>
+        </form.AppForm>
       </form>
     </main>
   )

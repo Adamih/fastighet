@@ -1,9 +1,6 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer } from '#/components/form-drawer'
-import { optionsFrom, SelectField } from '#/components/select-field'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
 import { createUnitFn, propertyQuery } from './functions'
 import { type UnitKind, unitKindLabels } from './unit-kinds'
 
@@ -18,38 +15,28 @@ export const emptyUnit: UnitValues = { kind: 'apartment', label: '', areaSqm: nu
 const parseArea = (value: string) => (value.trim() ? Number(value.replace(',', '.')) : null)
 const areaToInput = (area: number | null) => (area == null ? '' : String(area).replace('.', ','))
 
-/** Shared by "Lägg till objekt" and the unit edit page. */
+/** Shared by "Lägg till objekt" (in a drawer) and the unit edit page. */
 export function UnitForm({
   defaultValues,
   submitLabel,
   onSubmit,
   error,
   disabled = false,
-  resetAfterSubmit = false,
-  idPrefix = '',
-  layout = 'wide',
 }: {
   defaultValues: UnitValues
   submitLabel: string
   onSubmit: (value: UnitValues) => Promise<unknown>
   error: Error | null
   disabled?: boolean
-  resetAfterSubmit?: boolean
-  /** Keeps ids unique when the form can be on the page twice (card and phone drawer). */
-  idPrefix?: string
-  /** `narrow` gives a full-width submit button, for drawers. */
-  layout?: 'wide' | 'narrow'
 }) {
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
       kind: defaultValues.kind,
       label: defaultValues.label,
       area: areaToInput(defaultValues.areaSqm),
     },
-    onSubmit: async ({ value, formApi }) => {
-      await onSubmit({ kind: value.kind, label: value.label, areaSqm: parseArea(value.area) })
-      if (resetAfterSubmit) formApi.reset()
-    },
+    onSubmit: ({ value }) =>
+      onSubmit({ kind: value.kind, label: value.label, areaSqm: parseArea(value.area) }),
   })
 
   return (
@@ -62,34 +49,25 @@ export function UnitForm({
     >
       <fieldset disabled={disabled} className="grid gap-4">
         <div className="grid grid-cols-2 gap-4">
-          <form.Field
+          <form.AppField
             name="label"
             validators={{
               onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange objektsnummer'),
             }}
           >
+            {(field) => <field.TextField label="Objektsnummer" placeholder="1001" />}
+          </form.AppField>
+          <form.AppField name="kind">
             {(field) => (
-              <TextField
-                field={field}
-                id={`${idPrefix}label`}
-                label="Objektsnummer"
-                placeholder="1001"
-              />
-            )}
-          </form.Field>
-          <form.Field name="kind">
-            {(field) => (
-              <SelectField
-                disabled={disabled}
-                field={field}
-                id={`${idPrefix}kind`}
+              <field.SelectField
                 label="Typ"
+                disabled={disabled}
                 options={optionsFrom(unitKindLabels)}
               />
             )}
-          </form.Field>
+          </form.AppField>
         </div>
-        <form.Field
+        <form.AppField
           name="area"
           validators={{
             onSubmit: ({ value }) => {
@@ -101,35 +79,19 @@ export function UnitForm({
           }}
         >
           {(field) => (
-            <TextField
-              field={field}
-              id={`${idPrefix}area`}
-              label={
-                <span>
-                  Yta (m²) <span className="font-normal text-muted-foreground">(valfritt)</span>
-                </span>
-              }
+            <field.TextField
+              label={<Optional>Yta (m²)</Optional>}
               placeholder="72,5"
               inputMode="decimal"
             />
           )}
-        </form.Field>
+        </form.AppField>
         {error && <p className="text-destructive text-sm">{error.message}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className={
-                layout === 'wide'
-                  ? 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start'
-                  : 'h-11 w-full sm:h-10'
-              }
-            >
-              {submitLabel}
-            </Button>
-          )}
-        </form.Subscribe>
+        {!disabled && (
+          <form.AppForm>
+            <form.SubmitButton>{submitLabel}</form.SubmitButton>
+          </form.AppForm>
+        )}
       </fieldset>
     </form>
   )
@@ -151,8 +113,6 @@ export function useAddUnitDrawer(propertyId: string) {
     onClose: create.reset,
     form: ({ close }) => (
       <UnitForm
-        idPrefix="add-unit-"
-        layout="narrow"
         defaultValues={emptyUnit}
         submitLabel="Spara objekt"
         error={create.error}

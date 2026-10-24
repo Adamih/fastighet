@@ -1,8 +1,6 @@
-import { useForm } from '@tanstack/react-form'
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
+import { useAppForm } from '#/components/form'
 import { getSessionFn } from '#/features/auth/functions'
 import { authClient } from '#/lib/auth-client'
 
@@ -27,7 +25,7 @@ function OnboardingPage() {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: { name: '' },
     onSubmit: async ({ value }) => {
       setError(null)
@@ -60,22 +58,16 @@ function OnboardingPage() {
           void form.handleSubmit()
         }}
       >
-        <form.Field
+        <form.AppField
           name="name"
           validators={{ onSubmit: ({ value }) => (value.trim() ? undefined : 'Ange ett namn') }}
         >
-          {(field) => (
-            <TextField field={field} label="Företagsnamn" placeholder="Exempel Fastigheter AB" />
-          )}
-        </form.Field>
+          {(field) => <field.TextField label="Företagsnamn" placeholder="Exempel Fastigheter AB" />}
+        </form.AppField>
         {error && <p className="text-destructive text-sm">{error}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting}>
-              Fortsätt
-            </Button>
-          )}
-        </form.Subscribe>
+        <form.AppForm>
+          <form.SubmitButton className="sm:h-10 sm:w-full">Fortsätt</form.SubmitButton>
+        </form.AppForm>
       </form>
     </main>
   )

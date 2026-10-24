@@ -1,9 +1,4 @@
-import { useForm } from '@tanstack/react-form'
-import { optionsFrom, SelectField } from '#/components/select-field'
-import { FieldError, TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
-import { Label } from '#/components/ui/label'
-import { Switch } from '#/components/ui/switch'
+import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
 import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
 import { isIsoDate } from '#/lib/dates'
 import { oreToInput, parseSek } from '#/lib/money'
@@ -71,7 +66,7 @@ export function LeaseForm({
   error: Error | null
   disabled?: boolean
 }) {
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: {
       tenantId: defaultValues.tenantId,
       unitIds: defaultValues.unitIds,
@@ -86,8 +81,8 @@ export function LeaseForm({
       invoiceInterval: defaultValues.invoiceInterval,
       vat: defaultValues.vat,
     },
-    onSubmit: async ({ value }) => {
-      await onSubmit({
+    onSubmit: ({ value }) =>
+      onSubmit({
         tenantId: value.tenantId,
         unitIds: value.unitIds,
         startDate: value.startDate,
@@ -99,8 +94,7 @@ export function LeaseForm({
         rentInterval: value.rentInterval,
         invoiceInterval: value.invoiceInterval,
         vat: value.vat,
-      })
-    },
+      }),
   })
 
   return (
@@ -113,20 +107,19 @@ export function LeaseForm({
     >
       <fieldset disabled={disabled} className="grid gap-6">
         {tenants && (
-          <form.Field name="tenantId" validators={required('Välj en hyresgäst')}>
+          <form.AppField name="tenantId" validators={required('Välj en hyresgäst')}>
             {(field) => (
-              <SelectField
+              <field.SelectField
                 disabled={disabled}
-                field={field}
                 label="Hyresgäst"
                 placeholder="Välj hyresgäst"
                 options={tenants.map((t) => ({ value: t.id, label: t.name }))}
               />
             )}
-          </form.Field>
+          </form.AppField>
         )}
 
-        <form.Field
+        <form.AppField
           name="unitIds"
           validators={{
             onSubmit: ({ value }) => (value.length > 0 ? undefined : 'Välj minst ett objekt'),
@@ -157,45 +150,41 @@ export function LeaseForm({
                   </label>
                 ))}
               </div>
-              <FieldError field={field} />
+              <FieldError />
             </fieldset>
           )}
-        </form.Field>
+        </form.AppField>
 
         <section className="grid gap-4">
           <h2 className="font-medium">Avtalstid</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <form.Field name="startDate" validators={date}>
-              {(field) => <TextField field={field} label="Tillträde" type="date" />}
-            </form.Field>
-            <form.Field name="noticePeriodMonths" validators={wholeMonths}>
-              {(field) => <TextField field={field} label="Uppsägningstid (månader)" />}
-            </form.Field>
+            <form.AppField name="startDate" validators={date}>
+              {(field) => <field.TextField label="Tillträde" type="date" />}
+            </form.AppField>
+            <form.AppField name="noticePeriodMonths" validators={wholeMonths}>
+              {(field) => <field.TextField label="Uppsägningstid (månader)" inputMode="numeric" />}
+            </form.AppField>
           </div>
           <p className="text-muted-foreground text-sm">
             Bostäder har normalt 3 månaders uppsägningstid, lokaler 9 månader.
           </p>
-          <form.Field name="fixedTerm">
+          <form.AppField name="fixedTerm">
             {(field) => (
-              <div className="flex items-center gap-3">
-                <Switch
-                  disabled={disabled}
-                  id={field.name}
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(checked)}
-                />
-                <Label htmlFor={field.name}>Tidsbestämt avtal</Label>
-              </div>
+              <field.SwitchField
+                disabled={disabled}
+                label="Tidsbestämt avtal"
+                description="Avtalet har ett slutdatum och kan förlängas automatiskt."
+              />
             )}
-          </form.Field>
+          </form.AppField>
           <form.Subscribe selector={(s) => s.values.fixedTerm}>
             {(fixedTerm) =>
               fixedTerm && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <form.Field name="endDate" validators={date}>
-                    {(field) => <TextField field={field} label="Avtalet löper till" type="date" />}
-                  </form.Field>
-                  <form.Field
+                  <form.AppField name="endDate" validators={date}>
+                    {(field) => <field.TextField label="Avtalet löper till" type="date" />}
+                  </form.AppField>
+                  <form.AppField
                     name="extensionMonths"
                     validators={{
                       onSubmit: ({ value }) =>
@@ -205,13 +194,13 @@ export function LeaseForm({
                     }}
                   >
                     {(field) => (
-                      <TextField
-                        field={field}
-                        label="Förlängning (månader)"
+                      <field.TextField
+                        label={<Optional>Förlängning (månader)</Optional>}
                         placeholder="Tomt = ingen förlängning"
+                        inputMode="numeric"
                       />
                     )}
-                  </form.Field>
+                  </form.AppField>
                 </div>
               )
             }
@@ -221,63 +210,53 @@ export function LeaseForm({
         <section className="grid gap-4">
           <h2 className="font-medium">Hyra</h2>
           <div className="grid gap-4 sm:grid-cols-2">
-            <form.Field
+            <form.AppField
               name="rent"
               validators={{
                 onSubmit: ({ value }) =>
                   parseSek(value) === null ? 'Ange ett belopp, t.ex. 8 450' : undefined,
               }}
             >
-              {(field) => <TextField field={field} label="Belopp (kr)" placeholder="8 450" />}
-            </form.Field>
-            <form.Field name="rentInterval">
               {(field) => (
-                <SelectField
+                <field.TextField label="Belopp (kr)" placeholder="8 450" inputMode="decimal" />
+              )}
+            </form.AppField>
+            <form.AppField name="rentInterval">
+              {(field) => (
+                <field.SelectField
                   disabled={disabled}
-                  field={field}
                   label="Avser"
                   options={optionsFrom(rentIntervalLabels)}
                 />
               )}
-            </form.Field>
-            <form.Field name="invoiceInterval">
+            </form.AppField>
+            <form.AppField name="invoiceInterval">
               {(field) => (
-                <SelectField
+                <field.SelectField
                   disabled={disabled}
-                  field={field}
                   label="Avisering"
                   options={optionsFrom(invoiceIntervalLabels)}
                 />
               )}
-            </form.Field>
+            </form.AppField>
           </div>
-          <form.Field name="vat">
+          <form.AppField name="vat">
             {(field) => (
-              <div className="flex items-center gap-3">
-                <Switch
-                  disabled={disabled}
-                  id={field.name}
-                  checked={field.state.value}
-                  onCheckedChange={(checked) => field.handleChange(checked)}
-                />
-                <Label htmlFor={field.name}>Momspliktig uthyrning (25 % moms på hyran)</Label>
-              </div>
+              <field.SwitchField
+                disabled={disabled}
+                label="Momspliktig uthyrning"
+                description="25 % moms läggs på hyran."
+              />
             )}
-          </form.Field>
+          </form.AppField>
         </section>
 
         {error && <p className="text-destructive text-sm">{error.message}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start"
-            >
-              {submitLabel}
-            </Button>
-          )}
-        </form.Subscribe>
+        {!disabled && (
+          <form.AppForm>
+            <form.SubmitButton>{submitLabel}</form.SubmitButton>
+          </form.AppForm>
+        )}
       </fieldset>
     </form>
   )

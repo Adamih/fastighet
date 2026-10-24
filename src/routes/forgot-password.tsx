@@ -1,8 +1,6 @@
-import { useForm } from '@tanstack/react-form'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
+import { useAppForm } from '#/components/form'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 
@@ -12,7 +10,7 @@ function ForgotPasswordPage() {
   const [sentTo, setSentTo] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: { email: '' },
     onSubmit: async ({ value }) => {
       setError(null)
@@ -46,24 +44,18 @@ function ForgotPasswordPage() {
           <p className="text-muted-foreground text-sm">
             Ange din e-postadress så skickar vi en länk för att välja ett nytt lösenord.
           </p>
-          <form.Field
+          <form.AppField
             name="email"
             validators={{
               onSubmit: ({ value }) => (value.includes('@') ? undefined : 'Ange din e-postadress'),
             }}
           >
-            {(field) => (
-              <TextField field={field} label="E-post" type="email" autoComplete="email" />
-            )}
-          </form.Field>
+            {(field) => <field.TextField label="E-post" type="email" autoComplete="email" />}
+          </form.AppField>
           {error && <p className="text-destructive text-sm">{error}</p>}
-          <form.Subscribe selector={(s) => s.isSubmitting}>
-            {(isSubmitting) => (
-              <Button type="submit" disabled={isSubmitting}>
-                Skicka länk
-              </Button>
-            )}
-          </form.Subscribe>
+          <form.AppForm>
+            <form.SubmitButton className="sm:h-10 sm:w-full">Skicka länk</form.SubmitButton>
+          </form.AppForm>
         </form>
       )}
       <Link to="/login" className="text-muted-foreground text-sm underline">

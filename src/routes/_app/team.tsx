@@ -1,12 +1,10 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useAppForm } from '#/components/form'
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { PageHeader } from '#/components/responsive'
-import { SegmentedControl } from '#/components/segmented-control'
-import { TextField } from '#/components/text-field'
 import { Button } from '#/components/ui/button'
 import {
   Select,
@@ -298,7 +296,7 @@ function InviteForm() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }),
   })
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: { email: '', role: 'member' as InvitableRole },
     onSubmit: async ({ value, formApi }) => {
       await invite.mutateAsync({ email: value.email.trim(), role: value.role })
@@ -322,7 +320,7 @@ function InviteForm() {
         }}
       >
         <div className="grid gap-4">
-          <form.Field
+          <form.AppField
             name="email"
             validators={{
               onSubmit: ({ value }) =>
@@ -332,44 +330,31 @@ function InviteForm() {
             }}
           >
             {(field) => (
-              <TextField
-                field={field}
-                id="invite-email"
+              <field.TextField
                 label="E-post"
                 type="email"
                 autoComplete="off"
                 placeholder="namn@foretag.se"
               />
             )}
-          </form.Field>
-          <form.Field name="role">
+          </form.AppField>
+          <form.AppField name="role">
             {(field) => (
-              <div className="grid gap-1.5">
-                <span aria-hidden="true" className="font-medium text-sm">
-                  Roll
-                </span>
-                <SegmentedControl
-                  label="Roll"
-                  name="invite-role"
-                  value={field.state.value}
-                  options={invitableRoles.map((r) => ({ value: r, label: roleLabels[r] }))}
-                  onChange={(role) => field.handleChange(role)}
-                />
-              </div>
+              <field.SegmentedField
+                label="Roll"
+                showLabel
+                options={invitableRoles.map((r) => ({ value: r, label: roleLabels[r] }))}
+              />
             )}
-          </form.Field>
+          </form.AppField>
         </div>
         <p className="rounded-lg bg-muted px-3.5 py-3 text-[13px] text-muted-foreground leading-relaxed">
           Administratörer kan också bjuda in och ta bort användare.
         </p>
         {invite.error && <p className="text-destructive text-sm">{invite.error.message}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting} className="h-11 w-full md:h-10">
-              Skicka inbjudan
-            </Button>
-          )}
-        </form.Subscribe>
+        <form.AppForm>
+          <form.SubmitButton className="sm:w-full md:h-10">Skicka inbjudan</form.SubmitButton>
+        </form.AppForm>
       </form>
     </section>
   )

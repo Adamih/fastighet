@@ -1,9 +1,7 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
-import { useFormDrawer } from '#/components/form-drawer'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
+import { Optional, useAppForm } from '#/components/form'
+import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { createPropertyFn, propertiesQuery } from './functions'
 import { type CreatePropertyInput, CreatePropertyInput as PropertySchema } from './schemas'
 
@@ -17,36 +15,25 @@ export const emptyProperty: CreatePropertyInput = {
   city: '',
 }
 
-/** Shared by "Lägg till fastighet" and the edit page. */
+/** Shared by "Lägg till fastighet" (in a drawer) and the edit page. */
 export function PropertyForm({
   defaultValues,
   submitLabel,
   onSubmit,
   error,
   disabled = false,
-  resetAfterSubmit = false,
-  idPrefix = '',
-  layout = 'wide',
 }: {
   defaultValues: CreatePropertyInput
   submitLabel: string
   onSubmit: (value: CreatePropertyInput) => Promise<unknown>
   error: Error | null
   disabled?: boolean
-  resetAfterSubmit?: boolean
-  /** Keeps ids unique when the form can be on the page twice (card and phone drawer). */
-  idPrefix?: string
-  /** `narrow` stacks every field, for drawers. */
-  layout?: 'wide' | 'narrow'
 }) {
-  const id = (name: string) => `${idPrefix}${name}`
-  const form = useForm({
+  const inDrawer = useFormDrawerContext() !== null
+  const form = useAppForm({
     defaultValues,
     validators: { onSubmit: validator },
-    onSubmit: async ({ value, formApi }) => {
-      await onSubmit(value)
-      if (resetAfterSubmit) formApi.reset()
-    },
+    onSubmit: ({ value }) => onSubmit(value),
   })
 
   return (
@@ -58,76 +45,37 @@ export function PropertyForm({
       }}
     >
       <fieldset disabled={disabled} className="grid gap-4">
-        <div className={layout === 'wide' ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4'}>
-          <form.Field name="designation">
+        <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
+          <form.AppField name="designation">
             {(field) => (
-              <TextField
-                field={field}
-                id={id('designation')}
-                label="Fastighetsbeteckning"
-                placeholder="Uppsala Kungsängen 12:3"
-              />
+              <field.TextField label="Fastighetsbeteckning" placeholder="Uppsala Kungsängen 12:3" />
             )}
-          </form.Field>
-          <form.Field name="name">
+          </form.AppField>
+          <form.AppField name="name">
             {(field) => (
-              <TextField
-                field={field}
-                id={id('name')}
-                label={
-                  <span>
-                    Namn <span className="font-normal text-muted-foreground">(valfritt)</span>
-                  </span>
-                }
-                placeholder="Kv. Lärkan"
-              />
+              <field.TextField label={<Optional>Namn</Optional>} placeholder="Kv. Lärkan" />
             )}
-          </form.Field>
+          </form.AppField>
         </div>
-        <form.Field name="streetAddress">
-          {(field) => (
-            <TextField
-              field={field}
-              id={id('streetAddress')}
-              label="Gatuadress"
-              autoComplete="street-address"
-            />
-          )}
-        </form.Field>
+        <form.AppField name="streetAddress">
+          {(field) => <field.TextField label="Gatuadress" autoComplete="street-address" />}
+        </form.AppField>
         <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
-          <form.Field name="postalCode">
+          <form.AppField name="postalCode">
             {(field) => (
-              <TextField
-                field={field}
-                id={id('postalCode')}
-                label="Postnummer"
-                inputMode="numeric"
-                autoComplete="postal-code"
-              />
+              <field.TextField label="Postnummer" inputMode="numeric" autoComplete="postal-code" />
             )}
-          </form.Field>
-          <form.Field name="city">
-            {(field) => (
-              <TextField field={field} id={id('city')} label="Ort" autoComplete="address-level2" />
-            )}
-          </form.Field>
+          </form.AppField>
+          <form.AppField name="city">
+            {(field) => <field.TextField label="Ort" autoComplete="address-level2" />}
+          </form.AppField>
         </div>
         {error && <p className="text-destructive text-sm">{error.message}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className={
-                layout === 'wide'
-                  ? 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start'
-                  : 'h-11 w-full sm:h-10'
-              }
-            >
-              {submitLabel}
-            </Button>
-          )}
-        </form.Subscribe>
+        {!disabled && (
+          <form.AppForm>
+            <form.SubmitButton>{submitLabel}</form.SubmitButton>
+          </form.AppForm>
+        )}
       </fieldset>
     </form>
   )
@@ -146,8 +94,6 @@ export function useAddPropertyDrawer() {
     onClose: create.reset,
     form: ({ close }) => (
       <PropertyForm
-        idPrefix="add-property-"
-        layout="narrow"
         defaultValues={emptyProperty}
         submitLabel="Spara fastighet"
         error={create.error}

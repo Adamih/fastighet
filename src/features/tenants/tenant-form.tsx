@@ -1,10 +1,7 @@
-import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
+import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer } from '#/components/form-drawer'
-import { SegmentedControl } from '#/components/segmented-control'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
 import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
 import { createTenantFn, tenantQuery, tenantsQuery, updateTenantFn } from './functions'
 import { type CreateTenantInput, CreateTenantInput as TenantSchema } from './schemas'
@@ -43,37 +40,22 @@ export const tenantToInput = (t: {
   city: t.city ?? '',
 })
 
-/** Shared by "Lägg till hyresgäst" and the tenant page. */
+/** Used for both "Lägg till hyresgäst" and "Redigera uppgifter", each in a drawer. */
 export function TenantForm({
   defaultValues,
   submitLabel,
   onSubmit,
   error,
-  disabled = false,
-  resetAfterSubmit = false,
-  idPrefix = '',
-  layout = 'wide',
 }: {
   defaultValues: CreateTenantInput
   submitLabel: string
   onSubmit: (value: CreateTenantInput) => Promise<unknown>
   error: Error | null
-  disabled?: boolean
-  resetAfterSubmit?: boolean
-  /** Keeps ids unique when the form can be on the page twice (side panel and phone sheet). */
-  idPrefix?: string
-  /** `narrow` stacks every field, for side panels and sheets. */
-  layout?: 'wide' | 'narrow'
 }) {
-  const pair = layout === 'wide' ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4'
-  const id = (name: string) => `${idPrefix}${name}`
-  const form = useForm({
+  const form = useAppForm({
     defaultValues,
     validators: { onSubmit: validator },
-    onSubmit: async ({ value, formApi }) => {
-      await onSubmit(value)
-      if (resetAfterSubmit) formApi.reset()
-    },
+    onSubmit: ({ value }) => onSubmit(value),
   })
 
   return (
@@ -81,132 +63,82 @@ export function TenantForm({
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
-        if (!disabled) void form.handleSubmit()
+        void form.handleSubmit()
       }}
     >
-      <fieldset disabled={disabled} className="grid gap-4">
-        <form.Field name="kind">
-          {(field) => (
-            <SegmentedControl
-              label="Typ av hyresgäst"
-              name={id('kind')}
-              disabled={disabled}
-              value={field.state.value}
-              options={tenantKinds.map((k) => ({ value: k, label: tenantKindLabels[k] }))}
-              onChange={(kind) => field.handleChange(kind)}
-            />
-          )}
-        </form.Field>
-        <form.Subscribe selector={(s) => s.values.kind}>
-          {(kind) => (
-            <div className={pair}>
-              <form.Field name="name">
+      <form.AppField name="kind">
+        {(field) => (
+          <field.SegmentedField
+            label="Typ av hyresgäst"
+            options={tenantKinds.map((k) => ({ value: k, label: tenantKindLabels[k] }))}
+          />
+        )}
+      </form.AppField>
+      <form.Subscribe selector={(s) => s.values.kind}>
+        {(kind) => (
+          <>
+            <form.AppField name="name">
+              {(field) => (
+                <field.TextField
+                  label={kind === 'company' ? 'Företagsnamn' : 'Namn'}
+                  autoComplete={kind === 'company' ? 'organization' : 'name'}
+                  placeholder={kind === 'company' ? undefined : 'För- och efternamn'}
+                />
+              )}
+            </form.AppField>
+            {kind === 'company' && (
+              <form.AppField name="organizationNumber">
                 {(field) => (
-                  <TextField
-                    field={field}
-                    id={id('name')}
-                    label={kind === 'company' ? 'Företagsnamn' : 'Namn'}
-                    autoComplete={kind === 'company' ? 'organization' : 'name'}
-                    placeholder={kind === 'company' ? undefined : 'För- och efternamn'}
+                  <field.TextField
+                    label="Organisationsnummer"
+                    placeholder="556677-8899"
+                    inputMode="numeric"
+                    hint="10 siffror, med eller utan bindestreck"
                   />
                 )}
-              </form.Field>
-              {kind === 'company' && (
-                <form.Field name="organizationNumber">
-                  {(field) => (
-                    <TextField
-                      field={field}
-                      id={id('organizationNumber')}
-                      label="Organisationsnummer"
-                      placeholder="556677-8899"
-                      inputMode="numeric"
-                      hint="10 siffror, med eller utan bindestreck"
-                    />
-                  )}
-                </form.Field>
-              )}
-            </div>
-          )}
-        </form.Subscribe>
-        <div className={pair}>
-          <form.Field name="email">
-            {(field) => (
-              <TextField
-                field={field}
-                id={id('email')}
-                label="E-post"
-                type="email"
-                autoComplete="email"
-                hint="Avier skickas hit. Utan e-post kan avier inte mejlas."
-              />
+              </form.AppField>
             )}
-          </form.Field>
-          <form.Field name="phone">
-            {(field) => (
-              <TextField
-                field={field}
-                id={id('phone')}
-                label={<Optional>Telefon</Optional>}
-                type="tel"
-                autoComplete="tel"
-              />
-            )}
-          </form.Field>
-        </div>
-        <form.Field name="streetAddress">
+          </>
+        )}
+      </form.Subscribe>
+      <form.AppField name="email">
+        {(field) => (
+          <field.TextField
+            label="E-post"
+            type="email"
+            autoComplete="email"
+            hint="Avier skickas hit. Utan e-post kan avier inte mejlas."
+          />
+        )}
+      </form.AppField>
+      <form.AppField name="phone">
+        {(field) => (
+          <field.TextField label={<Optional>Telefon</Optional>} type="tel" autoComplete="tel" />
+        )}
+      </form.AppField>
+      <form.AppField name="streetAddress">
+        {(field) => (
+          <field.TextField
+            label={<Optional>Fakturaadress</Optional>}
+            autoComplete="street-address"
+          />
+        )}
+      </form.AppField>
+      <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
+        <form.AppField name="postalCode">
           {(field) => (
-            <TextField
-              field={field}
-              id={id('streetAddress')}
-              label={<Optional>Fakturaadress</Optional>}
-              autoComplete="street-address"
-            />
+            <field.TextField label="Postnummer" inputMode="numeric" autoComplete="postal-code" />
           )}
-        </form.Field>
-        <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
-          <form.Field name="postalCode">
-            {(field) => (
-              <TextField
-                field={field}
-                id={id('postalCode')}
-                label="Postnummer"
-                inputMode="numeric"
-                autoComplete="postal-code"
-              />
-            )}
-          </form.Field>
-          <form.Field name="city">
-            {(field) => (
-              <TextField field={field} id={id('city')} label="Ort" autoComplete="address-level2" />
-            )}
-          </form.Field>
-        </div>
-        {error && <p className="text-destructive text-sm">{error.message}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className={
-                layout === 'wide'
-                  ? 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start'
-                  : 'h-11 w-full sm:h-10'
-              }
-            >
-              {submitLabel}
-            </Button>
-          )}
-        </form.Subscribe>
-      </fieldset>
+        </form.AppField>
+        <form.AppField name="city">
+          {(field) => <field.TextField label="Ort" autoComplete="address-level2" />}
+        </form.AppField>
+      </div>
+      {error && <p className="text-destructive text-sm">{error.message}</p>}
+      <form.AppForm>
+        <form.SubmitButton>{submitLabel}</form.SubmitButton>
+      </form.AppForm>
     </form>
-  )
-}
-
-function Optional({ children }: { children: string }) {
-  return (
-    <span>
-      {children} <span className="font-normal text-muted-foreground">(valfritt)</span>
-    </span>
   )
 }
 
@@ -223,8 +155,6 @@ export function useAddTenantDrawer() {
     onClose: create.reset,
     form: ({ close }) => (
       <TenantForm
-        idPrefix="add-tenant-"
-        layout="narrow"
         defaultValues={emptyTenant}
         submitLabel="Spara hyresgäst"
         error={create.error}
@@ -255,8 +185,6 @@ export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] 
     onClose: update.reset,
     form: ({ close }) => (
       <TenantForm
-        idPrefix="edit-tenant-"
-        layout="narrow"
         defaultValues={tenantToInput(tenant)}
         submitLabel="Spara ändringar"
         error={update.error}

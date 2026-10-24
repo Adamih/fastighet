@@ -1,8 +1,6 @@
-import { useForm } from '@tanstack/react-form'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
-import { TextField } from '#/components/text-field'
-import { Button } from '#/components/ui/button'
+import { useAppForm } from '#/components/form'
 import { getSessionFn } from '#/features/auth/functions'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage, safeRedirect } from '#/lib/auth-errors'
@@ -22,7 +20,7 @@ function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [verificationSentTo, setVerificationSentTo] = useState<string | null>(null)
 
-  const form = useForm({
+  const form = useAppForm({
     defaultValues: { name: '', email: '', password: '' },
     onSubmit: async ({ value }) => {
       setError(null)
@@ -81,31 +79,28 @@ function LoginPage() {
         }}
       >
         {mode === 'signUp' && (
-          <form.Field name="name">
-            {(field) => <TextField field={field} label="Namn" autoComplete="name" />}
-          </form.Field>
+          <form.AppField name="name">
+            {(field) => <field.TextField label="Namn" autoComplete="name" />}
+          </form.AppField>
         )}
-        <form.Field name="email">
-          {(field) => <TextField field={field} label="E-post" type="email" autoComplete="email" />}
-        </form.Field>
-        <form.Field name="password">
+        <form.AppField name="email">
+          {(field) => <field.TextField label="E-post" type="email" autoComplete="email" />}
+        </form.AppField>
+        <form.AppField name="password">
           {(field) => (
-            <TextField
-              field={field}
+            <field.TextField
               label="Lösenord"
               type="password"
               autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
             />
           )}
-        </form.Field>
+        </form.AppField>
         {error && <p className="text-destructive text-sm">{error}</p>}
-        <form.Subscribe selector={(s) => s.isSubmitting}>
-          {(isSubmitting) => (
-            <Button type="submit" disabled={isSubmitting}>
-              {mode === 'signIn' ? 'Logga in' : 'Skapa konto'}
-            </Button>
-          )}
-        </form.Subscribe>
+        <form.AppForm>
+          <form.SubmitButton className="sm:h-10 sm:w-full">
+            {mode === 'signIn' ? 'Logga in' : 'Skapa konto'}
+          </form.SubmitButton>
+        </form.AppForm>
       </form>
       <div className="flex justify-between text-sm">
         <button
