@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useState,
 } from 'react'
@@ -15,6 +16,8 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 interface FormDrawerContextValue {
+  formId: string
+  footer: HTMLDivElement | null
   /** Called by the form's submit button whenever its state changes. */
   report: (state: { changed: boolean; submitting: boolean }) => void
 }
@@ -23,6 +26,34 @@ const FormDrawerContext = createContext<FormDrawerContextValue | null>(null)
 
 /** The surrounding `FormDrawer`, or null when the form is on a page. */
 export const useFormDrawerContext = () => useContext(FormDrawerContext)
+
+interface DrawerHostValue {
+  update: (id: string, drawer: ReactNode, open: boolean) => void
+  remove: (id: string) => void
+}
+
+const DrawerHostContext = createContext<DrawerHostValue | null>(null)
+
+/** The app layout owns the drawer; feature hooks only open and update it. */
+export function FormDrawerProvider({ children }: { children: ReactNode }) {
+  const [active, setActive] = useState<{ id: string; drawer: ReactNode } | null>(null)
+  const host = useMemo<DrawerHostValue>(
+    () => ({
+      update: (id, drawer, open) => {
+        setActive((current) => (open || current?.id === id ? { id, drawer } : current))
+      },
+      remove: (id) => setActive((current) => (current?.id === id ? null : current)),
+    }),
+    [],
+  )
+
+  return (
+    <DrawerHostContext.Provider value={host}>
+      {children}
+      {active?.drawer}
+    </DrawerHostContext.Provider>
+  )
+}
 
 /**
  * A form in a drawer: from the bottom on phones, from the right on larger screens. For
@@ -46,6 +77,8 @@ export function FormDrawer({
   children: ReactNode
 }) {
   const mobile = useIsMobile()
+  const formId = useId()
+  const [footer, setFooter] = useState<HTMLDivElement | null>(null)
   const [changed, setChanged] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -61,13 +94,15 @@ export function FormDrawer({
 
   const context = useMemo<FormDrawerContextValue>(
     () => ({
+      formId,
+      footer,
       report: (state) => {
         setChanged(state.changed)
         setSubmitting(state.submitting)
         if (!state.changed) setConfirming(false)
       },
     }),
-    [],
+    [formId, footer],
   )
 
   const requestClose = () => {
@@ -99,11 +134,12 @@ export function FormDrawer({
         onEscapeKeyDown={guard}
         onPointerDownOutside={guard}
         className={cn(
+          'overflow-hidden',
           'data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-3rem)] data-[vaul-drawer-direction=bottom]:rounded-t-2xl',
           'data-[vaul-drawer-direction=right]:w-full data-[vaul-drawer-direction=right]:sm:max-w-md',
         )}
       >
-        <div className="mt-2 flex items-center justify-between gap-3 border-b py-2 pr-2 pl-5">
+        <div className="mt-2 flex shrink-0 items-center justify-between gap-3 border-b py-2 pr-2 pl-5">
           <DrawerTitle className="font-bold text-lg">{title}</DrawerTitle>
           <Button
             variant="ghost"
@@ -119,7 +155,7 @@ export function FormDrawer({
           <div
             role="alertdialog"
             aria-label={m.form_unsaved_label()}
-            className="grid gap-2.5 border-b bg-amber-50 px-5 py-3 text-amber-900 text-sm dark:bg-amber-950 dark:text-amber-100"
+            className="grid shrink-0 gap-2.5 border-b bg-amber-50 px-5 py-3 text-amber-900 text-sm dark:bg-amber-950 dark:text-amber-100"
           >
             <span>{m.form_unsaved_question()}</span>
             <div className="flex gap-2">
@@ -136,21 +172,27 @@ export function FormDrawer({
             </div>
           </div>
         )}
-        <DrawerDescription className={description ? 'px-5 pt-4 text-[13px]' : 'sr-only'}>
+        <DrawerDescription className={description ? 'shrink-0 px-5 pt-4 text-[13px]' : 'sr-only'}>
           {description ?? title}
         </DrawerDescription>
-        <div className="overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-          <FormDrawerContext.Provider value={context}>{children}</FormDrawerContext.Provider>
-        </div>
+        <FormDrawerContext.Provider value={context}>
+          <div data-slot="form-drawer-body" className="min-h-0 flex-1 overflow-y-auto p-5">
+            {children}
+          </div>
+          <div
+            ref={setFooter}
+            data-slot="form-drawer-footer"
+            className="shrink-0 border-t bg-background px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] empty:hidden"
+          />
+        </FormDrawerContext.Provider>
       </DrawerContent>
     </Drawer>
   )
 }
 
 /**
- * Owns a `FormDrawer`'s open state. Returns `open` for any button's `onClick` and the `drawer`
- * element, which the page renders once. Features define these hooks next to their forms (e.g.
- * `useAddTenantDrawer` in `tenant-form.tsx`), so pages only place a button and the drawer.
+ * Owns a feature's drawer state and registers it with the app layout. Features define these
+ * hooks next to their forms; pages only wire a button to `open`.
  */
 export function useFormDrawer({
   title,
@@ -165,6 +207,9 @@ export function useFormDrawer({
   /** Runs whenever the drawer closes, e.g. to clear a mutation's error for next time. */
   onClose?: () => void
 }) {
+  const host = useContext(DrawerHostContext)
+  if (!host) throw new Error('useFormDrawer requires FormDrawerProvider in the app layout')
+  const id = useId()
   const [isOpen, setIsOpen] = useState(false)
   const setOpen = useCallback(
     (next: boolean) => {
@@ -175,10 +220,22 @@ export function useFormDrawer({
   )
   const open = useCallback(() => setOpen(true), [setOpen])
   const close = useCallback(() => setOpen(false), [setOpen])
-  const drawer = (
-    <FormDrawer open={isOpen} onOpenChange={setOpen} title={title} description={description}>
-      {form({ close })}
-    </FormDrawer>
-  )
-  return { open, close, isOpen, drawer }
+  useEffect(() => {
+    host.update(
+      id,
+      <FormDrawer
+        key={id}
+        open={isOpen}
+        onOpenChange={setOpen}
+        title={title}
+        description={description}
+      >
+        {form({ close })}
+      </FormDrawer>,
+      isOpen,
+    )
+  }, [host, id, isOpen, setOpen, title, description, form, close])
+  useEffect(() => () => host.remove(id), [host, id])
+
+  return { open, close, isOpen }
 }

@@ -57,7 +57,6 @@ function TenantsPage() {
           )}
         </div>
       </header>
-      {canManage && addTenant.drawer}
 
       <div className="grid items-start gap-6">
         {tenants.length === 0 ? (

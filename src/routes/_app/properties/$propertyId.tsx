@@ -66,8 +66,6 @@ function PropertyPage() {
         }
       />
 
-      {canManage && addUnit.drawer}
-
       <StatRow>
         <StatCard label={m.lease_form_units()}>{summary.units}</StatCard>
         {canReadLeases ? (

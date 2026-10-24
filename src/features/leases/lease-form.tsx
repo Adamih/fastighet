@@ -1,8 +1,16 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
+import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { useCan } from '#/features/auth/use-can'
+import { unitsQuery } from '#/features/properties/functions'
 import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
+import { tenantsQuery } from '#/features/tenants/functions'
 import { isIsoDate } from '#/lib/dates'
 import { oreToInput, parseSek } from '#/lib/money'
+import { rich } from '#/lib/rich'
 import { m } from '#/paraglide/messages'
+import { createLeaseFn, leasesQuery } from './functions'
 import {
   type InvoiceInterval,
   invoiceIntervalLabels,
@@ -49,7 +57,7 @@ const wholeMonths = {
     /^\d+$/.test(value.trim()) ? undefined : m.lease_form_months_required(),
 }
 
-/** Shared by "Nytt avtal" (with tenant picker) and the lease edit page (tenant fixed). */
+/** Shared by "Nytt avtal" (in a drawer, with tenant picker) and the lease edit page (tenant fixed). */
 export function LeaseForm({
   tenants,
   units,
@@ -68,6 +76,8 @@ export function LeaseForm({
   error: Error | null
   disabled?: boolean
 }) {
+  const drawer = useFormDrawerContext()
+  const inDrawer = drawer !== null
   const form = useAppForm({
     defaultValues: {
       tenantId: defaultValues.tenantId,
@@ -101,6 +111,7 @@ export function LeaseForm({
 
   return (
     <form
+      id={drawer?.formId}
       className="grid gap-6"
       onSubmit={(e) => {
         e.preventDefault()
@@ -159,7 +170,7 @@ export function LeaseForm({
 
         <section className="grid gap-4">
           <h2 className="font-medium">{m.lease_form_term()}</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
             <form.AppField name="startDate" validators={date}>
               {(field) => <field.TextField label={m.lease_form_start()} type="date" />}
             </form.AppField>
@@ -182,7 +193,7 @@ export function LeaseForm({
           <form.Subscribe selector={(s) => s.values.fixedTerm}>
             {(fixedTerm) =>
               fixedTerm && (
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
                   <form.AppField name="endDate" validators={date}>
                     {(field) => <field.TextField label={m.lease_form_end()} type="date" />}
                   </form.AppField>
@@ -211,7 +222,7 @@ export function LeaseForm({
 
         <section className="grid gap-4">
           <h2 className="font-medium">{m.lease_form_rent_section()}</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className={inDrawer ? 'grid gap-4' : 'grid gap-4 sm:grid-cols-2'}>
             <form.AppField
               name="rent"
               validators={{
@@ -266,4 +277,66 @@ export function LeaseForm({
       </fieldset>
     </form>
   )
+}
+
+/** "Nytt avtal" on the lease list or a unit's page. */
+export function useAddLeaseDrawer(unitId?: string) {
+  const queryClient = useQueryClient()
+  const canCreate = useCan()({ lease: ['manage'], tenant: ['read'], property: ['read'] })
+  const tenants = useQuery({ ...tenantsQuery(), enabled: canCreate })
+  const units = useQuery({ ...unitsQuery(), enabled: canCreate })
+  const create = useMutation({
+    mutationFn: createLeaseFn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: leasesQuery().queryKey })
+      await queryClient.invalidateQueries({ queryKey: ['properties'] })
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      await queryClient.invalidateQueries({ queryKey: ['units'] })
+    },
+  })
+  return useFormDrawer({
+    title: m.lease_new(),
+    onClose: create.reset,
+    form: ({ close }) => {
+      const error = tenants.error ?? units.error
+      if (error) return <p className="text-destructive text-sm">{error.message}</p>
+      if (!tenants.data || !units.data) {
+        return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
+      }
+      if (tenants.data.length === 0 || units.data.length === 0) {
+        return (
+          <p className="text-muted-foreground text-sm">
+            {rich(
+              (link) => m.lease_new_missing({ link }),
+              tenants.data.length === 0 ? (
+                <Link to="/tenants" className="underline">
+                  {m.lease_new_add_tenant()}
+                </Link>
+              ) : (
+                <Link to="/" className="underline">
+                  {m.lease_new_add_unit()}
+                </Link>
+              ),
+            )}
+          </p>
+        )
+      }
+      return (
+        <LeaseForm
+          tenants={tenants.data}
+          units={units.data}
+          defaultValues={{
+            ...emptyLease,
+            unitIds: unitId && units.data.some((u) => u.id === unitId) ? [unitId] : [],
+          }}
+          submitLabel={m.lease_create()}
+          error={create.error}
+          onSubmit={async (value) => {
+            await create.mutateAsync({ data: value })
+            close()
+          }}
+        />
+      )
+    },
+  })
 }

@@ -30,7 +30,8 @@ export function PropertyForm({
   error: Error | null
   disabled?: boolean
 }) {
-  const inDrawer = useFormDrawerContext() !== null
+  const drawer = useFormDrawerContext()
+  const inDrawer = drawer !== null
   const form = useAppForm({
     defaultValues,
     validators: { onSubmit: validator },
@@ -39,6 +40,7 @@ export function PropertyForm({
 
   return (
     <form
+      id={drawer?.formId}
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()

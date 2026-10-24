@@ -1,5 +1,6 @@
 import { createFormHook, createFormHookContexts, useStore } from '@tanstack/react-form'
-import { type HTMLAttributes, type ReactNode, useEffect, useId } from 'react'
+import { type HTMLAttributes, type ReactNode, useId, useLayoutEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useFormDrawerContext } from '#/components/form-drawer'
 import { SegmentedControl } from '#/components/segmented-control'
 import { Button } from '#/components/ui/button'
@@ -111,7 +112,7 @@ function SelectField({
       <Label htmlFor={id}>{label}</Label>
       <Select
         disabled={disabled}
-        value={field.state.value || undefined}
+        value={field.state.value}
         onValueChange={(v) => field.handleChange(v)}
       >
         <SelectTrigger
@@ -204,16 +205,18 @@ function SubmitButton({
   children,
   variant,
   className,
+  disabled = false,
 }: {
   children: ReactNode
   variant?: 'default' | 'destructive'
   className?: string
+  disabled?: boolean
 }) {
   const form = useFormContext()
   const drawer = useFormDrawerContext()
   const isSubmitting = useStore(form.store, (s) => s.isSubmitting)
   const changed = useStore(form.store, (s) => !s.isDefaultValue)
-  useEffect(
+  useLayoutEffect(
     () => drawer?.report({ changed, submitting: isSubmitting }),
     [drawer, changed, isSubmitting],
   )
@@ -221,8 +224,9 @@ function SubmitButton({
   const button = (
     <Button
       type="submit"
+      form={drawer?.formId}
       variant={variant}
-      disabled={isSubmitting}
+      disabled={disabled || isSubmitting}
       className={cn(
         drawer ? 'h-11 w-full sm:h-10' : 'h-11 w-full sm:h-9 sm:w-auto sm:justify-self-start',
         className,
@@ -232,11 +236,7 @@ function SubmitButton({
     </Button>
   )
   if (!drawer) return button
-  return (
-    <div className="sticky bottom-0 -mx-5 -mb-5 border-t bg-background px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-      {button}
-    </div>
-  )
+  return drawer.footer ? createPortal(button, drawer.footer) : null
 }
 
 export const { useAppForm, withForm } = createFormHook({

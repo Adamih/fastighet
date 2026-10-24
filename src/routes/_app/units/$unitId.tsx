@@ -13,6 +13,7 @@ import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
+import { useAddLeaseDrawer } from '#/features/leases/lease-form'
 import { formatShortDate, monthlyRentOre, unitLabel } from '#/features/leases/overview'
 import { effectiveEndDate } from '#/features/leases/terms'
 import { type UnitState, unitAvailability } from '#/features/properties/availability'
@@ -56,6 +57,8 @@ function UnitPage() {
   const { unitId } = Route.useParams()
   const can = useCan()
   const canReadLeases = can({ lease: ['read'] })
+  const canCreateLease = can({ lease: ['manage'], tenant: ['read'], property: ['read'] })
+  const addLease = useAddLeaseDrawer(unitId)
   const { data: unit } = useSuspenseQuery(unitDetailQuery(unitId))
   const today = stockholmDate(Date.now())
   const availability = unitAvailability(unit.leases, today)
@@ -102,15 +105,12 @@ function UnitPage() {
                 </Link>
               </Button>
             )}
-            {can({ lease: ['manage'], tenant: ['read'], property: ['read'] }) &&
-              availability.freeFrom && (
-                <Button className="flex-1 sm:flex-none" asChild>
-                  <Link to="/leases/new" search={{ unitId }}>
-                    <Plus aria-hidden="true" />
-                    {m.lease_new()}
-                  </Link>
-                </Button>
-              )}
+            {canCreateLease && availability.freeFrom && (
+              <Button className="flex-1 sm:flex-none" onClick={addLease.open}>
+                <Plus aria-hidden="true" />
+                {m.lease_new()}
+              </Button>
+            )}
           </>
         }
       />

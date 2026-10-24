@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Optional, useAppForm } from '#/components/form'
-import { useFormDrawer } from '#/components/form-drawer'
+import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
 import { m } from '#/paraglide/messages'
 import { leasesQuery, terminateLeaseFn } from './functions'
@@ -23,6 +23,7 @@ export function TerminateForm({
   onSubmit: (value: TerminateValues) => Promise<unknown>
   error: Error | null
 }) {
+  const drawer = useFormDrawerContext()
   const form = useAppForm({
     defaultValues: { noticeDate: stockholmDate(Date.now()), moveOutDate: '' },
     onSubmit: ({ value }) => onSubmit(value),
@@ -30,6 +31,7 @@ export function TerminateForm({
 
   return (
     <form
+      id={drawer?.formId}
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()

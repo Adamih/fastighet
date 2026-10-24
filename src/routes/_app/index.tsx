@@ -40,7 +40,7 @@ function PropertiesPage() {
           )
         }
       />
-      {canManage && addProperty.drawer}
+
       {properties.length === 0 ? (
         <p className="text-muted-foreground">{m.property_list_empty()}</p>
       ) : (

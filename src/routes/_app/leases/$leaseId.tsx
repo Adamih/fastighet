@@ -280,8 +280,6 @@ function LeasePage() {
           </>
         }
       />
-
-      {canManage && terminate.drawer}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Optional, optionsFrom, useAppForm } from '#/components/form'
-import { useFormDrawer } from '#/components/form-drawer'
+import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { m } from '#/paraglide/messages'
 import { createUnitFn, propertyQuery } from './functions'
 import { type UnitKind, unitKindLabels } from './unit-kinds'
@@ -30,6 +30,7 @@ export function UnitForm({
   error: Error | null
   disabled?: boolean
 }) {
+  const drawer = useFormDrawerContext()
   const form = useAppForm({
     defaultValues: {
       kind: defaultValues.kind,
@@ -42,6 +43,7 @@ export function UnitForm({
 
   return (
     <form
+      id={drawer?.formId}
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()

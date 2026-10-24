@@ -70,6 +70,7 @@
   ],
   "common_incl_vat": "inkl. moms",
   "common_kind": "Typ",
+  "common_loading": "Hämtar…",
   "common_months_short": "{months} mån",
   "common_more_actions_for": "Fler åtgärder för {name}",
   "common_name": "Namn",

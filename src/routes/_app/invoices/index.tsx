@@ -12,6 +12,7 @@ import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { invoicesQuery, markInvoicePaidFn } from '#/features/invoicing/functions'
+import { useCreateInvoiceRunDrawer } from '#/features/invoicing/invoice-run-form'
 import {
   dueNote,
   invoiceCount,
@@ -65,6 +66,7 @@ function InvoicesPage() {
   const can = useCan()
   const canCreate = can({ invoice: ['manage'], lease: ['read'] })
   const canManage = can({ invoice: ['manage'] })
+  const createRun = useCreateInvoiceRunDrawer()
   const search = Route.useSearch()
   const filter = search.filter ?? 'all'
   const navigate = useNavigate({ from: Route.fullPath })
@@ -103,14 +105,12 @@ function InvoicesPage() {
         subtitle={m.invoice_list_subtitle()}
         action={
           canCreate && (
-            <Button asChild className="h-11 md:h-10">
-              <Link to="/invoices/new">
-                <Plus aria-hidden="true" />
-                <span className="sm:hidden" aria-hidden="true">
-                  {m.invoice_create_short()}
-                </span>
-                <span className="sr-only sm:not-sr-only">{m.invoice_run_title()}</span>
-              </Link>
+            <Button className="h-11 md:h-10" onClick={createRun.open}>
+              <Plus aria-hidden="true" />
+              <span className="sm:hidden" aria-hidden="true">
+                {m.invoice_create_short()}
+              </span>
+              <span className="sr-only sm:not-sr-only">{m.invoice_run_title()}</span>
             </Button>
           )
         }

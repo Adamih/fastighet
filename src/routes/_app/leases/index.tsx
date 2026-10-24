@@ -13,6 +13,7 @@ import {
 import { useCan } from '#/features/auth/use-can'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { leasesQuery } from '#/features/leases/functions'
+import { useAddLeaseDrawer } from '#/features/leases/lease-form'
 import { tenantKindLabels } from '#/features/leases/options'
 import {
   formatShortDate,
@@ -81,6 +82,7 @@ function LeasesPage() {
   const filter = Route.useSearch().status ?? 'all'
   const { data: leases } = useSuspenseQuery(leasesQuery())
   const [query, setQuery] = useState('')
+  const addLease = useAddLeaseDrawer()
   const today = stockholmDate(Date.now())
   const overview = leaseOverview(leases, today)
 
@@ -114,12 +116,10 @@ function LeasesPage() {
         {/* Phones: the button sits beside the title and the search gets its own row. */}
         <div className="contents md:ml-auto md:flex md:items-center md:gap-2.5">
           {canCreate && (
-            <Button asChild className="h-11 md:h-10">
-              <Link to="/leases/new" aria-label={m.lease_new()}>
-                <Plus aria-hidden="true" />
-                <span className="sm:hidden">{m.common_new()}</span>
-                <span className="hidden sm:inline">{m.lease_new()}</span>
-              </Link>
+            <Button className="h-11 md:h-10" onClick={addLease.open} aria-label={m.lease_new()}>
+              <Plus aria-hidden="true" />
+              <span className="sm:hidden">{m.common_new()}</span>
+              <span className="hidden sm:inline">{m.lease_new()}</span>
             </Button>
           )}
           <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:order-first md:h-10 md:w-60 lg:w-64">

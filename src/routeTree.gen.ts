@@ -21,10 +21,8 @@ import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as InvitationsInvitationIdRouteImport } from './routes/invitations/$invitationId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
 import { Route as AppInvoicesInvoiceIdRouteImport } from './routes/_app/invoices/$invoiceId'
-import { Route as AppInvoicesNewRouteImport } from './routes/_app/invoices/new'
 import { Route as AppLeasesIndexRouteImport } from './routes/_app/leases/index'
 import { Route as AppLeasesLeaseIdRouteImport } from './routes/_app/leases/$leaseId'
-import { Route as AppLeasesNewRouteImport } from './routes/_app/leases/new'
 import { Route as AppPropertiesPropertyIdRouteImport } from './routes/_app/properties/$propertyId'
 import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index'
 import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
@@ -93,11 +91,6 @@ const AppInvoicesInvoiceIdRoute = AppInvoicesInvoiceIdRouteImport.update({
   path: '/invoices/$invoiceId',
   getParentRoute: () => AppRoute,
 } as any)
-const AppInvoicesNewRoute = AppInvoicesNewRouteImport.update({
-  id: '/invoices/new',
-  path: '/invoices/new',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppLeasesIndexRoute = AppLeasesIndexRouteImport.update({
   id: '/leases/',
   path: '/leases/',
@@ -106,11 +99,6 @@ const AppLeasesIndexRoute = AppLeasesIndexRouteImport.update({
 const AppLeasesLeaseIdRoute = AppLeasesLeaseIdRouteImport.update({
   id: '/leases/$leaseId',
   path: '/leases/$leaseId',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLeasesNewRoute = AppLeasesNewRouteImport.update({
-  id: '/leases/new',
-  path: '/leases/new',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPropertiesPropertyIdRoute = AppPropertiesPropertyIdRouteImport.update({
@@ -166,9 +154,7 @@ export interface FileRoutesByFullPath {
   '/team': typeof AppTeamRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
-  '/invoices/new': typeof AppInvoicesNewRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
-  '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
@@ -191,9 +177,7 @@ export interface FileRoutesByTo {
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/': typeof AppIndexRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
-  '/invoices/new': typeof AppInvoicesNewRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
-  '/leases/new': typeof AppLeasesNewRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
@@ -218,9 +202,7 @@ export interface FileRoutesById {
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/_app/': typeof AppIndexRoute
   '/_app/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
-  '/_app/invoices/new': typeof AppInvoicesNewRoute
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
-  '/_app/leases/new': typeof AppLeasesNewRoute
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/_app/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/_app/units/$unitId': typeof AppUnitsUnitIdRoute
@@ -245,9 +227,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/invitations/$invitationId'
     | '/invoices/$invoiceId'
-    | '/invoices/new'
     | '/leases/$leaseId'
-    | '/leases/new'
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
@@ -270,9 +250,7 @@ export interface FileRouteTypes {
     | '/invitations/$invitationId'
     | '/'
     | '/invoices/$invoiceId'
-    | '/invoices/new'
     | '/leases/$leaseId'
-    | '/leases/new'
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
@@ -296,9 +274,7 @@ export interface FileRouteTypes {
     | '/invitations/$invitationId'
     | '/_app/'
     | '/_app/invoices/$invoiceId'
-    | '/_app/invoices/new'
     | '/_app/leases/$leaseId'
-    | '/_app/leases/new'
     | '/_app/properties/$propertyId'
     | '/_app/tenants/$tenantId'
     | '/_app/units/$unitId'
@@ -407,13 +383,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppInvoicesInvoiceIdRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/invoices/new': {
-      id: '/_app/invoices/new'
-      path: '/invoices/new'
-      fullPath: '/invoices/new'
-      preLoaderRoute: typeof AppInvoicesNewRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/leases/': {
       id: '/_app/leases/'
       path: '/leases'
@@ -426,13 +395,6 @@ declare module '@tanstack/react-router' {
       path: '/leases/$leaseId'
       fullPath: '/leases/$leaseId'
       preLoaderRoute: typeof AppLeasesLeaseIdRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/leases/new': {
-      id: '/_app/leases/new'
-      path: '/leases/new'
-      fullPath: '/leases/new'
-      preLoaderRoute: typeof AppLeasesNewRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/properties/$propertyId': {
@@ -500,9 +462,7 @@ interface AppRouteChildren {
   AppTeamRoute: typeof AppTeamRoute
   AppIndexRoute: typeof AppIndexRoute
   AppInvoicesInvoiceIdRoute: typeof AppInvoicesInvoiceIdRoute
-  AppInvoicesNewRoute: typeof AppInvoicesNewRoute
   AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
-  AppLeasesNewRoute: typeof AppLeasesNewRoute
   AppPropertiesPropertyIdRoute: typeof AppPropertiesPropertyIdRoute
   AppTenantsTenantIdRoute: typeof AppTenantsTenantIdRoute
   AppUnitsUnitIdRoute: typeof AppUnitsUnitIdRoute
@@ -520,9 +480,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppTeamRoute: AppTeamRoute,
   AppIndexRoute: AppIndexRoute,
   AppInvoicesInvoiceIdRoute: AppInvoicesInvoiceIdRoute,
-  AppInvoicesNewRoute: AppInvoicesNewRoute,
   AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
-  AppLeasesNewRoute: AppLeasesNewRoute,
   AppPropertiesPropertyIdRoute: AppPropertiesPropertyIdRoute,
   AppTenantsTenantIdRoute: AppTenantsTenantIdRoute,
   AppUnitsUnitIdRoute: AppUnitsUnitIdRoute,

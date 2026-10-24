@@ -296,8 +296,6 @@ function TenantPage() {
           </Panel>
         }
       />
-
-      {canManage && edit.drawer}
     </div>
   )
 }

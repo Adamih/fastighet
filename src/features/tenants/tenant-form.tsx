@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
 import { Optional, useAppForm } from '#/components/form'
-import { useFormDrawer } from '#/components/form-drawer'
+import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
 import { m } from '#/paraglide/messages'
 import { createTenantFn, tenantQuery, tenantsQuery, updateTenantFn } from './functions'
@@ -53,6 +53,7 @@ export function TenantForm({
   onSubmit: (value: CreateTenantInput) => Promise<unknown>
   error: Error | null
 }) {
+  const drawer = useFormDrawerContext()
   const form = useAppForm({
     defaultValues,
     validators: { onSubmit: validator },
@@ -61,6 +62,7 @@ export function TenantForm({
 
   return (
     <form
+      id={drawer?.formId}
       className="grid gap-4"
       onSubmit={(e) => {
         e.preventDefault()
