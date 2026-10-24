@@ -13,6 +13,7 @@ import { UpdateSettingsInput } from '#/features/settings/schemas'
 import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/settings')({
   loader: ({ context }) => context.queryClient.ensureQueryData(settingsQuery()),
@@ -71,14 +72,14 @@ function SettingsPage() {
   return (
     <div className="grid max-w-4xl gap-6">
       <PageHeader
-        title="Inställningar"
-        subtitle={`${settings.organizationName} · uppgifterna skrivs ut på varje hyresavi`}
+        title={m.nav_settings()}
+        subtitle={m.settings_subtitle({ organization: settings.organizationName })}
       />
 
       {!canEdit && (
         <p className="flex items-start gap-2.5 rounded-xl border bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground">
           <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          Du kan se uppgifterna men inte ändra dem. Ägare och administratörer kan ändra.
+          {m.settings_read_only()}
         </p>
       )}
 
@@ -94,20 +95,22 @@ function SettingsPage() {
         }}
       >
         <fieldset disabled={!canEdit} className="grid">
-          <Section title="Företag" description="Säljaruppgifter som måste stå på en faktura.">
+          <Section title={m.tenant_kind_company()} description={m.settings_company_description()}>
             <div className="grid gap-1.5">
-              <span className="font-medium text-sm">Företagsnamn</span>
+              <span className="font-medium text-sm">{m.tenant_form_company_name()}</span>
               <span className="text-sm">{settings.organizationName}</span>
             </div>
             <form.AppField name="organizationNumber">
               {(field) => (
                 <field.TextField
-                  label="Organisationsnummer"
-                  placeholder="556677-8899"
+                  label={m.common_organization_number()}
+                  placeholder={m.settings_org_number_placeholder()}
                   inputMode="numeric"
                   hint={
                     isValidOrganizationNumber(field.state.value) && (
-                      <Note tone="ok">Momsreg.nr {vatNumberFor(field.state.value)}</Note>
+                      <Note tone="ok">
+                        {m.settings_vat_number({ number: vatNumberFor(field.state.value) })}
+                      </Note>
                     )
                   }
                 />
@@ -118,27 +121,24 @@ function SettingsPage() {
                 {(field) => (
                   <field.SwitchField
                     disabled={!canEdit}
-                    label="Godkänd för F-skatt"
-                    description="Skrivs ut som ”Godkänd för F-skatt” på avin."
+                    label={m.settings_f_skatt()}
+                    description={m.settings_f_skatt_description()}
                   />
                 )}
               </form.AppField>
             </div>
           </Section>
 
-          <Section
-            title="Betalning"
-            description="Vart hyran betalas. OCR-numret byggs av avins nummer."
-          >
+          <Section title={m.settings_payment()} description={m.settings_payment_description()}>
             <form.AppField name="bankgiro">
               {(field) => (
                 <field.TextField
-                  label="Bankgiro"
-                  placeholder="5050-1055"
+                  label={m.settings_bankgiro()}
+                  placeholder={m.settings_bankgiro_placeholder()}
                   inputMode="numeric"
                   hint={
                     !field.state.value.trim() && (
-                      <Note tone="warn">Krävs för att avier ska kunna betalas</Note>
+                      <Note tone="warn">{m.settings_bankgiro_required()}</Note>
                     )
                   }
                 />
@@ -146,44 +146,47 @@ function SettingsPage() {
             </form.AppField>
           </Section>
 
-          <Section
-            title="Adress och kontakt"
-            description="Visas i avins sidfot så att hyresgäster vet vem de ska fråga."
-          >
+          <Section title={m.settings_contact()} description={m.settings_contact_description()}>
             <form.AppField name="streetAddress">
-              {(field) => <field.TextField label="Gatuadress" autoComplete="street-address" />}
+              {(field) => (
+                <field.TextField label={m.common_street_address()} autoComplete="street-address" />
+              )}
             </form.AppField>
             <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
               <form.AppField name="postalCode">
                 {(field) => (
                   <field.TextField
-                    label="Postnummer"
+                    label={m.common_postal_code()}
                     inputMode="numeric"
                     autoComplete="postal-code"
                   />
                 )}
               </form.AppField>
               <form.AppField name="city">
-                {(field) => <field.TextField label="Ort" autoComplete="address-level2" />}
+                {(field) => (
+                  <field.TextField label={m.common_city()} autoComplete="address-level2" />
+                )}
               </form.AppField>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <form.AppField name="email">
                 {(field) => (
                   <field.TextField
-                    label="E-post för frågor"
+                    label={m.settings_email()}
                     type="email"
-                    placeholder="hyra@foretag.se"
+                    placeholder={m.settings_email_placeholder()}
                   />
                 )}
               </form.AppField>
               <form.AppField name="phone">
-                {(field) => <field.TextField label={<Optional>Telefon</Optional>} type="tel" />}
+                {(field) => (
+                  <field.TextField label={<Optional>{m.common_phone()}</Optional>} type="tel" />
+                )}
               </form.AppField>
             </div>
           </Section>
 
-          <Section title="Förhandsvisning" description="Så här ser sidfoten ut på nästa avi.">
+          <Section title={m.settings_preview()} description={m.settings_preview_description()}>
             <form.Subscribe selector={(s) => s.values}>
               {(values) => <FooterPreview name={settings.organizationName} values={values} />}
             </form.Subscribe>
@@ -203,7 +206,7 @@ function SettingsPage() {
                   {/* Keeps the fixed bar from covering the last fields. */}
                   <div aria-hidden="true" className="h-28 sm:h-20" />
                   <section
-                    aria-label="Osparade ändringar"
+                    aria-label={m.form_unsaved_label()}
                     className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 shadow-lg sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-auto sm:min-w-96"
                   >
                     <span
@@ -217,7 +220,7 @@ function SettingsPage() {
                       ) : (
                         <>
                           <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
-                          Osparade ändringar
+                          {m.form_unsaved_label()}
                         </>
                       )}
                     </span>
@@ -232,14 +235,14 @@ function SettingsPage() {
                           save.reset()
                         }}
                       >
-                        Ångra
+                        {m.common_undo()}
                       </Button>
                       <Button
                         type="submit"
                         className="h-11 flex-1 sm:h-9 sm:flex-none"
                         disabled={submitting}
                       >
-                        Spara ändringar
+                        {m.common_save_changes()}
                       </Button>
                     </div>
                   </section>
@@ -248,7 +251,7 @@ function SettingsPage() {
                 saved && (
                   <output className="mt-2 flex items-center gap-2 text-[13px] text-emerald-700 dark:text-emerald-300">
                     <Check aria-hidden="true" className="size-4" />
-                    Sparat. Nya avier får de nya uppgifterna.
+                    {m.settings_saved()}
                   </output>
                 )
               )
@@ -306,7 +309,7 @@ function Readiness({ values }: { values: Values }) {
   const ready = !firstMissing
   return (
     <section
-      aria-label="Uppgifter för avier"
+      aria-label={m.settings_readiness_label()}
       className={cn(
         'flex items-center gap-3.5 rounded-xl border px-4 py-3',
         ready
@@ -322,8 +325,8 @@ function Readiness({ values }: { values: Values }) {
       <div className="grid min-w-0 flex-1 gap-0.5 text-[13px]">
         <span className="font-semibold">
           {ready
-            ? 'Avierna har alla uppgifter de behöver'
-            : `${done} av ${items.length} uppgifter för avier är klara`}
+            ? m.settings_ready()
+            : m.settings_readiness_progress({ done, total: items.length })}
         </span>
         {firstMissing && <span>{firstMissing.missing}</span>}
       </div>
@@ -367,16 +370,16 @@ function FooterPreview({ name, values }: { name: string; values: Values }) {
         ))}
       </div>
       <div className="flex items-baseline justify-between gap-3 border-t border-dashed pt-3">
-        <span className="text-muted-foreground">Bankgiro</span>
+        <span className="text-muted-foreground">{m.settings_bankgiro()}</span>
         {values.bankgiro.trim() ? (
           <span className="font-medium tabular-nums">{values.bankgiro.trim()}</span>
         ) : (
-          <span className="font-medium text-amber-700 dark:text-amber-300">saknas</span>
+          <span className="font-medium text-amber-700 dark:text-amber-300">
+            {m.settings_missing()}
+          </span>
         )}
       </div>
-      <span className="text-muted-foreground text-xs">
-        Momsreg.nr skrivs bara ut på avier med moms.
-      </span>
+      <span className="text-muted-foreground text-xs">{m.settings_vat_footer_hint()}</span>
     </div>
   )
 }

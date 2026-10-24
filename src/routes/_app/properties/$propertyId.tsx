@@ -13,6 +13,7 @@ import { useAddUnitDrawer } from '#/features/properties/unit-form'
 import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/properties/$propertyId')({
   loader: ({ context, params }) =>
@@ -43,7 +44,7 @@ function PropertyPage() {
   return (
     <div className={cn('grid gap-6 md:gap-7', canManage && 'pb-20 md:pb-0')}>
       <DetailHeader
-        back={{ label: 'Fastigheter', to: '/' }}
+        back={{ label: m.nav_properties(), to: '/' }}
         crumb={property.designation}
         title={property.designation}
         meta={[property.name, address].filter(Boolean).join(' · ') || undefined}
@@ -53,12 +54,12 @@ function PropertyPage() {
               <Button variant="outline" className="flex-1 sm:flex-none" asChild>
                 <Link to="/properties/$propertyId/edit" params={{ propertyId }}>
                   <Pencil aria-hidden="true" />
-                  Ändra
+                  {m.common_edit()}
                 </Link>
               </Button>
               <Button size="fab" onClick={addUnit.open}>
                 <Plus aria-hidden="true" />
-                Lägg till objekt
+                {m.unit_add()}
               </Button>
             </>
           )
@@ -68,15 +69,17 @@ function PropertyPage() {
       {canManage && addUnit.drawer}
 
       <StatRow>
-        <StatCard label="Objekt">{summary.units}</StatCard>
+        <StatCard label={m.lease_form_units()}>{summary.units}</StatCard>
         {canReadLeases ? (
           <>
             <StatCard
-              label="Uthyrt"
+              label={m.unit_rented()}
               hint={
                 <span
                   role="img"
-                  aria-label={`${Math.round(occupancyShare * 100)} % uthyrt`}
+                  aria-label={m.property_occupancy_percent({
+                    percent: Math.round(occupancyShare * 100),
+                  })}
                   className="mt-1 block h-1.5 overflow-hidden rounded-full bg-muted"
                 >
                   <span
@@ -86,17 +89,23 @@ function PropertyPage() {
                 </span>
               }
             >
-              {summary.rented} av {summary.units}
+              {m.property_occupancy_count({ rented: summary.rented, total: summary.units })}
             </StatCard>
-            <StatCard label="Hyra" hint={summary.vat ? 'exkl. moms' : 'gällande avtal'}>
+            <StatCard
+              label={m.common_rent()}
+              hint={summary.vat ? m.common_excl_vat() : m.property_current_leases()}
+            >
               {formatSekShort(summary.monthlyRentOre)}
-              <span className="font-medium text-muted-foreground text-sm"> /mån</span>
+              <span className="font-medium text-muted-foreground text-sm">
+                {' '}
+                {m.common_per_month()}
+              </span>
             </StatCard>
           </>
         ) : (
-          <StatCard label="Ort">{property.city ?? '–'}</StatCard>
+          <StatCard label={m.common_city()}>{property.city ?? '–'}</StatCard>
         )}
-        <StatCard label="Yta">
+        <StatCard label={m.unit_area()}>
           {summary.areaSqm > 0 ? `${areaFormat.format(summary.areaSqm)} m²` : '–'}
         </StatCard>
       </StatRow>
@@ -105,14 +114,14 @@ function PropertyPage() {
         main={
           <section aria-labelledby="units" className="overflow-hidden rounded-xl border bg-card">
             <h2 id="units" className="border-b px-4 py-3 font-semibold text-[15px] md:px-5">
-              Objekt{' '}
+              {m.lease_form_units()}{' '}
               <span className="font-medium text-muted-foreground tabular-nums">
                 {property.units.length}
               </span>
             </h2>
             {property.units.length === 0 ? (
               <p className="px-4 py-6 text-[13px] text-muted-foreground md:px-5">
-                Inga objekt ännu.
+                {m.unit_list_empty()}
               </p>
             ) : (
               <ul className="divide-y">
@@ -133,12 +142,12 @@ function PropertyPage() {
           </section>
         }
         side={
-          <Panel title="Uppgifter">
+          <Panel title={m.property_details()}>
             <FactList
               facts={[
-                ['Beteckning', property.designation],
-                ['Namn', property.name ?? '–'],
-                ['Adress', address || '–'],
+                [m.property_designation(), property.designation],
+                [m.common_name(), property.name ?? '–'],
+                [m.common_address(), address || '–'],
               ]}
             />
           </Panel>
@@ -188,17 +197,17 @@ function UnitRow({
                 </span>
                 <span className="truncate text-muted-foreground tabular-nums">
                   {o.status === 'upcoming'
-                    ? `från ${o.startDate}`
+                    ? m.common_from_date({ date: o.startDate })
                     : o.moveOutDate
-                      ? `till ${o.moveOutDate}`
+                      ? m.common_until_date({ date: o.moveOutDate })
                       : shared
-                        ? `Avtal #${o.number}, flera objekt`
-                        : `${formatSekShort(monthlyRentOre(o))} /mån`}
+                        ? m.property_shared_lease({ number: o.number })
+                        : m.property_monthly_rent({ amount: formatSekShort(monthlyRentOre(o)) })}
                 </span>
               </span>
             ) : (
               <span className="justify-self-start rounded-full bg-muted px-2.5 py-0.5 font-semibold text-muted-foreground text-xs">
-                Vakant
+                {m.unit_vacant()}
               </span>
             ))}
         </span>

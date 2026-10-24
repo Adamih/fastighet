@@ -21,6 +21,7 @@ import { unitKindLabels } from '#/features/properties/unit-kinds'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/units/$unitId')({
   loader: ({ context, params }) =>
@@ -31,10 +32,18 @@ export const Route = createFileRoute('/_app/units/$unitId')({
 const areaFormat = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
 
 const stateLabels: Record<UnitState, string> = {
-  vacant: 'Vakant',
-  reserved: 'Kommande avtal',
-  rented: 'Uthyrt',
-  leaving: 'Uppsagt',
+  get vacant() {
+    return m.unit_vacant()
+  },
+  get reserved() {
+    return m.unit_upcoming_lease()
+  },
+  get rented() {
+    return m.unit_rented()
+  },
+  get leaving() {
+    return m.lease_status_terminated()
+  },
 }
 const stateStyles: Record<UnitState, string> = {
   vacant: 'bg-muted text-muted-foreground',
@@ -89,7 +98,7 @@ function UnitPage() {
               <Button variant="outline" className="flex-1 sm:flex-none" asChild>
                 <Link to="/units/$unitId/edit" params={{ unitId }}>
                   <Pencil aria-hidden="true" />
-                  Ändra
+                  {m.common_edit()}
                 </Link>
               </Button>
             )}
@@ -98,7 +107,7 @@ function UnitPage() {
                 <Button className="flex-1 sm:flex-none" asChild>
                   <Link to="/leases/new" search={{ unitId }}>
                     <Plus aria-hidden="true" />
-                    Nytt avtal
+                    {m.lease_new()}
                   </Link>
                 </Button>
               )}
@@ -108,27 +117,37 @@ function UnitPage() {
 
       {canReadLeases && (
         <StatRow>
-          <StatCard label="Hyresgäst" hint={current ? `Avtal #${current.number}` : undefined}>
+          <StatCard
+            label={m.lease_form_tenant()}
+            hint={current ? m.lease_number({ number: current.number }) : undefined}
+          >
             <span className="block truncate">
-              {current ? current.tenant.name : next ? 'Ingen ännu' : 'Ingen'}
+              {current ? current.tenant.name : next ? m.unit_no_tenant_yet() : m.unit_no_tenant()}
             </span>
           </StatCard>
           <StatCard
-            label="Hyra"
-            hint={current?.vat ? 'exkl. moms' : current ? undefined : 'ingen uthyrning nu'}
+            label={m.common_rent()}
+            hint={
+              current?.vat ? m.common_excl_vat() : current ? undefined : m.unit_not_rented_now()
+            }
           >
             {current ? formatSekShort(monthlyRentOre(current)) : '–'}
-            {current && <span className="font-medium text-muted-foreground text-sm"> /mån</span>}
+            {current && (
+              <span className="font-medium text-muted-foreground text-sm">
+                {' '}
+                {m.common_per_month()}
+              </span>
+            )}
           </StatCard>
           <StatCard
-            label="Ledigt från"
+            label={m.unit_available_from()}
             hint={
               availability.freeFrom === today
                 ? next
-                  ? `till ${formatShortDate(next.startDate)}`
-                  : 'kan hyras ut'
+                  ? m.common_until_date({ date: formatShortDate(next.startDate) })
+                  : m.unit_can_be_rented()
                 : !availability.freeFrom && next
-                  ? `ny hyresgäst ${formatShortDate(next.startDate)}`
+                  ? m.unit_next_tenant({ date: formatShortDate(next.startDate) })
                   : undefined
             }
             hintClass={
@@ -136,14 +155,14 @@ function UnitPage() {
             }
           >
             {availability.freeFrom === today
-              ? 'Nu'
+              ? m.unit_available_now()
               : availability.freeFrom
                 ? formatShortDate(availability.freeFrom)
                 : next
                   ? '–'
-                  : 'Tillsvidare'}
+                  : m.lease_open_ended()}
           </StatCard>
-          <StatCard label="Yta">
+          <StatCard label={m.unit_area()}>
             {unit.areaSqm != null ? `${areaFormat.format(unit.areaSqm)} m²` : '–'}
           </StatCard>
         </StatRow>
@@ -154,19 +173,21 @@ function UnitPage() {
           canReadLeases && (
             <>
               {focus && (
-                <Panel title={current ? 'Nuvarande avtal' : 'Kommande avtal'}>
+                <Panel title={current ? m.unit_current_lease() : m.unit_upcoming_lease()}>
                   <LeaseRow lease={focus} />
                   {current && next && (
                     <div className="border-t pt-3">
-                      <p className="mb-2 font-medium text-[13px] text-muted-foreground">Därefter</p>
+                      <p className="mb-2 font-medium text-[13px] text-muted-foreground">
+                        {m.unit_afterwards()}
+                      </p>
                       <LeaseRow lease={next} />
                     </div>
                   )}
                 </Panel>
               )}
-              <Panel title="Uthyrningshistorik">
+              <Panel title={m.unit_rental_history()}>
                 {unit.leases.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">Objektet har aldrig hyrts ut.</p>
+                  <p className="text-[13px] text-muted-foreground">{m.unit_never_rented()}</p>
                 ) : (
                   <ol>
                     {unit.leases.map((l) => (
@@ -182,7 +203,7 @@ function UnitPage() {
                             </Link>
                             <span className="truncate text-muted-foreground tabular-nums">
                               {l.startDate.slice(0, 4)}–{(effectiveEndDate(l) ?? '').slice(0, 4)} ·
-                              Avtal #{l.number}
+                              {m.lease_number({ number: l.number })}
                             </span>
                           </span>
                           <LeaseStatusBadge status={l.status} />
@@ -196,11 +217,11 @@ function UnitPage() {
           )
         }
         side={
-          <Panel title="Uppgifter">
+          <Panel title={m.property_details()}>
             <FactList
               facts={[
                 [
-                  'Fastighet',
+                  m.unit_property(),
                   <Link
                     key="property"
                     to="/properties/$propertyId"
@@ -210,9 +231,12 @@ function UnitPage() {
                     {unit.property.designation}
                   </Link>,
                 ],
-                ['Objektsnummer', unit.label],
-                ['Typ', unitKindLabels[unit.kind]],
-                ['Yta', unit.areaSqm != null ? `${areaFormat.format(unit.areaSqm)} m²` : '–'],
+                [m.unit_form_label(), unit.label],
+                [m.common_kind(), unitKindLabels[unit.kind]],
+                [
+                  m.unit_area(),
+                  unit.areaSqm != null ? `${areaFormat.format(unit.areaSqm)} m²` : '–',
+                ],
               ]}
             />
           </Panel>
@@ -236,13 +260,13 @@ function LeaseRow({ lease }: { lease: UnitLease }) {
           {lease.tenant.name}
         </Link>
         <span className="truncate text-muted-foreground tabular-nums">
-          Avtal #{lease.number} · {formatPeriod(lease)}
+          {m.unit_lease_period({ number: lease.number, period: formatPeriod(lease) })}
         </span>
       </span>
       <span className="flex shrink-0 items-center gap-3">
         <span className="hidden font-semibold tabular-nums sm:inline">
           {formatSekShort(monthlyRentOre(lease))}
-          <span className="font-normal text-muted-foreground"> /mån</span>
+          <span className="font-normal text-muted-foreground"> {m.common_per_month()}</span>
         </span>
         <LeaseStatusBadge status={lease.status} />
       </span>

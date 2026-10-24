@@ -49,6 +49,7 @@ import { PaymentStatusBadge } from '#/features/payments/components'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek, formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/invoices/$invoiceId')({
   loader: ({ context, params }) =>
@@ -73,7 +74,7 @@ function InvoicePage() {
   const email = useMutation({
     mutationFn: emailInvoiceFn,
     onSuccess: async () => {
-      setNotice(`Skickad till ${invoice.recipientEmail}`)
+      setNotice(m.invoice_sent_to({ email: invoice.recipientEmail ?? '' }))
       await onDone()
     },
   })
@@ -94,9 +95,9 @@ function InvoicePage() {
     <div className="grid gap-6 md:gap-7">
       <DetailHeader
         className="print:hidden"
-        back={{ label: 'Avier', to: '/invoices' }}
-        crumb={`Avi #${invoice.number}`}
-        title={`Avi #${invoice.number}`}
+        back={{ label: m.nav_invoices(), to: '/invoices' }}
+        crumb={m.invoice_number({ number: invoice.number })}
+        title={m.invoice_number({ number: invoice.number })}
         badge={<InvoiceStatusBadge status={invoice.status} />}
         meta={
           <>
@@ -107,10 +108,10 @@ function InvoicePage() {
                 params={{ leaseId: invoice.lease.id }}
                 className="underline-offset-4 hover:text-foreground hover:underline"
               >
-                Avtal #{invoice.lease.number}
+                {m.lease_number({ number: invoice.lease.number })}
               </Link>
             ) : (
-              `Avtal #${invoice.lease.number}`
+              m.lease_number({ number: invoice.lease.number })
             )}
           </>
         }
@@ -122,7 +123,7 @@ function InvoicePage() {
               onClick={() => window.print()}
             >
               <Printer aria-hidden="true" />
-              Skriv ut
+              {m.invoice_print()}
             </Button>
             {canManage && invoice.status !== 'void' && invoice.recipientEmail && (
               <Button
@@ -132,24 +133,24 @@ function InvoicePage() {
                 onClick={() => email.mutate({ data })}
               >
                 <Send aria-hidden="true" />
-                {invoice.sentAt ? 'Skicka igen' : 'Skicka e-post'}
+                {invoice.sentAt ? m.invoice_resend() : m.invoice_send_email()}
               </Button>
             )}
             {canManage && (open || invoice.status === 'paid') && (
-              <MoreActions label={`Fler åtgärder för avi ${invoice.number}`}>
+              <MoreActions label={m.invoice_more_actions({ number: invoice.number })}>
                 {invoice.status === 'paid' && (
                   <DropdownMenuItem
                     disabled={unpay.isPending}
                     onSelect={() => unpay.mutate({ data })}
                   >
                     <Undo2 aria-hidden="true" />
-                    Ångra betalning
+                    {m.invoice_undo_payment()}
                   </DropdownMenuItem>
                 )}
                 {open && (
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmVoid(true)}>
                     <Ban aria-hidden="true" />
-                    Makulera avi
+                    {m.invoice_void()}
                   </DropdownMenuItem>
                 )}
               </MoreActions>
@@ -169,14 +170,14 @@ function InvoicePage() {
           <div className="grid gap-4 print:hidden">
             {confirmVoid && (
               <section className="grid gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
-                <p>Makulera avi {invoice.number}? Den behåller sitt nummer men ska inte betalas.</p>
+                <p>{m.invoice_void_confirm({ number: invoice.number })}</p>
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
                     className="h-11 flex-1 sm:h-9"
                     onClick={() => setConfirmVoid(false)}
                   >
-                    Avbryt
+                    {m.common_cancel()}
                   </Button>
                   <Button
                     variant="destructive"
@@ -184,7 +185,7 @@ function InvoicePage() {
                     disabled={voidIt.isPending}
                     onClick={() => voidIt.mutate({ data })}
                   >
-                    Makulera
+                    {m.invoice_void_confirm_action()}
                   </Button>
                 </div>
               </section>
@@ -197,7 +198,7 @@ function InvoicePage() {
             )}
             {error && <p className="text-destructive text-sm">{error.message}</p>}
             <AmountPanel invoice={invoice} today={today} canManage={canManage} onDone={onDone} />
-            <Panel title="Händelser">
+            <Panel title={m.detail_events()}>
               <EventList
                 events={invoiceEvents(
                   {
@@ -214,21 +215,19 @@ function InvoicePage() {
             </Panel>
             {can({ payment: ['read'] }) && (
               <Panel
-                title="Inbetalningar"
+                title={m.invoice_payments()}
                 action={
                   <Link
                     to="/payments"
                     search={{ filter: 'all' }}
                     className="font-medium text-primary underline-offset-4 hover:underline"
                   >
-                    Alla betalningar
+                    {m.invoice_all_payments()}
                   </Link>
                 }
               >
                 {invoice.payments.length === 0 ? (
-                  <p className="text-[13px] text-muted-foreground">
-                    Ingen inbetalning har matchats mot avin.
-                  </p>
+                  <p className="text-[13px] text-muted-foreground">{m.invoice_payments_empty()}</p>
                 ) : (
                   <div>
                     {invoice.payments.map((p) => (
@@ -266,11 +265,11 @@ const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
 function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
   const [icon, tone] = eventIcons[e.kind]
   const text = {
-    created: 'Utfärdad',
-    sent: email ? `Skickad till ${email}` : 'Skickad',
-    fellDue: 'Förföll obetald',
-    paid: 'Betald',
-    voided: 'Makulerad',
+    created: m.invoice_event_created(),
+    sent: email ? m.invoice_sent_to({ email }) : m.invoice_sent(),
+    fellDue: m.invoice_event_fell_due(),
+    paid: m.invoice_status_paid(),
+    voided: m.invoice_status_void(),
   }[e.kind]
   return { key: e.kind, icon, tone, text, date: e.date }
 }
@@ -293,15 +292,15 @@ function AmountPanel({
   const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
   const days = daysUntil(today, invoice.dueDate)
   const status = {
-    overdue: `Förföll för ${-days} ${-days === 1 ? 'dag' : 'dagar'} sedan`,
-    unpaid: days === 0 ? 'Förfaller i dag' : `Förfaller ${inDays(days)}`,
-    paid: `Betald ${invoice.paidOn}`,
-    void: 'Makulerad – ska inte betalas',
+    overdue: m.invoice_overdue_since({ days: -days }),
+    unpaid: days === 0 ? m.invoice_due_today() : m.invoice_due_relative({ when: inDays(days) }),
+    paid: m.invoice_paid_on({ date: invoice.paidOn ?? '' }),
+    void: m.invoice_void_no_payment(),
   }[invoice.status]
 
   return (
     <section
-      aria-label="Belopp"
+      aria-label={m.common_amount()}
       className={cn(
         'grid gap-3 rounded-xl border bg-card p-4 md:p-5',
         invoice.status === 'overdue' && 'border-destructive/40',
@@ -329,13 +328,13 @@ function AmountPanel({
           {formatSekShort(invoice.totalOre)}
         </span>
         <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
-          {open ? 'att betala' : 'belopp'} · OCR{' '}
+          {open ? m.invoice_amount_ocr_to_pay() : m.invoice_amount_ocr()}{' '}
           <span className="font-medium text-foreground tabular-nums">{invoice.ocr}</span>
           <Button
             variant="ghost"
             size="icon"
             className="size-8"
-            aria-label={copied ? 'OCR-numret kopierat' : 'Kopiera OCR-numret'}
+            aria-label={copied ? m.invoice_ocr_copied() : m.invoice_copy_ocr()}
             onClick={async () => {
               await navigator.clipboard.writeText(invoice.ocr)
               setCopied(true)
@@ -348,7 +347,7 @@ function AmountPanel({
       </div>
       {canManage && open && (
         <div className="grid gap-2 border-t pt-3">
-          <Label htmlFor="paidOn">Betald den</Label>
+          <Label htmlFor="paidOn">{m.invoice_paid_on_label()}</Label>
           <Input
             id="paidOn"
             type="date"
@@ -361,7 +360,7 @@ function AmountPanel({
             disabled={pay.isPending}
             onClick={() => pay.mutate({ data: { invoiceId: invoice.id, paidOn } })}
           >
-            Registrera betalning
+            {m.invoice_register_payment()}
           </Button>
           {pay.error && <p className="text-destructive text-sm">{pay.error.message}</p>}
         </div>

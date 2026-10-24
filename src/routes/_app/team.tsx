@@ -26,6 +26,7 @@ import {
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import { stockholmDate } from '#/lib/dates'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/team')({
   loader: ({ context }) => context.queryClient.ensureQueryData(teamQuery()),
@@ -83,14 +84,12 @@ function TeamPage() {
   return (
     <div className="grid gap-6 md:gap-7">
       <PageHeader
-        title="Användare"
+        title={m.nav_team()}
         subtitle={
           <>
-            <span className="md:hidden">
-              {count} {count === 1 ? 'person har' : 'personer har'} åtkomst
-            </span>
+            <span className="md:hidden">{m.team_access_count({ count })}</span>
             <span className="hidden md:inline">
-              Personer med åtkomst till {app.organization.name}
+              {m.team_access_organization({ organization: app.organization.name })}
             </span>
           </>
         }
@@ -99,7 +98,7 @@ function TeamPage() {
         <div className="grid gap-6">
           <section aria-labelledby="members" className="overflow-hidden rounded-xl border bg-card">
             <h2 id="members" className="hidden border-b px-5 py-4 font-bold text-[15px] md:block">
-              Medlemmar{' '}
+              {m.team_members()}{' '}
               <span className="font-medium text-muted-foreground tabular-nums">{count}</span>
             </h2>
             <ul className="divide-y">
@@ -149,7 +148,7 @@ function MemberRow({
     <Select value={member.role} disabled={busy} onValueChange={(r) => onRoleChange(r as Role)}>
       <SelectTrigger
         className="h-11 w-full min-w-0 flex-1 md:h-9 md:w-40 md:flex-none"
-        aria-label={`Roll för ${member.name}`}
+        aria-label={m.team_role_for({ name: member.name })}
       >
         <SelectValue />
       </SelectTrigger>
@@ -171,7 +170,7 @@ function MemberRow({
           <span className="truncate font-semibold text-[15px] md:text-sm">
             {member.name}
             {member.isSelf && (
-              <span className="font-medium text-muted-foreground text-xs"> (du)</span>
+              <span className="font-medium text-muted-foreground text-xs"> {m.team_you()}</span>
             )}
           </span>
           <span className="truncate text-[13px] text-muted-foreground">{member.email}</span>
@@ -190,7 +189,7 @@ function MemberRow({
             variant="ghost"
             size="icon"
             className="size-11 shrink-0 text-destructive hover:text-destructive md:size-9"
-            aria-label={`Ta bort ${member.name}`}
+            aria-label={m.team_remove_member({ name: member.name })}
             aria-expanded={confirming}
             onClick={() => setConfirming((c) => !c)}
           >
@@ -203,21 +202,21 @@ function MemberRow({
       {roleSelect && (
         <div className="flex items-center gap-3 pl-13 md:hidden">
           <span aria-hidden="true" className="text-[13px] text-muted-foreground">
-            Roll
+            {m.team_role()}
           </span>
           {roleSelect}
         </div>
       )}
       {confirming && (
         <div className="flex flex-wrap items-center justify-end gap-2 rounded-lg bg-destructive/5 p-3 text-sm md:ml-13">
-          <span className="mr-auto">Ta bort {member.name} från företaget?</span>
+          <span className="mr-auto">{m.team_remove_confirm({ name: member.name })}</span>
           <Button
             variant="outline"
             size="sm"
             className="h-11 md:h-8"
             onClick={() => setConfirming(false)}
           >
-            Avbryt
+            {m.common_cancel()}
           </Button>
           <Button
             variant="destructive"
@@ -226,7 +225,7 @@ function MemberRow({
             disabled={busy}
             onClick={onRemove}
           >
-            Ta bort
+            {m.common_delete()}
           </Button>
         </div>
       )}
@@ -253,7 +252,7 @@ function PendingInvitations({
   return (
     <section aria-labelledby="invitations" className="overflow-hidden rounded-xl border bg-card">
       <h2 id="invitations" className="border-b px-4 py-3 font-bold text-[15px] md:px-5 md:py-4">
-        Väntande inbjudningar{' '}
+        {m.team_pending_invitations()}{' '}
         <span className="font-medium text-muted-foreground tabular-nums">{invitations.length}</span>
       </h2>
       <ul className="divide-y text-sm">
@@ -261,7 +260,10 @@ function PendingInvitations({
           <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 md:px-5">
             <span className="min-w-0 truncate font-medium">{i.email}</span>
             <span className="text-[13px] text-muted-foreground">
-              {roleLabels[i.role ?? 'member']} · gäller till {stockholmDate(i.expiresAt.getTime())}
+              {m.team_invitation_meta({
+                role: roleLabels[i.role ?? 'member'],
+                date: stockholmDate(i.expiresAt.getTime()),
+              })}
             </span>
             {manage && (
               <Button
@@ -271,7 +273,7 @@ function PendingInvitations({
                 disabled={cancel.isPending}
                 onClick={() => cancel.mutate(i.id)}
               >
-                Återkalla
+                {m.team_revoke()}
               </Button>
             )}
           </li>
@@ -310,7 +312,7 @@ function InviteForm() {
       className="grid gap-4 rounded-xl border bg-card p-4 md:max-w-xl md:p-6 xl:max-w-none"
     >
       <h2 id="invite" className="font-bold text-[17px]">
-        Bjud in en kollega
+        {m.team_invite_colleague()}
       </h2>
       <form
         className="grid gap-4"
@@ -326,22 +328,22 @@ function InviteForm() {
               onSubmit: ({ value }) =>
                 /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
                   ? undefined
-                  : 'Ange en e-postadress',
+                  : m.team_email_required(),
             }}
           >
             {(field) => (
               <field.TextField
-                label="E-post"
+                label={m.common_email()}
                 type="email"
                 autoComplete="off"
-                placeholder="namn@foretag.se"
+                placeholder={m.team_email_placeholder()}
               />
             )}
           </form.AppField>
           <form.AppField name="role">
             {(field) => (
               <field.SegmentedField
-                label="Roll"
+                label={m.team_role()}
                 showLabel
                 options={invitableRoles.map((r) => ({ value: r, label: roleLabels[r] }))}
               />
@@ -349,11 +351,13 @@ function InviteForm() {
           </form.AppField>
         </div>
         <p className="rounded-lg bg-muted px-3.5 py-3 text-[13px] text-muted-foreground leading-relaxed">
-          Administratörer kan också bjuda in och ta bort användare.
+          {m.team_admin_hint()}
         </p>
         {invite.error && <p className="text-destructive text-sm">{invite.error.message}</p>}
         <form.AppForm>
-          <form.SubmitButton className="sm:w-full md:h-10">Skicka inbjudan</form.SubmitButton>
+          <form.SubmitButton className="sm:w-full md:h-10">
+            {m.team_send_invitation()}
+          </form.SubmitButton>
         </form.AppForm>
       </form>
     </section>

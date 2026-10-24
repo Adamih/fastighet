@@ -23,12 +23,14 @@
   "auth_error_you_are_not_allowed_to_update_this_member": "Du har inte behörighet att ändra den här användaren",
   "auth_error_you_are_not_the_recipient_of_the_invitation": "Inbjudan gäller en annan e-postadress än den du är inloggad med",
   "auth_error_you_cannot_leave_the_organization_as_the_only_owner": "Företaget måste ha minst en ägare",
+  "common_action": "Åtgärd",
   "common_actions": "Åtgärder",
   "common_address": "Adress",
   "common_amount": "Belopp",
   "common_cancel": "Avbryt",
   "common_city": "Ort",
   "common_close": "Stäng",
+  "common_date": "Datum",
   "common_date_required": "Ange ett datum",
   "common_days_ago": [
     {
@@ -91,8 +93,11 @@
   "common_summary": "Sammanfattning",
   "common_today": "i dag",
   "common_tomorrow": "i morgon",
+  "common_undo": "Ångra",
+  "common_until_date": "till {date}",
   "common_view": "Visa",
   "common_view_named": "Visa {name}",
+  "common_yes": "Ja",
   "common_yesterday": "i går",
   "detail_breadcrumb_label": "Sökväg",
   "detail_events": "Händelser",
@@ -115,6 +120,12 @@
   "invitation_decline": "Avböj",
   "invitation_switch_account": "Logga ut och byt konto",
   "invitation_title": "Gå med i {organization}",
+  "invoice_all_payments": "Alla betalningar",
+  "invoice_all_periods": "Alla perioder",
+  "invoice_amount_ocr": "belopp · OCR",
+  "invoice_amount_ocr_to_pay": "att betala · OCR",
+  "invoice_card_meta": "Avi #{number} · {period}",
+  "invoice_copy_ocr": "Kopiera OCR-numret",
   "invoice_count": [
     {
       "declarations": [
@@ -160,11 +171,90 @@
       }
     }
   ],
+  "invoice_create_short": "Skapa",
   "invoice_due_date": "Förfallodag",
+  "invoice_due_on": "Förfaller {date}",
+  "invoice_due_relative": "Förfaller {when}",
+  "invoice_due_today": "Förfaller i dag",
+  "invoice_event_created": "Utfärdad",
+  "invoice_event_fell_due": "Förföll obetald",
+  "invoice_fell_due_on": "Förföll {date}",
+  "invoice_filter_label": "Filtrera avier",
+  "invoice_filter_overdue": "Förfallna",
+  "invoice_filter_paid": "Betalda",
+  "invoice_filter_unpaid": "Obetalda",
+  "invoice_filter_void": "Makulerade",
   "invoice_interval_monthly": "Månadsvis",
   "invoice_interval_quarterly": "Kvartalsvis",
   "invoice_list_empty": "Inga avier ännu.",
+  "invoice_list_no_match": "Inga avier matchar.",
+  "invoice_list_outstanding": "Utestående i listan: {amount}",
+  "invoice_list_showing": [
+    {
+      "declarations": [
+        "input visible",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Visar {visible} av {count} avi",
+        "countPlural=other": "Visar {visible} av {count} avier"
+      }
+    }
+  ],
+  "invoice_list_subtitle": "Hyresavier och betalningsstatus",
+  "invoice_mark_paid": "Markera betald",
+  "invoice_mark_paid_today": "Markera avi {number} betald i dag",
+  "invoice_more_actions": "Fler åtgärder för avi {number}",
+  "invoice_none_overdue": "Inget förfallet",
   "invoice_none_unpaid": "Inga obetalda avier",
+  "invoice_not_sent": "Inte skickad",
+  "invoice_number": "Avi #{number}",
+  "invoice_number_short": "Nr",
+  "invoice_ocr_copied": "OCR-numret kopierat",
+  "invoice_overdue_amount": "Förfallet",
+  "invoice_overdue_since": [
+    {
+      "declarations": [
+        "input days",
+        "local daysPlural = days: plural"
+      ],
+      "selectors": [
+        "daysPlural"
+      ],
+      "match": {
+        "daysPlural=one": "Förföll för {days} dag sedan",
+        "daysPlural=other": "Förföll för {days} dagar sedan"
+      }
+    }
+  ],
+  "invoice_overdue_summary": [
+    {
+      "declarations": [
+        "input invoices",
+        "input days",
+        "local daysPlural = days: plural"
+      ],
+      "selectors": [
+        "daysPlural"
+      ],
+      "match": {
+        "daysPlural=one": "{invoices} · äldsta {days} dag sen",
+        "daysPlural=other": "{invoices} · äldsta {days} dagar sen"
+      }
+    }
+  ],
+  "invoice_paid_amount": "Betalt",
+  "invoice_paid_on": "Betald {date}",
+  "invoice_paid_on_label": "Betald den",
+  "invoice_payments": "Inbetalningar",
+  "invoice_payments_empty": "Ingen inbetalning har matchats mot avin.",
+  "invoice_print": "Skriv ut",
+  "invoice_register_payment": "Registrera betalning",
+  "invoice_resend": "Skicka igen",
   "invoice_run_all_done": "Allt är redan aviserat",
   "invoice_run_already": "Redan aviserad",
   "invoice_run_calculating": "Räknar…",
@@ -270,10 +360,20 @@
       }
     }
   ],
+  "invoice_send_email": "Skicka e-post",
+  "invoice_sent": "Skickad",
+  "invoice_sent_email": "Skickad ✓ via e-post",
+  "invoice_sent_inline": "skickad",
+  "invoice_sent_to": "Skickad till {email}",
   "invoice_status_overdue": "Förfallen",
   "invoice_status_paid": "Betald",
   "invoice_status_unpaid": "Obetald",
   "invoice_status_void": "Makulerad",
+  "invoice_undo_payment": "Ångra betalning",
+  "invoice_void": "Makulera avi",
+  "invoice_void_confirm": "Makulera avi {number}? Den behåller sitt nummer men ska inte betalas.",
+  "invoice_void_confirm_action": "Makulera",
+  "invoice_void_no_payment": "Makulerad – ska inte betalas",
   "lease_card_period_open": "Från {start} · tillsvidare",
   "lease_count": [
     {
@@ -458,6 +558,149 @@
   "onboarding_intro": "Fastigheter, objekt och användare hör till ett företag. Du kan bjuda in kollegor senare.",
   "onboarding_submit": "Fortsätt",
   "onboarding_title": "Skapa ditt företag",
+  "payment_assign": "Koppla",
+  "payment_assign_and_pay": "Koppla och markera betald",
+  "payment_assign_invoice_label": "Avi att koppla till",
+  "payment_booked": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} bokad mot avi",
+        "countPlural=other": "{count} bokade mot avier"
+      }
+    }
+  ],
+  "payment_choose_invoice": "Välj avi",
+  "payment_duplicates": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} redan importerad",
+        "countPlural=other": "{count} redan importerade"
+      }
+    }
+  ],
+  "payment_duplicates_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} redan importerad, hoppades över",
+        "countPlural=other": "{count} redan importerade, hoppades över"
+      }
+    }
+  ],
+  "payment_filter_attention": "Att hantera",
+  "payment_filter_ignored": "Ignorerade",
+  "payment_filter_label": "Filtrera betalningar",
+  "payment_filter_matched": "Matchade",
+  "payment_ignore": "Ignorera",
+  "payment_import": "Importera betalningar",
+  "payment_import_intro": "Ladda upp bankens fil med inbetalningar (camt.054, XML). Betalningar med rätt OCR-nummer och belopp bokas mot avin automatiskt. En fil kan importeras flera gånger utan dubbletter.",
+  "payment_import_meta": [
+    {
+      "declarations": [
+        "input amount",
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} betalning, {amount}",
+        "countPlural=other": "{count} betalningar, {amount}"
+      }
+    }
+  ],
+  "payment_imported": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} betalning importerad",
+        "countPlural=other": "{count} betalningar importerade"
+      }
+    }
+  ],
+  "payment_importing": "Importerar…",
+  "payment_invoice": "Avi {number} · {recipient}",
+  "payment_invoice_option": "Avi {number} · {recipient} · {amount} · OCR {ocr}",
+  "payment_loading_invoices": "Hämtar avier…",
+  "payment_no_open_invoices": "Det finns inga obetalda avier att koppla till.",
+  "payment_none": "Inga betalningar.",
+  "payment_none_attention": "Inga betalningar att hantera.",
+  "payment_payer": "Betalare",
+  "payment_recent_imports": "Senaste importer",
+  "payment_reference": "Referens",
+  "payment_review_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} att kontrollera",
+        "countPlural=other": "{count} att kontrollera"
+      }
+    }
+  ],
+  "payment_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} utbetalning eller post i annan valuta ignorerades",
+        "countPlural=other": "{count} utbetalningar eller poster i annan valuta ignorerades"
+      }
+    }
+  ],
+  "payment_unknown_payer": "Okänd betalare",
+  "payment_unmatched_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} utan matchande avi",
+        "countPlural=other": "{count} utan matchande avi"
+      }
+    }
+  ],
   "property_add": "Lägg till fastighet",
   "property_add_description": "Lägenheter och lokaler lägger du till på fastighetens sida.",
   "property_count": [
@@ -475,14 +718,20 @@
       }
     }
   ],
+  "property_current_leases": "gällande avtal",
   "property_delete": "Ta bort fastighet",
   "property_delete_blocked": "Fastigheten har objekt med avtal och kan inte tas bort.",
   "property_delete_warning": "Fastigheten och dess {count} objekt tas bort. Det går inte att ångra.",
   "property_designation": "Beteckning",
+  "property_details": "Uppgifter",
   "property_edit_title": "Ändra fastighet",
   "property_form_designation": "Fastighetsbeteckning",
   "property_list_empty": "Inga fastigheter ännu.",
+  "property_monthly_rent": "{amount} /mån",
+  "property_occupancy_count": "{rented} av {total}",
+  "property_occupancy_percent": "{percent} % uthyrt",
   "property_save": "Spara fastighet",
+  "property_shared_lease": "Avtal #{number}, flera objekt",
   "rent_interval_monthly": "per månad",
   "rent_interval_yearly": "per år",
   "rent_unit_with_vat": "{interval} + moms",
@@ -498,10 +747,64 @@
   "role_admin": "Administratör",
   "role_member": "Medlem",
   "role_owner": "Ägare",
+  "settings_bankgiro": "Bankgiro",
+  "settings_bankgiro_placeholder": "5050-1055",
+  "settings_bankgiro_required": "Krävs för att avier ska kunna betalas",
+  "settings_company_description": "Säljaruppgifter som måste stå på en faktura.",
+  "settings_contact": "Adress och kontakt",
+  "settings_contact_description": "Visas i avins sidfot så att hyresgäster vet vem de ska fråga.",
+  "settings_email": "E-post för frågor",
+  "settings_email_placeholder": "hyra@foretag.se",
+  "settings_f_skatt": "Godkänd för F-skatt",
+  "settings_f_skatt_description": "Skrivs ut som ”Godkänd för F-skatt” på avin.",
+  "settings_missing": "saknas",
   "settings_missing_address": "Adressen är inte komplett – den skrivs ut som avsändare på avin.",
   "settings_missing_bankgiro": "Bankgiro saknas – hyresgäster kan inte betala med OCR förrän det är ifyllt.",
   "settings_missing_email": "E-post för frågor saknas – hyresgäster ser inte vart de ska vända sig.",
   "settings_missing_organization_number": "Organisationsnummer saknas – det måste stå på en faktura.",
+  "settings_org_number_placeholder": "556677-8899",
+  "settings_payment": "Betalning",
+  "settings_payment_description": "Vart hyran betalas. OCR-numret byggs av avins nummer.",
+  "settings_preview": "Förhandsvisning",
+  "settings_preview_description": "Så här ser sidfoten ut på nästa avi.",
+  "settings_read_only": "Du kan se uppgifterna men inte ändra dem. Ägare och administratörer kan ändra.",
+  "settings_readiness_label": "Uppgifter för avier",
+  "settings_readiness_progress": "{done} av {total} uppgifter för avier är klara",
+  "settings_ready": "Avierna har alla uppgifter de behöver",
+  "settings_saved": "Sparat. Nya avier får de nya uppgifterna.",
+  "settings_subtitle": "{organization} · uppgifterna skrivs ut på varje hyresavi",
+  "settings_vat_footer_hint": "Momsreg.nr skrivs bara ut på avier med moms.",
+  "settings_vat_number": "Momsreg.nr {number}",
+  "team_access_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} person har åtkomst",
+        "countPlural=other": "{count} personer har åtkomst"
+      }
+    }
+  ],
+  "team_access_organization": "Personer med åtkomst till {organization}",
+  "team_admin_hint": "Administratörer kan också bjuda in och ta bort användare.",
+  "team_email_placeholder": "namn@foretag.se",
+  "team_email_required": "Ange en e-postadress",
+  "team_invitation_meta": "{role} · gäller till {date}",
+  "team_invite_colleague": "Bjud in en kollega",
+  "team_members": "Medlemmar",
+  "team_pending_invitations": "Väntande inbjudningar",
+  "team_remove_confirm": "Ta bort {name} från företaget?",
+  "team_remove_member": "Ta bort {name}",
+  "team_revoke": "Återkalla",
+  "team_role": "Roll",
+  "team_role_for": "Roll för {name}",
+  "team_send_invitation": "Skicka inbjudan",
+  "team_you": "(du)",
   "tenant_add": "Lägg till hyresgäst",
   "tenant_add_description": "Koppla hyresgästen till ett avtal i nästa steg.",
   "tenant_add_email": "Lägg till e-post",
@@ -587,6 +890,12 @@
   "terminate_title": "Säg upp avtalet",
   "unit_add": "Lägg till objekt",
   "unit_add_description": "Lägenheter, lokaler, parkeringar och förråd.",
+  "unit_afterwards": "Därefter",
+  "unit_area": "Yta",
+  "unit_available_from": "Ledigt från",
+  "unit_available_now": "Nu",
+  "unit_can_be_rented": "kan hyras ut",
+  "unit_current_lease": "Nuvarande avtal",
   "unit_delete": "Ta bort objekt",
   "unit_delete_blocked": "Objektet har avtal och kan inte tas bort.",
   "unit_delete_confirm": "Ta bort objekt {label}?",
@@ -599,10 +908,22 @@
   "unit_kind_commercial": "Lokal",
   "unit_kind_parking": "Parkering",
   "unit_kind_storage": "Förråd",
+  "unit_lease_period": "Avtal #{number} · {period}",
+  "unit_list_empty": "Inga objekt ännu.",
   "unit_named": "Objekt {label}",
+  "unit_never_rented": "Objektet har aldrig hyrts ut.",
+  "unit_next_tenant": "ny hyresgäst {date}",
+  "unit_no_tenant": "Ingen",
+  "unit_no_tenant_yet": "Ingen ännu",
+  "unit_not_rented_now": "ingen uthyrning nu",
   "unit_prefix_apartment": "Lgh",
   "unit_prefix_commercial": "Lokal",
   "unit_prefix_parking": "P-plats",
   "unit_prefix_storage": "Förråd",
-  "unit_save": "Spara objekt"
+  "unit_property": "Fastighet",
+  "unit_rental_history": "Uthyrningshistorik",
+  "unit_rented": "Uthyrt",
+  "unit_save": "Spara objekt",
+  "unit_upcoming_lease": "Kommande avtal",
+  "unit_vacant": "Vakant"
 }

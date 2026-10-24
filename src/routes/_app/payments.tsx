@@ -33,12 +33,21 @@ import {
 import type { listPayments } from '#/features/payments/program'
 import { type PaymentFilter, paymentFilters } from '#/features/payments/schemas'
 import { formatSek } from '#/lib/money'
+import { m } from '#/paraglide/messages'
 
 const filterLabels: Record<PaymentFilter, string> = {
-  attention: 'Att hantera',
-  matched: 'Matchade',
-  ignored: 'Ignorerade',
-  all: 'Alla',
+  get attention() {
+    return m.payment_filter_attention()
+  },
+  get matched() {
+    return m.payment_filter_matched()
+  },
+  get ignored() {
+    return m.payment_filter_ignored()
+  },
+  get all() {
+    return m.filter_all()
+  },
 }
 
 export const Route = createFileRoute('/_app/payments')({
@@ -67,11 +76,11 @@ function PaymentsPage() {
 
   return (
     <div className="grid gap-6 sm:gap-8">
-      <PageHeader title="Betalningar" />
+      <PageHeader title={m.nav_payments()} />
       {canImport && <ImportForm />}
 
       <section className="grid gap-4">
-        <FilterChips label="Filtrera betalningar">
+        <FilterChips label={m.payment_filter_label()}>
           {paymentFilters.map((f) => (
             <Link
               key={f}
@@ -86,7 +95,7 @@ function PaymentsPage() {
         </FilterChips>
         {payments.length === 0 ? (
           <p className="text-muted-foreground">
-            {filter === 'attention' ? 'Inga betalningar att hantera.' : 'Inga betalningar.'}
+            {filter === 'attention' ? m.payment_none_attention() : m.payment_none()}
           </p>
         ) : (
           <>
@@ -98,11 +107,11 @@ function PaymentsPage() {
             <table className={desktopTableClass}>
               <thead className="border-b text-muted-foreground">
                 <tr>
-                  <th className="py-2 font-medium">Datum</th>
-                  <th className="py-2 font-medium">Betalare</th>
-                  <th className="py-2 font-medium">Referens</th>
-                  <th className="py-2 text-right font-medium">Belopp</th>
-                  <th className="py-2 pl-4 font-medium">Status</th>
+                  <th className="py-2 font-medium">{m.common_date()}</th>
+                  <th className="py-2 font-medium">{m.payment_payer()}</th>
+                  <th className="py-2 font-medium">{m.payment_reference()}</th>
+                  <th className="py-2 text-right font-medium">{m.common_amount()}</th>
+                  <th className="py-2 pl-4 font-medium">{m.common_status()}</th>
                   <th className="py-2 font-medium" />
                 </tr>
               </thead>
@@ -118,14 +127,16 @@ function PaymentsPage() {
 
       {imports.length > 0 && (
         <section className="grid gap-2">
-          <h2 className="font-medium text-lg">Senaste importer</h2>
+          <h2 className="font-medium text-lg">{m.payment_recent_imports()}</h2>
           <ul className="grid gap-1 text-sm">
             {imports.map((i) => (
               <li key={i.id} className="text-muted-foreground">
                 {i.createdAt.toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm' })} ·{' '}
-                <span className="text-foreground">{i.fileName}</span> · {i.paymentCount}{' '}
-                betalningar, {formatSek(i.totalOre)}
-                {i.duplicateCount > 0 && ` · ${i.duplicateCount} redan importerade`}
+                <span className="text-foreground">{i.fileName}</span> ·{' '}
+                {m.payment_import_meta({ count: i.paymentCount, amount: formatSek(i.totalOre) })}
+                {i.duplicateCount > 0 && (
+                  <> · {m.payment_duplicates({ count: i.duplicateCount })}</>
+                )}
               </li>
             ))}
           </ul>
@@ -152,11 +163,8 @@ function ImportForm() {
 
   return (
     <section className="grid max-w-2xl gap-3 rounded-lg border p-4 sm:p-6">
-      <h2 className="font-medium text-lg">Importera betalningar</h2>
-      <p className="text-muted-foreground text-sm">
-        Ladda upp bankens fil med inbetalningar (camt.054, XML). Betalningar med rätt OCR-nummer och
-        belopp bokas mot avin automatiskt. En fil kan importeras flera gånger utan dubbletter.
-      </p>
+      <h2 className="font-medium text-lg">{m.payment_import()}</h2>
+      <p className="text-muted-foreground text-sm">{m.payment_import_intro()}</p>
       <input
         ref={input}
         type="file"
@@ -169,19 +177,22 @@ function ImportForm() {
           if (file) upload.mutate(file)
         }}
       />
-      {upload.isPending && <p className="text-muted-foreground text-sm">Importerar…</p>}
+      {upload.isPending && <p className="text-muted-foreground text-sm">{m.payment_importing()}</p>}
       {upload.error && <p className="text-destructive text-sm">{upload.error.message}</p>}
       {summary && (
         <ul className="grid gap-0.5 text-sm">
-          <li>{summary.imported} betalningar importerade</li>
-          <li>{summary.matched} bokade mot avier</li>
-          {summary.review > 0 && <li>{summary.review} att kontrollera</li>}
-          {summary.unmatched > 0 && <li>{summary.unmatched} utan matchande avi</li>}
-          {summary.duplicates > 0 && <li>{summary.duplicates} redan importerade, hoppades över</li>}
+          <li>{m.payment_imported({ count: summary.imported })}</li>
+          <li>{m.payment_booked({ count: summary.matched })}</li>
+          {summary.review > 0 && <li>{m.payment_review_count({ count: summary.review })}</li>}
+          {summary.unmatched > 0 && (
+            <li>{m.payment_unmatched_count({ count: summary.unmatched })}</li>
+          )}
+          {summary.duplicates > 0 && (
+            <li>{m.payment_duplicates_skipped({ count: summary.duplicates })}</li>
+          )}
           {summary.skippedDebits + summary.skippedOtherCurrency > 0 && (
             <li className="text-muted-foreground">
-              {summary.skippedDebits + summary.skippedOtherCurrency} utbetalningar eller poster i
-              annan valuta ignorerades
+              {m.payment_skipped({ count: summary.skippedDebits + summary.skippedOtherCurrency })}
             </li>
           )}
         </ul>
@@ -240,7 +251,10 @@ function PaymentStatusDetails({
           params={{ invoiceId: payment.invoice.id }}
           className="text-xs underline-offset-4 hover:underline"
         >
-          Avi {payment.invoice.number} · {payment.invoice.recipientName}
+          {m.payment_invoice({
+            number: payment.invoice.number,
+            recipient: payment.invoice.recipientName,
+          })}
         </Link>
       )}
       {payment.note && <span className="text-muted-foreground text-xs">{payment.note}</span>}
@@ -265,7 +279,7 @@ function PaymentButtons({
         <>
           {canAssign && (
             <Button variant="outline" size="sm" onClick={() => setAssigning(!assigning)}>
-              Koppla
+              {m.payment_assign()}
             </Button>
           )}
           <Button
@@ -274,7 +288,7 @@ function PaymentButtons({
             disabled={ignore.isPending}
             onClick={() => ignore.mutate({ data: { paymentId: payment.id } })}
           >
-            Ignorera
+            {m.payment_ignore()}
           </Button>
         </>
       )}
@@ -285,7 +299,7 @@ function PaymentButtons({
           disabled={undo.isPending}
           onClick={() => undo.mutate({ data: { paymentId: payment.id } })}
         >
-          Ångra
+          {m.common_undo()}
         </Button>
       )}
     </span>
@@ -314,7 +328,7 @@ function PaymentCard({ payment }: { payment: PaymentRowData }) {
       <RowTitle
         end={<span className="font-medium tabular-nums">{formatSek(payment.amountOre)}</span>}
       >
-        {payment.payerName ?? 'Okänd betalare'}
+        {payment.payerName ?? m.payment_unknown_payer()}
       </RowTitle>
       <RowMeta>
         {payment.bookingDate}
@@ -373,21 +387,30 @@ function AssignToInvoice({
   const [invoiceId, setInvoiceId] = useState(suggestedInvoiceId ?? '')
   const assign = useMutation({ mutationFn: assignPaymentFn, onSuccess: onDone })
 
-  if (isPending) return <p className="text-muted-foreground text-sm">Hämtar avier…</p>
+  if (isPending)
+    return <p className="text-muted-foreground text-sm">{m.payment_loading_invoices()}</p>
   if (!invoices || invoices.length === 0) {
-    return <p className="text-sm">Det finns inga obetalda avier att koppla till.</p>
+    return <p className="text-sm">{m.payment_no_open_invoices()}</p>
   }
 
   return (
     <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
       <Select value={invoiceId || undefined} onValueChange={setInvoiceId}>
-        <SelectTrigger className="h-11 w-full sm:h-9 sm:w-96" aria-label="Avi att koppla till">
-          <SelectValue placeholder="Välj avi" />
+        <SelectTrigger
+          className="h-11 w-full sm:h-9 sm:w-96"
+          aria-label={m.payment_assign_invoice_label()}
+        >
+          <SelectValue placeholder={m.payment_choose_invoice()} />
         </SelectTrigger>
         <SelectContent>
           {invoices.map((i) => (
             <SelectItem key={i.id} value={i.id}>
-              Avi {i.number} · {i.recipientName} · {formatSek(i.totalOre)} · OCR {i.ocr}
+              {m.payment_invoice_option({
+                number: i.number,
+                recipient: i.recipientName,
+                amount: formatSek(i.totalOre),
+                ocr: i.ocr,
+              })}
             </SelectItem>
           ))}
         </SelectContent>
@@ -398,7 +421,7 @@ function AssignToInvoice({
         disabled={!invoiceId || assign.isPending}
         onClick={() => assign.mutate({ data: { paymentId, invoiceId } })}
       >
-        Koppla och markera betald
+        {m.payment_assign_and_pay()}
       </Button>
       {assign.error && <span className="text-destructive text-sm">{assign.error.message}</span>}
     </div>

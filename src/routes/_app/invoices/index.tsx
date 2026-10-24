@@ -23,14 +23,26 @@ import { type InvoiceFilter, invoiceFilters } from '#/features/invoicing/schemas
 import { unitSummary } from '#/features/leases/overview'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
+import { rich } from '#/lib/rich'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 const filterLabels: Record<InvoiceFilter, string> = {
-  all: 'Alla',
-  unpaid: 'Obetalda',
-  overdue: 'Förfallna',
-  paid: 'Betalda',
-  void: 'Makulerade',
+  get all() {
+    return m.filter_all()
+  },
+  get unpaid() {
+    return m.invoice_filter_unpaid()
+  },
+  get overdue() {
+    return m.invoice_filter_overdue()
+  },
+  get paid() {
+    return m.invoice_filter_paid()
+  },
+  get void() {
+    return m.invoice_filter_void()
+  },
 }
 
 export const Route = createFileRoute('/_app/invoices/')({
@@ -87,16 +99,17 @@ function InvoicesPage() {
   return (
     <div className="grid gap-6 md:gap-7">
       <PageHeader
-        title="Avier"
-        subtitle="Hyresavier och betalningsstatus"
+        title={m.nav_invoices()}
+        subtitle={m.invoice_list_subtitle()}
         action={
           canCreate && (
             <Button asChild className="h-11 md:h-10">
               <Link to="/invoices/new">
                 <Plus aria-hidden="true" />
-                <span>
-                  Skapa<span className="sr-only sm:not-sr-only"> avier</span>
+                <span className="sm:hidden" aria-hidden="true">
+                  {m.invoice_create_short()}
                 </span>
+                <span className="sr-only sm:not-sr-only">{m.invoice_run_title()}</span>
               </Link>
             </Button>
           )
@@ -104,25 +117,28 @@ function InvoicesPage() {
       />
 
       <section
-        aria-label="Sammanfattning"
+        aria-label={m.common_summary()}
         className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:gap-4"
       >
-        <StatCard label="Utestående" hint={invoiceCount(overview.outstanding.count)}>
+        <StatCard label={m.common_outstanding()} hint={invoiceCount(overview.outstanding.count)}>
           {formatSekShort(overview.outstanding.totalOre)}
         </StatCard>
         <StatCard
-          label="Förfallet"
+          label={m.invoice_overdue_amount()}
           tone={overview.overdue.count > 0 ? 'danger' : 'default'}
           hint={
             overview.overdue.oldestDays !== null
-              ? `${invoiceCount(overview.overdue.count)} · äldsta ${overview.overdue.oldestDays} dagar sen`
-              : 'Inget förfallet'
+              ? m.invoice_overdue_summary({
+                  invoices: invoiceCount(overview.overdue.count),
+                  days: overview.overdue.oldestDays,
+                })
+              : m.invoice_none_overdue()
           }
         >
           {formatSekShort(overview.overdue.totalOre)}
         </StatCard>
         <StatCard
-          label="Betalt"
+          label={m.invoice_paid_amount()}
           hint={invoiceCount(overview.paid.count)}
           className="hidden md:grid"
         >
@@ -131,12 +147,12 @@ function InvoicesPage() {
       </section>
 
       {invoices.length === 0 ? (
-        <p className="text-muted-foreground">Inga avier ännu.</p>
+        <p className="text-muted-foreground">{m.invoice_list_empty()}</p>
       ) : (
         <>
           {/* Phone: chips and cards. */}
           <div className="grid gap-3 md:hidden">
-            <FilterChips label="Filtrera avier">
+            <FilterChips label={m.invoice_filter_label()}>
               {tabs.map((f) => (
                 <Link
                   key={f}
@@ -150,7 +166,9 @@ function InvoicesPage() {
               ))}
             </FilterChips>
             {visible.length === 0 ? (
-              <p className="py-6 text-center text-muted-foreground text-sm">Inga avier matchar.</p>
+              <p className="py-6 text-center text-muted-foreground text-sm">
+                {m.invoice_list_no_match()}
+              </p>
             ) : (
               <ul className="grid gap-3">
                 {visible.map((invoice) => (
@@ -160,8 +178,10 @@ function InvoicesPage() {
             )}
             {visibleOutstanding > 0 && (
               <p className="text-center text-[13px] text-muted-foreground tabular-nums">
-                Utestående i listan:{' '}
-                <strong className="text-foreground">{formatSekShort(visibleOutstanding)}</strong>
+                {rich(
+                  (amount) => m.invoice_list_outstanding({ amount }),
+                  <strong className="text-foreground">{formatSekShort(visibleOutstanding)}</strong>,
+                )}
               </p>
             )}
           </div>
@@ -169,7 +189,7 @@ function InvoicesPage() {
           {/* Desktop: one card with tabs, period filter and the table. */}
           <section className="hidden overflow-hidden rounded-xl border bg-card md:block">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5">
-              <nav aria-label="Filtrera avier" className="flex flex-wrap gap-1">
+              <nav aria-label={m.invoice_filter_label()} className="flex flex-wrap gap-1">
                 {tabs.map((f) => (
                   <Link
                     key={f}
@@ -184,7 +204,7 @@ function InvoicesPage() {
               </nav>
               {periods.length > 1 && (
                 <label className="flex h-9 items-center gap-2 rounded-lg border bg-background pl-3 text-[13px] text-muted-foreground">
-                  Period
+                  {m.common_period()}
                   <select
                     value={search.period ?? ''}
                     onChange={(e) =>
@@ -194,7 +214,7 @@ function InvoicesPage() {
                     }
                     className="h-full rounded-r-lg bg-transparent pr-2 font-medium text-foreground outline-none"
                   >
-                    <option value="">Alla perioder</option>
+                    <option value="">{m.invoice_all_periods()}</option>
                     {periods.map((p) => (
                       <option key={p.start} value={p.start}>
                         {p.label}
@@ -206,23 +226,23 @@ function InvoicesPage() {
             </div>
             {visible.length === 0 ? (
               <p className="px-4 py-10 text-center text-muted-foreground text-sm">
-                Inga avier matchar.
+                {m.invoice_list_no_match()}
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-[13px] lg:text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground text-xs">
-                      <th className={cn(th, 'w-0')}>Nr</th>
-                      <th className={th}>Hyresgäst</th>
-                      <th className={cn(th, 'hidden lg:table-cell')}>Period</th>
-                      <th className={th}>Förfallodag</th>
-                      <th className={cn(th, 'text-right')}>Belopp</th>
-                      <th className={th}>Status</th>
-                      <th className={cn(th, 'hidden lg:table-cell')}>Skickad</th>
+                      <th className={cn(th, 'w-0')}>{m.invoice_number_short()}</th>
+                      <th className={th}>{m.lease_form_tenant()}</th>
+                      <th className={cn(th, 'hidden lg:table-cell')}>{m.common_period()}</th>
+                      <th className={th}>{m.invoice_due_date()}</th>
+                      <th className={cn(th, 'text-right')}>{m.common_amount()}</th>
+                      <th className={th}>{m.common_status()}</th>
+                      <th className={cn(th, 'hidden lg:table-cell')}>{m.invoice_sent()}</th>
                       {canManage && (
                         <th className={cn(th, 'text-right')}>
-                          <span className="sr-only">Åtgärd</span>
+                          <span className="sr-only">{m.common_action()}</span>
                         </th>
                       )}
                     </tr>
@@ -237,14 +257,16 @@ function InvoicesPage() {
             )}
             <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t bg-muted/30 px-4 py-3 text-[13px] text-muted-foreground">
               <span>
-                Visar {visible.length} av {invoiceCount(invoices.length)}
+                {m.invoice_list_showing({ visible: visible.length, count: invoices.length })}
               </span>
               {visibleOutstanding > 0 && (
                 <span>
-                  Utestående i listan:{' '}
-                  <strong className="text-foreground tabular-nums">
-                    {formatSekShort(visibleOutstanding)}
-                  </strong>
+                  {rich(
+                    (amount) => m.invoice_list_outstanding({ amount }),
+                    <strong className="text-foreground tabular-nums">
+                      {formatSekShort(visibleOutstanding)}
+                    </strong>,
+                  )}
                 </span>
               )}
             </div>
@@ -303,7 +325,7 @@ function InvoiceRow({ invoice, today, canManage, busy, markPaid }: RowProps) {
           {/* Below lg the period and sent columns fold in here. */}
           <span className="whitespace-nowrap text-muted-foreground text-xs lg:hidden">
             {period}
-            {invoice.sentAt && ' · skickad'}
+            {invoice.sentAt && <> · {m.invoice_sent_inline()}</>}
           </span>
         </div>
       </td>
@@ -333,7 +355,7 @@ function InvoiceRow({ invoice, today, canManage, busy, markPaid }: RowProps) {
         {invoice.sentAt ? (
           <span className="inline-flex items-center gap-1.5 text-[13px]">
             <Check aria-hidden="true" className="size-3.5 text-emerald-600" />
-            Ja
+            {m.common_yes()}
           </span>
         ) : (
           <span className="text-muted-foreground">–</span>
@@ -348,9 +370,9 @@ function InvoiceRow({ invoice, today, canManage, busy, markPaid }: RowProps) {
               className="h-8 px-2.5 text-[13px]"
               disabled={busy}
               onClick={() => markPaid(invoice.id)}
-              aria-label={`Markera avi ${invoice.number} betald i dag`}
+              aria-label={m.invoice_mark_paid_today({ number: invoice.number })}
             >
-              Markera betald
+              {m.invoice_mark_paid()}
             </Button>
           )}
         </td>
@@ -381,7 +403,7 @@ function InvoiceCard({ invoice, canManage, busy, markPaid }: Omit<RowProps, 'tod
           <span className="grid min-w-0 gap-0.5">
             <span className="truncate font-semibold text-base">{invoice.recipientName}</span>
             <span className="truncate text-[13px] text-muted-foreground">
-              Avi #{invoice.number} · {period}
+              {m.invoice_card_meta({ number: invoice.number, period })}
             </span>
           </span>
           <InvoiceStatusBadge status={invoice.status} />
@@ -389,10 +411,12 @@ function InvoiceCard({ invoice, canManage, busy, markPaid }: Omit<RowProps, 'tod
         <span className="flex items-end justify-between gap-3 text-[13px] tabular-nums">
           <span className="grid min-w-0 gap-0.5">
             <span>
-              {overdue ? 'Förföll' : 'Förfaller'} {invoice.dueDate}
+              {overdue
+                ? m.invoice_fell_due_on({ date: invoice.dueDate })
+                : m.invoice_due_on({ date: invoice.dueDate })}
             </span>
             <span className="text-muted-foreground">
-              {invoice.sentAt ? 'Skickad ✓ via e-post' : 'Inte skickad'}
+              {invoice.sentAt ? m.invoice_sent_email() : m.invoice_not_sent()}
             </span>
           </span>
           <span className="shrink-0 font-bold text-xl">{formatSekShort(invoice.totalOre)}</span>
@@ -403,10 +427,10 @@ function InvoiceCard({ invoice, canManage, busy, markPaid }: Omit<RowProps, 'tod
           type="button"
           disabled={busy}
           onClick={() => markPaid(invoice.id)}
-          aria-label={`Markera avi ${invoice.number} betald i dag`}
+          aria-label={m.invoice_mark_paid_today({ number: invoice.number })}
           className="h-12 w-full border-t font-semibold text-primary text-sm hover:bg-muted/40 disabled:opacity-50"
         >
-          Markera betald
+          {m.invoice_mark_paid()}
         </button>
       )}
     </li>
