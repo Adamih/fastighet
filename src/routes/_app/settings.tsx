@@ -1,10 +1,11 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Schema } from 'effect'
 import { AlertTriangle, Check, CircleCheck, FileText, Lock } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { Optional, useAppForm } from '#/components/form'
 import { PageHeader } from '#/components/responsive'
+import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { vatNumberFor } from '#/features/invoicing/rules'
@@ -12,6 +13,7 @@ import { settingsQuery, updateSettingsFn } from '#/features/settings/functions'
 import { UpdateSettingsInput } from '#/features/settings/schemas'
 import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
+import { useFormMutation } from '#/lib/form-mutation'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -46,11 +48,11 @@ function SettingsPage() {
   const [baseline, setBaseline] = useState(() => toValues(settings))
   const [saved, setSaved] = useState(false)
 
-  const save = useMutation({
+  const save = useFormMutation({
     mutationFn: updateSettingsFn,
-    onSuccess: (updated) => {
+    onSuccess: async (updated) => {
       queryClient.setQueryData(settingsQuery().queryKey, updated)
-      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true })
     },
   })
 
@@ -87,13 +89,7 @@ function SettingsPage() {
         {(values) => <Readiness values={values} />}
       </form.Subscribe>
 
-      <form
-        method="post"
-        onSubmit={(e) => {
-          e.preventDefault()
-          if (canEdit) void form.handleSubmit()
-        }}
-      >
+      <SubmissionForm form={form} disabled={!canEdit} method="post">
         <fieldset disabled={!canEdit} className="grid">
           <Section title={m.tenant_kind_company()} description={m.settings_company_description()}>
             <div className="grid gap-1.5">
@@ -201,7 +197,7 @@ function SettingsPage() {
             })}
           >
             {({ dirty, submitting }) =>
-              dirty || save.error ? (
+              dirty ? (
                 <>
                   {/* Keeps the fixed bar from covering the last fields. */}
                   <div aria-hidden="true" className="h-28 sm:h-20" />
@@ -209,20 +205,9 @@ function SettingsPage() {
                     aria-label={m.form_unsaved_label()}
                     className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 shadow-lg sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-auto sm:min-w-96"
                   >
-                    <span
-                      className={cn(
-                        'flex min-w-0 flex-1 items-center gap-2 text-[13px]',
-                        save.error ? 'text-destructive' : 'text-muted-foreground',
-                      )}
-                    >
-                      {save.error ? (
-                        save.error.message
-                      ) : (
-                        <>
-                          <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
-                          {m.form_unsaved_label()}
-                        </>
-                      )}
+                    <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-muted-foreground">
+                      <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
+                      {m.form_unsaved_label()}
                     </span>
                     <div className="flex w-full gap-2 sm:w-auto">
                       <Button
@@ -258,7 +243,7 @@ function SettingsPage() {
             }
           </form.Subscribe>
         )}
-      </form>
+      </SubmissionForm>
     </div>
   )
 }

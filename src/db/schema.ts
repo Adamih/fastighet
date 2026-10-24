@@ -305,3 +305,20 @@ export const paymentRelations = relations(payment, ({ one }) => ({
   import: one(paymentImport, { fields: [payment.importId], references: [paymentImport.id] }),
   invoice: one(invoice, { fields: [payment.invoiceId], references: [invoice.id] }),
 }))
+
+/** A claimed request is never executed twice, including after a worker/network failure. */
+export const submission = sqliteTable(
+  'submission',
+  {
+    organizationId: organizationId(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    operation: text('operation').notNull(),
+    requestId: text('request_id').notNull(),
+    payload: text('payload').notNull(),
+    result: text('result'),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.userId, t.operation, t.requestId] })],
+)

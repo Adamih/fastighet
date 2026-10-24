@@ -1,13 +1,17 @@
 import { useStore } from '@tanstack/react-form'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Schema } from 'effect'
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { QueryError } from '#/components/query-error'
 import { RowMeta, RowTitle } from '#/components/responsive'
+import { SubmissionForm } from '#/components/submission-form'
 import { useCan } from '#/features/auth/use-can'
+import { isAppError } from '#/lib/app-errors'
 import { addMonths, stockholmDate } from '#/lib/dates'
+import { useFormMutation } from '#/lib/form-mutation'
 import { formatSek } from '#/lib/money'
 import { rich } from '#/lib/rich'
 import { cn } from '#/lib/utils'
@@ -24,11 +28,11 @@ const nextMonth = () => addMonths(`${stockholmDate(Date.now()).slice(0, 7)}-01`,
 
 export function InvoiceRunForm({
   onSubmit,
-  error,
   onDone,
+  recovering = false,
 }: {
   onSubmit: (value: CreateInvoiceRunInput) => Promise<RunResult>
-  error: Error | null
+  recovering?: boolean
   onDone: () => void
 }) {
   const drawer = useFormDrawerContext()
@@ -41,7 +45,7 @@ export function InvoiceRunForm({
     onSubmit: async ({ value, formApi }): Promise<void> => {
       if (result) {
         onDone()
-      } else if (canSubmit) {
+      } else if (canSubmit || recovering) {
         const summary = await onSubmit(value)
         setDefaultValues(value)
         formApi.reset(value)
@@ -68,15 +72,7 @@ export function InvoiceRunForm({
   if (!canCreate) return <p>{m.invoice_run_forbidden()}</p>
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-5"
-      onSubmit={(e) => {
-        e.preventDefault()
-        // Mutation errors are rendered in the form and leave the inputs available for retry.
-        void form.handleSubmit().catch(() => {})
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-5">
       {result ? (
         <section className="grid gap-2 text-sm">
           <h2 className="font-medium text-lg">{m.invoice_run_done()}</h2>
@@ -91,6 +87,17 @@ export function InvoiceRunForm({
               <li className="text-destructive">{m.invoice_run_failed({ count: result.failed })}</li>
             )}
           </ul>
+          {result.failedInvoiceIds.length > 0 && (
+            <ul className="grid gap-1">
+              {result.failedInvoiceIds.map((invoiceId, index) => (
+                <li key={invoiceId}>
+                  <Link className="underline" to="/invoices/$invoiceId" params={{ invoiceId }}>
+                    {m.invoice_run_review_failed({ number: index + 1 })}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       ) : (
         <>
@@ -112,7 +119,11 @@ export function InvoiceRunForm({
           {!isInvoiceMonth(month) ? null : preview.isPending ? (
             <p className="text-muted-foreground text-sm">{m.invoice_run_calculating()}</p>
           ) : preview.error ? (
-            <p className="text-destructive text-sm">{preview.error.message}</p>
+            <QueryError
+              error={preview.error}
+              pending={preview.isFetching}
+              retry={() => preview.refetch()}
+            />
           ) : preview.data && !preview.data.canInvoice ? (
             <p className="text-sm">
               {rich(
@@ -158,7 +169,7 @@ export function InvoiceRunForm({
               ))}
             </ul>
           )}
-          {error && <p className="text-destructive text-sm">{error.message}</p>}
+
           {pending.length > 0 && preview.data?.canInvoice && (
             <p className="text-sm">
               {rich(
@@ -170,7 +181,7 @@ export function InvoiceRunForm({
         </>
       )}
       <form.AppForm>
-        <form.SubmitButton disabled={!result && !canSubmit}>
+        <form.SubmitButton disabled={!result && !canSubmit && !recovering}>
           {result
             ? m.invoice_run_view()
             : preview.data?.canInvoice && rows.length > 0 && !preview.error && !preview.isFetching
@@ -180,7 +191,7 @@ export function InvoiceRunForm({
               : m.invoice_run_title()}
         </form.SubmitButton>
       </form.AppForm>
-    </form>
+    </SubmissionForm>
   )
 }
 
@@ -188,9 +199,10 @@ export function InvoiceRunForm({
 export function useCreateInvoiceRunDrawer() {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const create = useMutation({
+  const create = useFormMutation({
     mutationFn: createInvoiceRunFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true }),
   })
   return useFormDrawer({
     title: m.invoice_run_title(),
@@ -199,7 +211,7 @@ export function useCreateInvoiceRunDrawer() {
     form: ({ close }) => (
       <InvoiceRunForm
         onSubmit={(value) => create.mutateAsync({ data: value })}
-        error={create.error}
+        recovering={isAppError(create.error) && create.error.code === 'refresh'}
         onDone={() => {
           close()
           void navigate({ to: '/invoices', search: {} })

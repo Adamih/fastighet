@@ -2,6 +2,8 @@ import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
 import { runApp } from '#/server/run'
+import { once } from '#/server/submission'
+import { validate } from '#/server/validate'
 import {
   createProperty,
   createUnit,
@@ -24,7 +26,7 @@ import {
   UpdateUnitInput,
 } from './schemas'
 
-const std = Schema.toStandardSchemaV1
+const std = validate
 
 export const listPropertiesFn = createServerFn({ method: 'GET' }).handler(() =>
   runApp(listProperties),
@@ -37,8 +39,17 @@ export const getPropertyFn = createServerFn({ method: 'GET' })
   .handler(({ data }) => runApp(getProperty(data.propertyId)))
 
 export const createPropertyFn = createServerFn({ method: 'POST' })
-  .validator(std(CreatePropertyInput))
-  .handler(({ data }) => runApp(createProperty(data)))
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreatePropertyInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(once('createProperty', data, { property: ['manage'] }, createProperty(data))),
+  )
 
 export const updatePropertyFn = createServerFn({ method: 'POST' })
   .validator(std(UpdatePropertyInput))
@@ -57,8 +68,17 @@ export const getUnitDetailFn = createServerFn({ method: 'GET' })
   .handler(({ data }) => runApp(getUnitDetail(data.unitId)))
 
 export const createUnitFn = createServerFn({ method: 'POST' })
-  .validator(std(CreateUnitInput))
-  .handler(({ data }) => runApp(createUnit(data)))
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreateUnitInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(once('createUnit', data, { property: ['manage'] }, createUnit(data))),
+  )
 
 export const updateUnitFn = createServerFn({ method: 'POST' })
   .validator(std(UpdateUnitInput))

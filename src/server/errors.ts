@@ -17,3 +17,6 @@ export class Forbidden extends Data.TaggedError('Forbidden') {}
 export class Conflict extends Data.TaggedError('Conflict')<{ readonly message: string }> {}
 
 export class DatabaseError extends Data.TaggedError('DatabaseError')<{ readonly cause: unknown }> {}
+
+/** The write may have completed; repeating it could duplicate a record or delivery. */
+export class UncertainSubmission extends Data.TaggedError('UncertainSubmission') {}

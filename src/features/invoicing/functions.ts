@@ -2,6 +2,8 @@ import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
 import { runApp } from '#/server/run'
+import { once } from '#/server/submission'
+import { validate } from '#/server/validate'
 import {
   createInvoiceRun,
   emailInvoice,
@@ -21,15 +23,31 @@ import {
   MarkPaidInput,
 } from './schemas'
 
-const std = Schema.toStandardSchemaV1
+const std = validate
 
 export const previewInvoiceRunFn = createServerFn({ method: 'GET' })
   .validator(std(InvoiceRunInput))
   .handler(({ data }) => runApp(previewInvoiceRun(data.month)))
 
 export const createInvoiceRunFn = createServerFn({ method: 'POST' })
-  .validator(std(CreateInvoiceRunInput))
-  .handler(({ data }) => runApp(createInvoiceRun(data)))
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreateInvoiceRunInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(
+      once(
+        'createInvoiceRun',
+        data,
+        { invoice: ['manage'], lease: ['read'] },
+        createInvoiceRun(data),
+      ),
+    ),
+  )
 
 export const listInvoicesFn = createServerFn({ method: 'GET' })
   .validator(std(ListInvoicesSchema))

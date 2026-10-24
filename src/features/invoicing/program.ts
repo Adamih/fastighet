@@ -163,7 +163,7 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
 
     const withEmail = pending.filter((r) => r.tenant.email).length
     let sent = 0
-    let failed = 0
+    const failedInvoiceIds: string[] = []
     if (input.send && createdIds.length > 0) {
       // A handful at a time; one failure does not stop the others.
       const results = yield* Effect.forEach(
@@ -171,9 +171,11 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
         (id) => Effect.exit(emailInvoice(id, { skipWithoutEmail: true })),
         { concurrency: 4 },
       )
-      for (const result of results) {
-        if (Exit.isFailure(result)) failed++
-        else if (result.value) sent++
+      for (const [index, result] of results.entries()) {
+        if (Exit.isFailure(result)) {
+          failedInvoiceIds.push(createdIds[index])
+          yield* Effect.logError(result.cause)
+        } else if (result.value) sent++
       }
     }
 
@@ -181,7 +183,8 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
       created: createdIds.length,
       skipped: preview.rows.length - pending.length,
       sent,
-      failed,
+      failed: failedInvoiceIds.length,
+      failedInvoiceIds,
       withoutEmail: pending.length - withEmail,
     }
   })

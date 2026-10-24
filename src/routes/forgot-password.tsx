@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
+import { SubmissionForm } from '#/components/submission-form'
+import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import { rich } from '#/lib/rich'
@@ -10,17 +12,15 @@ export const Route = createFileRoute('/forgot-password')({ component: ForgotPass
 
 function ForgotPasswordPage() {
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const form = useAppForm({
     defaultValues: { email: '' },
     onSubmit: async ({ value }) => {
-      setError(null)
       const result = await authClient.requestPasswordReset({
         email: value.email,
         redirectTo: '/reset-password',
       })
-      if (result.error) return setError(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
       setSentTo(value.email)
     },
   })
@@ -34,14 +34,7 @@ function ForgotPasswordPage() {
           {rich((email) => m.forgot_sent({ email }), <span className="font-medium">{sentTo}</span>)}
         </p>
       ) : (
-        <form
-          method="post"
-          className="grid gap-4"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void form.handleSubmit()
-          }}
-        >
+        <SubmissionForm form={form} method="post" className="grid gap-4">
           <p className="text-muted-foreground text-sm">{m.forgot_intro()}</p>
           <form.AppField
             name="email"
@@ -54,11 +47,11 @@ function ForgotPasswordPage() {
               <field.TextField label={m.common_email()} type="email" autoComplete="email" />
             )}
           </form.AppField>
-          {error && <p className="text-destructive text-sm">{error}</p>}
+
           <form.AppForm>
             <form.SubmitButton className="sm:h-10 sm:w-full">{m.forgot_submit()}</form.SubmitButton>
           </form.AppForm>
-        </form>
+        </SubmissionForm>
       )}
       <Link to="/login" className="text-muted-foreground text-sm underline">
         {m.auth_back_to_login()}

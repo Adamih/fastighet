@@ -1,8 +1,11 @@
 import { createFileRoute, redirect, useRouter } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useRef } from 'react'
 import { useAppForm } from '#/components/form'
+import { SubmissionForm } from '#/components/submission-form'
 import { getSessionFn } from '#/features/auth/functions'
+import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
+import { authErrorMessage } from '#/lib/auth-errors'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/onboarding')({
@@ -24,21 +27,24 @@ const slugify = (name: string) =>
 
 function OnboardingPage() {
   const router = useRouter()
-  const [error, setError] = useState<string | null>(null)
+  const organizationId = useRef<string | null>(null)
 
   const form = useAppForm({
     defaultValues: { name: '' },
     onSubmit: async ({ value }) => {
-      setError(null)
-      const created = await authClient.organization.create({
-        name: value.name.trim(),
-        slug: slugify(value.name),
-      })
-      if (created.error) {
-        setError(created.error.message ?? m.onboarding_failed())
-        return
+      if (!organizationId.current) {
+        const created = await authClient.organization.create({
+          name: value.name.trim(),
+          slug: slugify(value.name),
+        })
+        if (created.error)
+          throw appError('validation', authErrorMessage(created.error, m.onboarding_failed()))
+        organizationId.current = created.data.id
       }
-      await authClient.organization.setActive({ organizationId: created.data.id })
+      const active = await authClient.organization.setActive({
+        organizationId: organizationId.current,
+      })
+      if (active.error) throw appError('validation', authErrorMessage(active.error))
       await router.navigate({ to: '/' })
     },
   })
@@ -49,14 +55,7 @@ function OnboardingPage() {
         <h1 className="font-semibold text-2xl">{m.onboarding_title()}</h1>
         <p className="text-muted-foreground text-sm">{m.onboarding_intro()}</p>
       </div>
-      <form
-        method="post"
-        className="grid gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void form.handleSubmit()
-        }}
-      >
+      <SubmissionForm form={form} method="post" className="grid gap-4">
         <form.AppField
           name="name"
           validators={{
@@ -70,13 +69,13 @@ function OnboardingPage() {
             />
           )}
         </form.AppField>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+
         <form.AppForm>
           <form.SubmitButton className="sm:h-10 sm:w-full">
             {m.onboarding_submit()}
           </form.SubmitButton>
         </form.AppForm>
-      </form>
+      </SubmissionForm>
     </main>
   )
 }

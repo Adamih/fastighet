@@ -1,8 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { DeleteButton } from '#/components/delete-button'
 import { Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { SubmissionForm } from '#/components/submission-form'
+import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 import { createUnitFn, deleteUnitFn, propertyQuery, unitQuery, updateUnitFn } from './functions'
 import { type UnitKind, unitKindLabels } from './unit-kinds'
@@ -23,12 +25,10 @@ export function UnitForm({
   defaultValues,
   submitLabel,
   onSubmit,
-  error,
 }: {
   defaultValues: UnitValues
   submitLabel: string
   onSubmit: (value: UnitValues) => Promise<unknown>
-  error: Error | null
 }) {
   const drawer = useFormDrawerContext()
   const form = useAppForm({
@@ -42,14 +42,7 @@ export function UnitForm({
   })
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit().catch(() => {})
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-4">
       <fieldset className="grid gap-4">
         <div className="grid grid-cols-2 gap-4">
           <form.AppField
@@ -85,23 +78,26 @@ export function UnitForm({
             />
           )}
         </form.AppField>
-        {error && <p className="text-destructive text-sm">{error.message}</p>}
+
         <form.AppForm>
           <form.SubmitButton>{submitLabel}</form.SubmitButton>
         </form.AppForm>
       </fieldset>
-    </form>
+    </SubmissionForm>
   )
 }
 
 /** "Lägg till objekt" on a property's page. */
 export function useAddUnitDrawer(propertyId: string) {
   const queryClient = useQueryClient()
-  const create = useMutation({
+  const create = useFormMutation({
     mutationFn: createUnitFn,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: propertyQuery(propertyId).queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['units'] })
+      await queryClient.invalidateQueries(
+        { queryKey: propertyQuery(propertyId).queryKey },
+        { throwOnError: true },
+      )
+      await queryClient.invalidateQueries({ queryKey: ['units'] }, { throwOnError: true })
     },
   })
   return useFormDrawer({
@@ -112,7 +108,6 @@ export function useAddUnitDrawer(propertyId: string) {
       <UnitForm
         defaultValues={emptyUnit}
         submitLabel={m.unit_save()}
-        error={create.error}
         onSubmit={async (value) => {
           await create.mutateAsync({ data: { propertyId, ...value } })
           close()
@@ -129,18 +124,21 @@ export function useEditUnitDrawer(
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: propertyQuery(unit.propertyId).queryKey })
-    await queryClient.invalidateQueries({ queryKey: ['units'] })
-    await queryClient.invalidateQueries({ queryKey: ['leases'] })
+    await queryClient.invalidateQueries(
+      { queryKey: propertyQuery(unit.propertyId).queryKey },
+      { throwOnError: true },
+    )
+    await queryClient.invalidateQueries({ queryKey: ['units'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['leases'] }, { throwOnError: true })
   }
-  const update = useMutation({
+  const update = useFormMutation({
     mutationFn: updateUnitFn,
     onSuccess: async (updated) => {
       queryClient.setQueryData(unitQuery(unit.id).queryKey, updated)
       await refresh()
     },
   })
-  const remove = useMutation({
+  const remove = useFormMutation({
     mutationFn: deleteUnitFn,
     onSuccess: async () => {
       await navigate({ to: '/properties/$propertyId', params: { propertyId: unit.propertyId } })
@@ -159,7 +157,6 @@ export function useEditUnitDrawer(
         <UnitForm
           defaultValues={{ kind: unit.kind, label: unit.label, areaSqm: unit.areaSqm }}
           submitLabel={m.common_save_changes()}
-          error={update.error}
           onSubmit={async (value) => {
             await update.mutateAsync({ data: { unitId: unit.id, ...value } })
             close()

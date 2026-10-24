@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useAppForm } from '#/components/form'
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { PageHeader } from '#/components/responsive'
+import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
 import {
   Select,
@@ -23,9 +24,11 @@ import {
   type Role,
   roleLabels,
 } from '#/features/team/roles'
+import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import { stockholmDate } from '#/lib/dates'
+import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/team')({
@@ -43,14 +46,15 @@ function TeamPage() {
   const ownerCount = team.members.filter((m) => isOwner(m.role)).length
 
   const queryClient = useQueryClient()
-  const refresh = () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey })
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }, { throwOnError: true })
   const changeRole = useMutation({
     mutationFn: async (input: { memberId: string; role: Role }) => {
       const result = await authClient.organization.updateMemberRole({
         ...input,
         organizationId: app.organization.id,
       })
-      if (result.error) throw new Error(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
     },
     onSettled: refresh,
   })
@@ -60,7 +64,7 @@ function TeamPage() {
         memberIdOrEmail: memberId,
         organizationId: app.organization.id,
       })
-      if (result.error) throw new Error(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
     },
     onSettled: refresh,
   })
@@ -244,9 +248,10 @@ function PendingInvitations({
   const cancel = useMutation({
     mutationFn: async (invitationId: string) => {
       const result = await authClient.organization.cancelInvitation({ invitationId })
-      if (result.error) throw new Error(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }, { throwOnError: true }),
   })
 
   return (
@@ -290,12 +295,13 @@ function PendingInvitations({
 
 function InviteForm() {
   const queryClient = useQueryClient()
-  const invite = useMutation({
+  const invite = useFormMutation({
     mutationFn: async (value: { email: string; role: InvitableRole }) => {
       const result = await authClient.organization.inviteMember(value)
-      if (result.error) throw new Error(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: teamQuery().queryKey }, { throwOnError: true }),
   })
 
   const form = useAppForm({
@@ -314,13 +320,7 @@ function InviteForm() {
       <h2 id="invite" className="font-bold text-[17px]">
         {m.team_invite_colleague()}
       </h2>
-      <form
-        className="grid gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void form.handleSubmit()
-        }}
-      >
+      <SubmissionForm form={form} className="grid gap-4">
         <div className="grid gap-4">
           <form.AppField
             name="email"
@@ -353,13 +353,13 @@ function InviteForm() {
         <p className="rounded-lg bg-muted px-3.5 py-3 text-[13px] text-muted-foreground leading-relaxed">
           {m.team_admin_hint()}
         </p>
-        {invite.error && <p className="text-destructive text-sm">{invite.error.message}</p>}
+
         <form.AppForm>
           <form.SubmitButton className="sm:w-full md:h-10">
             {m.team_send_invitation()}
           </form.SubmitButton>
         </form.AppForm>
-      </form>
+      </SubmissionForm>
     </section>
   )
 }

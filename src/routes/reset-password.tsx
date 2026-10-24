@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
+import { SubmissionForm } from '#/components/submission-form'
+import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import { m } from '#/paraglide/messages'
@@ -17,15 +19,13 @@ export const Route = createFileRoute('/reset-password')({
 function ResetPasswordPage() {
   const { token, error: linkError } = Route.useSearch()
   const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const form = useAppForm({
     defaultValues: { password: '', confirm: '' },
     onSubmit: async ({ value }) => {
       if (!token) return
-      setError(null)
       const result = await authClient.resetPassword({ newPassword: value.password, token })
-      if (result.error) return setError(authErrorMessage(result.error))
+      if (result.error) throw appError('validation', authErrorMessage(result.error))
       setDone(true)
     },
   })
@@ -57,14 +57,7 @@ function ResetPasswordPage() {
   return (
     <main className="mx-auto grid max-w-sm gap-6 px-4 py-16">
       <h1 className="font-semibold text-2xl">{m.reset_title()}</h1>
-      <form
-        method="post"
-        className="grid gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void form.handleSubmit()
-        }}
-      >
+      <SubmissionForm form={form} method="post" className="grid gap-4">
         <form.AppField
           name="password"
           validators={{
@@ -95,11 +88,11 @@ function ResetPasswordPage() {
             />
           )}
         </form.AppField>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+
         <form.AppForm>
           <form.SubmitButton className="sm:h-10 sm:w-full">{m.reset_submit()}</form.SubmitButton>
         </form.AppForm>
-      </form>
+      </SubmissionForm>
     </main>
   )
 }

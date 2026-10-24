@@ -1,7 +1,9 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { SubmissionForm } from '#/components/submission-form'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
+import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 import { leasesQuery, terminateLeaseFn } from './functions'
 import type { LeaseView } from './program'
@@ -17,11 +19,9 @@ interface TerminateValues {
 export function TerminateForm({
   lease,
   onSubmit,
-  error,
 }: {
   lease: LeaseView
   onSubmit: (value: TerminateValues) => Promise<unknown>
-  error: Error | null
 }) {
   const drawer = useFormDrawerContext()
   const form = useAppForm({
@@ -30,14 +30,7 @@ export function TerminateForm({
   })
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit()
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-4">
       <form.AppField
         name="noticeDate"
         validators={{
@@ -60,23 +53,26 @@ export function TerminateForm({
           )
         }
       </form.Subscribe>
-      {error && <p className="text-destructive text-sm">{error.message}</p>}
+
       <form.AppForm>
         <form.SubmitButton variant="destructive">{m.terminate_submit()}</form.SubmitButton>
       </form.AppForm>
-    </form>
+    </SubmissionForm>
   )
 }
 
 /** "Säg upp" on the lease page. */
 export function useTerminateLeaseDrawer(lease: LeaseView) {
   const queryClient = useQueryClient()
-  const terminate = useMutation({
+  const terminate = useFormMutation({
     mutationFn: terminateLeaseFn,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leasesQuery().queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['properties'] })
-      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
+      await queryClient.invalidateQueries(
+        { queryKey: leasesQuery().queryKey },
+        { throwOnError: true },
+      )
+      await queryClient.invalidateQueries({ queryKey: ['properties'] }, { throwOnError: true })
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] }, { throwOnError: true })
     },
   })
   return useFormDrawer({
@@ -90,7 +86,6 @@ export function useTerminateLeaseDrawer(lease: LeaseView) {
     form: ({ close }) => (
       <TerminateForm
         lease={lease}
-        error={terminate.error}
         onSubmit={async (value) => {
           await terminate.mutateAsync({
             data: {

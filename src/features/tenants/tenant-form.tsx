@@ -1,8 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Schema } from 'effect'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { SubmissionForm } from '#/components/submission-form'
 import { tenantKindLabels, tenantKinds } from '#/features/leases/options'
+import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 import { createTenantFn, tenantQuery, tenantsQuery, updateTenantFn } from './functions'
 import { type CreateTenantInput, CreateTenantInput as TenantSchema } from './schemas'
@@ -46,12 +48,10 @@ export function TenantForm({
   defaultValues,
   submitLabel,
   onSubmit,
-  error,
 }: {
   defaultValues: CreateTenantInput
   submitLabel: string
   onSubmit: (value: CreateTenantInput) => Promise<unknown>
-  error: Error | null
 }) {
   const drawer = useFormDrawerContext()
   const form = useAppForm({
@@ -61,14 +61,7 @@ export function TenantForm({
   })
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit()
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-4">
       <form.AppField name="kind">
         {(field) => (
           <field.SegmentedField
@@ -147,20 +140,21 @@ export function TenantForm({
           {(field) => <field.TextField label={m.common_city()} autoComplete="address-level2" />}
         </form.AppField>
       </div>
-      {error && <p className="text-destructive text-sm">{error.message}</p>}
+
       <form.AppForm>
         <form.SubmitButton>{submitLabel}</form.SubmitButton>
       </form.AppForm>
-    </form>
+    </SubmissionForm>
   )
 }
 
 /** "Lägg till hyresgäst": creates a tenant and refreshes the tenant list. */
 export function useAddTenantDrawer() {
   const queryClient = useQueryClient()
-  const create = useMutation({
+  const create = useFormMutation({
     mutationFn: createTenantFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey }, { throwOnError: true }),
   })
   return useFormDrawer({
     title: m.tenant_add(),
@@ -170,7 +164,6 @@ export function useAddTenantDrawer() {
       <TenantForm
         defaultValues={emptyTenant}
         submitLabel={m.tenant_save()}
-        error={create.error}
         onSubmit={async (value) => {
           await create.mutateAsync({ data: value })
           close()
@@ -183,12 +176,15 @@ export function useAddTenantDrawer() {
 /** "Redigera uppgifter" on the tenant page. */
 export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] & { id: string }) {
   const queryClient = useQueryClient()
-  const update = useMutation({
+  const update = useFormMutation({
     mutationFn: updateTenantFn,
     onSuccess: async (updated) => {
       queryClient.setQueryData(tenantQuery(tenant.id).queryKey, updated)
-      await queryClient.invalidateQueries({ queryKey: tenantsQuery().queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['leases'] })
+      await queryClient.invalidateQueries(
+        { queryKey: tenantsQuery().queryKey },
+        { throwOnError: true },
+      )
+      await queryClient.invalidateQueries({ queryKey: ['leases'] }, { throwOnError: true })
     },
   })
   return useFormDrawer({
@@ -199,7 +195,6 @@ export function useEditTenantDrawer(tenant: Parameters<typeof tenantToInput>[0] 
       <TenantForm
         defaultValues={tenantToInput(tenant)}
         submitLabel={m.common_save_changes()}
-        error={update.error}
         onSubmit={async (value) => {
           await update.mutateAsync({ data: { tenantId: tenant.id, ...value } })
           close()

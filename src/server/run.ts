@@ -4,7 +4,9 @@ import { and, asc, eq } from 'drizzle-orm'
 import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable } from '#/db/schema'
+import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
+import { m } from '#/paraglide/messages'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { Mailer } from './mail/mailer'
 import { mailer } from './mail/provider'
@@ -75,14 +77,16 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
         return redirect({ to: '/onboarding' })
       case 'NotFound':
         return notFound()
+      case 'UncertainSubmission':
+        return appError('uncertain', m.form_error_uncertain())
       case 'Forbidden':
-        return new Error('Du har inte behörighet att göra det här.')
+        return appError('forbidden', m.form_error_forbidden())
       case 'Conflict':
-        return new Error(e.message)
+        return appError('conflict', e.message ?? 'Åtgärden kunde inte genomföras.')
     }
   }
   console.error(Cause.pretty(cause))
-  return new Error('Något gick fel. Försök igen.')
+  return appError('unexpected', m.form_error_unexpected())
 }
 
 /**

@@ -1,7 +1,10 @@
+import { useStore } from '@tanstack/react-form'
 import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
+import { SubmissionForm } from '#/components/submission-form'
 import { getSessionFn } from '#/features/auth/functions'
+import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage, safeRedirect } from '#/lib/auth-errors'
 import { rich } from '#/lib/rich'
@@ -19,18 +22,16 @@ function LoginPage() {
   const router = useRouter()
   const { redirect: next } = Route.useSearch()
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn')
-  const [error, setError] = useState<string | null>(null)
   const [verificationSentTo, setVerificationSentTo] = useState<string | null>(null)
 
   const form = useAppForm({
     defaultValues: { name: '', email: '', password: '' },
     onSubmit: async ({ value }) => {
-      setError(null)
       // Where the verification link lands after confirming (and signing in).
       const callbackURL = next ?? '/'
       if (mode === 'signUp') {
         const result = await authClient.signUp.email({ ...value, callbackURL })
-        if (result.error) return setError(authErrorMessage(result.error))
+        if (result.error) throw appError('validation', authErrorMessage(result.error))
         setVerificationSentTo(value.email)
         return
       }
@@ -39,10 +40,13 @@ function LoginPage() {
         password: value.password,
         callbackURL,
       })
-      if (result.error) return setError(authErrorMessage(result.error, m.login_failed()))
+      if (result.error)
+        throw appError('validation', authErrorMessage(result.error, m.login_failed()))
       await router.navigate({ href: next ?? '/' })
     },
   })
+
+  const submitting = useStore(form.store, (state) => state.isSubmitting)
 
   if (verificationSentTo) {
     return (
@@ -74,14 +78,7 @@ function LoginPage() {
       <h1 className="font-semibold text-2xl">
         {mode === 'signIn' ? m.login_sign_in() : m.login_sign_up()}
       </h1>
-      <form
-        method="post"
-        className="grid gap-4"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void form.handleSubmit()
-        }}
-      >
+      <SubmissionForm key={mode} form={form} method="post" className="grid gap-4">
         {mode === 'signUp' && (
           <form.AppField name="name">
             {(field) => <field.TextField label={m.common_name()} autoComplete="name" />}
@@ -101,19 +98,19 @@ function LoginPage() {
             />
           )}
         </form.AppField>
-        {error && <p className="text-destructive text-sm">{error}</p>}
+
         <form.AppForm>
           <form.SubmitButton className="sm:h-10 sm:w-full">
             {mode === 'signIn' ? m.login_sign_in() : m.login_sign_up()}
           </form.SubmitButton>
         </form.AppForm>
-      </form>
+      </SubmissionForm>
       <div className="flex justify-between text-sm">
         <button
           type="button"
           className="text-muted-foreground underline"
+          disabled={submitting}
           onClick={() => {
-            setError(null)
             setMode(mode === 'signIn' ? 'signUp' : 'signIn')
           }}
         >

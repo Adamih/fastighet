@@ -1,13 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { DeleteButton } from '#/components/delete-button'
 import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { QueryError } from '#/components/query-error'
+import { SubmissionForm } from '#/components/submission-form'
 import { useCan } from '#/features/auth/use-can'
 import { unitsQuery } from '#/features/properties/functions'
 import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
 import { tenantsQuery } from '#/features/tenants/functions'
 import { isIsoDate } from '#/lib/dates'
+import { useFormMutation } from '#/lib/form-mutation'
 import { oreToInput, parseSek } from '#/lib/money'
 import { rich } from '#/lib/rich'
 import { m } from '#/paraglide/messages'
@@ -66,7 +69,6 @@ export function LeaseForm({
   defaultValues,
   submitLabel,
   onSubmit,
-  error,
 }: {
   /** Omit to hide the tenant picker. */
   tenants?: readonly { id: string; name: string }[]
@@ -74,7 +76,6 @@ export function LeaseForm({
   defaultValues: LeaseFormValues
   submitLabel: string
   onSubmit: (value: LeaseFormValues) => Promise<unknown>
-  error: Error | null
 }) {
   const drawer = useFormDrawerContext()
   const form = useAppForm({
@@ -109,14 +110,7 @@ export function LeaseForm({
   })
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-6"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit().catch(() => {})
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-6">
       <fieldset className="grid gap-6">
         {tenants && (
           <form.AppField name="tenantId" validators={required(m.lease_form_tenant_required())}>
@@ -262,12 +256,11 @@ export function LeaseForm({
           </form.AppField>
         </section>
 
-        {error && <p className="text-destructive text-sm">{error.message}</p>}
         <form.AppForm>
           <form.SubmitButton>{submitLabel}</form.SubmitButton>
         </form.AppForm>
       </fieldset>
-    </form>
+    </SubmissionForm>
   )
 }
 
@@ -277,13 +270,16 @@ export function useAddLeaseDrawer(unitId?: string) {
   const canCreate = useCan()({ lease: ['manage'], tenant: ['read'], property: ['read'] })
   const tenants = useQuery({ ...tenantsQuery(), enabled: canCreate })
   const units = useQuery({ ...unitsQuery(), enabled: canCreate })
-  const create = useMutation({
+  const create = useFormMutation({
     mutationFn: createLeaseFn,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: leasesQuery().queryKey })
-      await queryClient.invalidateQueries({ queryKey: ['properties'] })
-      await queryClient.invalidateQueries({ queryKey: ['tenants'] })
-      await queryClient.invalidateQueries({ queryKey: ['units'] })
+      await queryClient.invalidateQueries(
+        { queryKey: leasesQuery().queryKey },
+        { throwOnError: true },
+      )
+      await queryClient.invalidateQueries({ queryKey: ['properties'] }, { throwOnError: true })
+      await queryClient.invalidateQueries({ queryKey: ['tenants'] }, { throwOnError: true })
+      await queryClient.invalidateQueries({ queryKey: ['units'] }, { throwOnError: true })
     },
   })
   return useFormDrawer({
@@ -291,7 +287,14 @@ export function useAddLeaseDrawer(unitId?: string) {
     onClose: create.reset,
     form: ({ close }) => {
       const error = tenants.error ?? units.error
-      if (error) return <p className="text-destructive text-sm">{error.message}</p>
+      if (error)
+        return (
+          <QueryError
+            error={error}
+            pending={tenants.isFetching || units.isFetching}
+            retry={() => Promise.all([tenants.refetch(), units.refetch()])}
+          />
+        )
       if (!tenants.data || !units.data) {
         return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
       }
@@ -322,7 +325,6 @@ export function useAddLeaseDrawer(unitId?: string) {
             unitIds: unitId && units.data.some((u) => u.id === unitId) ? [unitId] : [],
           }}
           submitLabel={m.lease_create()}
-          error={create.error}
           onSubmit={async (value) => {
             await create.mutateAsync({ data: value })
             close()
@@ -337,14 +339,15 @@ export function useAddLeaseDrawer(unitId?: string) {
 function EditLeaseForm({
   lease,
   onSubmit,
-  error,
 }: {
   lease: LeaseView
   onSubmit: (value: LeaseFormValues) => Promise<unknown>
-  error: Error | null
 }) {
   const units = useQuery(unitsQuery())
-  if (units.error) return <p className="text-destructive text-sm">{units.error.message}</p>
+  if (units.error)
+    return (
+      <QueryError error={units.error} pending={units.isFetching} retry={() => units.refetch()} />
+    )
   if (!units.data) return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
   return (
     <LeaseForm
@@ -362,7 +365,6 @@ function EditLeaseForm({
         vat: lease.vat,
       }}
       submitLabel={m.common_save_changes()}
-      error={error}
       onSubmit={onSubmit}
     />
   )
@@ -373,19 +375,19 @@ export function useEditLeaseDrawer(lease: LeaseView) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['leases'] })
-    await queryClient.invalidateQueries({ queryKey: ['properties'] })
-    await queryClient.invalidateQueries({ queryKey: ['tenants'] })
-    await queryClient.invalidateQueries({ queryKey: ['units'] })
+    await queryClient.invalidateQueries({ queryKey: ['leases'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['properties'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['tenants'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['units'] }, { throwOnError: true })
   }
-  const update = useMutation({
+  const update = useFormMutation({
     mutationFn: updateLeaseFn,
     onSuccess: async (updated) => {
       queryClient.setQueryData(leaseQuery(lease.id).queryKey, updated)
       await refresh()
     },
   })
-  const remove = useMutation({
+  const remove = useFormMutation({
     mutationFn: deleteLeaseFn,
     onSuccess: async () => {
       await navigate({ to: '/leases' })
@@ -404,7 +406,6 @@ export function useEditLeaseDrawer(lease: LeaseView) {
       <div className="grid gap-6">
         <EditLeaseForm
           lease={lease}
-          error={update.error}
           onSubmit={async ({ tenantId: _tenantId, ...value }) => {
             await update.mutateAsync({ data: { leaseId: lease.id, ...value } })
             close()

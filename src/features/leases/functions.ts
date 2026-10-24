@@ -2,6 +2,8 @@ import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
 import { runApp } from '#/server/run'
+import { once } from '#/server/submission'
+import { validate } from '#/server/validate'
 import {
   createLease,
   deleteLease,
@@ -13,7 +15,7 @@ import {
 } from './program'
 import { CreateLeaseInput, LeaseIdInput, TerminateLeaseInput, UpdateLeaseInput } from './schemas'
 
-const std = Schema.toStandardSchemaV1
+const std = validate
 
 export const listLeasesFn = createServerFn({ method: 'GET' }).handler(() => runApp(listLeases))
 
@@ -22,8 +24,24 @@ export const getLeaseFn = createServerFn({ method: 'GET' })
   .handler(({ data }) => runApp(getLease(data.leaseId)))
 
 export const createLeaseFn = createServerFn({ method: 'POST' })
-  .validator(std(CreateLeaseInput))
-  .handler(({ data }) => runApp(createLease(data)))
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreateLeaseInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(
+      once(
+        'createLease',
+        data,
+        { lease: ['manage'], tenant: ['read'], property: ['read'] },
+        createLease(data),
+      ),
+    ),
+  )
 
 export const updateLeaseFn = createServerFn({ method: 'POST' })
   .validator(std(UpdateLeaseInput))

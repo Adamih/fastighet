@@ -26,12 +26,12 @@ export const { fieldContext, formContext, useFieldContext, useFormContext } =
   createFormHookContexts()
 
 /** The field's first validation error, if any. For custom fields inside `form.AppField`. */
-export function FieldError() {
+export function FieldError({ id }: { id?: string }) {
   const field = useFieldContext<unknown>()
   const [error] = useStore(field.store, (s) => s.meta.errors)
   if (!error) return null
   return (
-    <p className="text-destructive text-sm">
+    <p id={id} className="text-destructive text-sm">
       {typeof error === 'string' ? error : (error as { message: string }).message}
     </p>
   )
@@ -78,7 +78,12 @@ function TextField({
         placeholder={placeholder}
         autoComplete={autoComplete}
         inputMode={inputMode}
-        aria-describedby={hint ? `${id}-hint` : undefined}
+        aria-invalid={field.state.meta.errors.length > 0}
+        aria-describedby={
+          [hint && `${id}-hint`, field.state.meta.errors.length > 0 && `${id}-error`]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         className="h-11 sm:h-9"
         value={field.state.value ?? ''}
         onBlur={field.handleBlur}
@@ -89,7 +94,7 @@ function TextField({
           {hint}
         </p>
       )}
-      <FieldError />
+      <FieldError id={`${id}-error`} />
     </div>
   )
 }
@@ -117,6 +122,8 @@ function SelectField({
       >
         <SelectTrigger
           id={id}
+          aria-invalid={field.state.meta.errors.length > 0}
+          aria-describedby={field.state.meta.errors.length > 0 ? `${id}-error` : undefined}
           className="w-full data-[size=default]:h-11 sm:data-[size=default]:h-9"
         >
           <SelectValue placeholder={placeholder} />
@@ -129,7 +136,7 @@ function SelectField({
           ))}
         </SelectContent>
       </Select>
-      <FieldError />
+      <FieldError id={`${id}-error`} />
     </div>
   )
 }

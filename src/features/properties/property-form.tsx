@@ -1,9 +1,11 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Schema } from 'effect'
 import { DeleteButton } from '#/components/delete-button'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
+import { SubmissionForm } from '#/components/submission-form'
+import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 import {
   createPropertyFn,
@@ -30,12 +32,10 @@ export function PropertyForm({
   defaultValues,
   submitLabel,
   onSubmit,
-  error,
 }: {
   defaultValues: CreatePropertyInput
   submitLabel: string
   onSubmit: (value: CreatePropertyInput) => Promise<unknown>
-  error: Error | null
 }) {
   const drawer = useFormDrawerContext()
   const form = useAppForm({
@@ -45,14 +45,7 @@ export function PropertyForm({
   })
 
   return (
-    <form
-      id={drawer?.formId}
-      className="grid gap-4"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void form.handleSubmit().catch(() => {})
-      }}
-    >
+    <SubmissionForm form={form} id={drawer?.formId} className="grid gap-4">
       <fieldset className="grid gap-4">
         <div className="grid gap-4">
           <form.AppField name="designation">
@@ -91,21 +84,25 @@ export function PropertyForm({
             {(field) => <field.TextField label={m.common_city()} autoComplete="address-level2" />}
           </form.AppField>
         </div>
-        {error && <p className="text-destructive text-sm">{error.message}</p>}
+
         <form.AppForm>
           <form.SubmitButton>{submitLabel}</form.SubmitButton>
         </form.AppForm>
       </fieldset>
-    </form>
+    </SubmissionForm>
   )
 }
 
 /** "Lägg till fastighet": creates a property and refreshes the property list. */
 export function useAddPropertyDrawer() {
   const queryClient = useQueryClient()
-  const create = useMutation({
+  const create = useFormMutation({
     mutationFn: createPropertyFn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: propertiesQuery().queryKey }),
+    onSuccess: () =>
+      queryClient.invalidateQueries(
+        { queryKey: propertiesQuery().queryKey },
+        { throwOnError: true },
+      ),
   })
   return useFormDrawer({
     title: m.property_add(),
@@ -115,7 +112,6 @@ export function useAddPropertyDrawer() {
       <PropertyForm
         defaultValues={emptyProperty}
         submitLabel={m.property_save()}
-        error={create.error}
         onSubmit={async (value) => {
           await create.mutateAsync({ data: value })
           close()
@@ -130,18 +126,18 @@ export function useEditPropertyDrawer(property: Awaited<ReturnType<typeof getPro
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const refresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['properties'] })
-    await queryClient.invalidateQueries({ queryKey: ['units'] })
-    await queryClient.invalidateQueries({ queryKey: ['leases'] })
+    await queryClient.invalidateQueries({ queryKey: ['properties'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['units'] }, { throwOnError: true })
+    await queryClient.invalidateQueries({ queryKey: ['leases'] }, { throwOnError: true })
   }
-  const update = useMutation({
+  const update = useFormMutation({
     mutationFn: updatePropertyFn,
     onSuccess: async (updated) => {
       queryClient.setQueryData(propertyQuery(property.id).queryKey, updated)
       await refresh()
     },
   })
-  const remove = useMutation({
+  const remove = useFormMutation({
     mutationFn: deletePropertyFn,
     onSuccess: async () => {
       await navigate({ to: '/' })
@@ -167,7 +163,6 @@ export function useEditPropertyDrawer(property: Awaited<ReturnType<typeof getPro
             city: property.city ?? '',
           }}
           submitLabel={m.common_save_changes()}
-          error={update.error}
           onSubmit={async (value) => {
             await update.mutateAsync({ data: { propertyId: property.id, ...value } })
             close()

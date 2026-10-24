@@ -111,8 +111,17 @@
   "forgot_submit": "Skicka länk",
   "forgot_title": "Glömt lösenordet",
   "form_discard": "Släng ändringar",
+  "form_error_check_before_retry": "Kontrollera resultatet innan du försöker igen. Åtgärden kan redan ha genomförts.",
+  "form_error_forbidden": "Du har inte behörighet att göra det här.",
+  "form_error_load": "Uppgifterna kunde inte läsas in.",
+  "form_error_not_found": "Uppgiften finns inte längre. Kontrollera sidan innan du försöker igen.",
+  "form_error_uncertain": "Den här begäran har redan påbörjats. Kontrollera resultatet innan du gör en ny begäran.",
+  "form_error_unexpected": "Det gick inte att bekräfta att åtgärden lyckades.",
   "form_keep_editing": "Fortsätt redigera",
   "form_optional": "(valfritt)",
+  "form_refresh_failed": "Ändringen är sparad, men sidan kunde inte uppdateras. Försök igen för att uppdatera sidan.",
+  "form_retry_load": "Försök läsa in igen",
+  "form_retry_refresh": "Försök uppdatera sidan igen",
   "form_unsaved_label": "Osparade ändringar",
   "form_unsaved_question": "Du har osparade ändringar. Vill du slänga dem?",
   "invitation_accept": "Acceptera inbjudan",
@@ -290,27 +299,14 @@
     }
   ],
   "invoice_run_done": "Klart",
-  "invoice_run_failed": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} kunde inte skickas. Försök igen från avin.",
-        "countPlural=other": "{count} kunde inte skickas. Försök igen från avin."
-      }
-    }
-  ],
+  "invoice_run_failed": "{count} utskick kunde inte bekräftas. Kontrollera avin innan du skickar igen.",
   "invoice_run_forbidden": "Du saknar behörighet att skapa avier.",
   "invoice_run_intro": "Välj vilken månad hyran avser. Kvartalsaviserade avtal tas med i januari, april, juli och oktober. Avtal som redan är aviserade för perioden hoppas över, så du kan köra om.",
   "invoice_run_month": "Hyresmånad",
   "invoice_run_needs_bankgiro": "Ange ert bankgironummer under {link} innan du skapar avier.",
   "invoice_run_no_email": "Ingen e-post",
   "invoice_run_nothing": "Inga avtal att avisera för {month}.",
+  "invoice_run_review_failed": "Kontrollera misslyckat utskick {number}",
   "invoice_run_row_meta": "Avtal {number} · {period} · förfaller {due}",
   "invoice_run_send": "Skicka e-post till hyresgäster med e-postadress",
   "invoice_run_sent": [

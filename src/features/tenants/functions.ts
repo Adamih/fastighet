@@ -2,25 +2,36 @@ import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
 import { runApp } from '#/server/run'
+import { once } from '#/server/submission'
+import { validate } from '#/server/validate'
 import { createTenant, deleteTenant, getTenant, listTenants, updateTenant } from './program'
 import { CreateTenantInput, TenantIdInput, UpdateTenantInput } from './schemas'
 
 export const listTenantsFn = createServerFn({ method: 'GET' }).handler(() => runApp(listTenants))
 
 export const getTenantFn = createServerFn({ method: 'GET' })
-  .validator(Schema.toStandardSchemaV1(TenantIdInput))
+  .validator(validate(TenantIdInput))
   .handler(({ data }) => runApp(getTenant(data.tenantId)))
 
 export const createTenantFn = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(CreateTenantInput))
-  .handler(({ data }) => runApp(createTenant(data)))
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreateTenantInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(once('createTenant', data, { tenant: ['manage'] }, createTenant(data))),
+  )
 
 export const updateTenantFn = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(UpdateTenantInput))
+  .validator(validate(UpdateTenantInput))
   .handler(({ data }) => runApp(updateTenant(data)))
 
 export const deleteTenantFn = createServerFn({ method: 'POST' })
-  .validator(Schema.toStandardSchemaV1(TenantIdInput))
+  .validator(validate(TenantIdInput))
   .handler(({ data }) => runApp(deleteTenant(data.tenantId)))
 
 export const tenantsQuery = () =>
