@@ -5,6 +5,8 @@ import { createLeaseFn, leasesQuery } from '#/features/leases/functions'
 import { emptyLease, LeaseForm } from '#/features/leases/lease-form'
 import { unitsQuery } from '#/features/properties/functions'
 import { tenantsQuery } from '#/features/tenants/functions'
+import { rich } from '#/lib/rich'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/leases/new')({
   // `unitId` preselects a unit, e.g. from the unit page's "Nytt avtal".
@@ -37,24 +39,25 @@ function NewLeasePage() {
     },
   })
 
-  if (!canCreate) return <p>Du saknar behörighet att skapa avtal.</p>
+  if (!canCreate) return <p>{m.lease_new_forbidden()}</p>
 
   if (tenants.length === 0 || units.length === 0) {
     return (
       <div className="grid gap-4">
-        <h1 className="font-semibold text-2xl">Nytt avtal</h1>
+        <h1 className="font-semibold text-2xl">{m.lease_new()}</h1>
         <p className="text-muted-foreground">
-          Ett avtal behöver en hyresgäst och minst ett objekt.{' '}
-          {tenants.length === 0 ? (
-            <Link to="/tenants" className="underline">
-              Lägg till en hyresgäst
-            </Link>
-          ) : (
-            <Link to="/" className="underline">
-              Lägg till objekt på en fastighet
-            </Link>
-          )}{' '}
-          först.
+          {rich(
+            (link) => m.lease_new_missing({ link }),
+            tenants.length === 0 ? (
+              <Link to="/tenants" className="underline">
+                {m.lease_new_add_tenant()}
+              </Link>
+            ) : (
+              <Link to="/" className="underline">
+                {m.lease_new_add_unit()}
+              </Link>
+            ),
+          )}
         </p>
       </div>
     )
@@ -62,7 +65,7 @@ function NewLeasePage() {
 
   return (
     <div className="grid max-w-2xl gap-6">
-      <h1 className="font-semibold text-2xl">Nytt avtal</h1>
+      <h1 className="font-semibold text-2xl">{m.lease_new()}</h1>
       <LeaseForm
         tenants={tenants}
         units={units}
@@ -70,7 +73,7 @@ function NewLeasePage() {
           ...emptyLease,
           unitIds: unitId && units.some((u) => u.id === unitId) ? [unitId] : [],
         }}
-        submitLabel="Skapa avtal"
+        submitLabel={m.lease_create()}
         error={create.error}
         onSubmit={(value) => create.mutateAsync({ data: value })}
       />

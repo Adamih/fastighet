@@ -28,15 +28,26 @@ import type { LeaseView } from '#/features/leases/program'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 const statusFilters = ['all', 'active', 'upcoming', 'terminated', 'ended'] as const
 type StatusFilter = (typeof statusFilters)[number]
 const filterLabels: Record<StatusFilter, string> = {
-  all: 'Alla',
-  active: 'Gällande',
-  upcoming: 'Kommande',
-  terminated: 'Uppsagda',
-  ended: 'Avslutade',
+  get all() {
+    return m.filter_all()
+  },
+  get active() {
+    return m.lease_filter_active()
+  },
+  get upcoming() {
+    return m.lease_filter_upcoming()
+  },
+  get terminated() {
+    return m.lease_filter_terminated()
+  },
+  get ended() {
+    return m.lease_filter_ended()
+  },
 }
 
 export const Route = createFileRoute('/_app/leases/')({
@@ -85,10 +96,10 @@ function LeasesPage() {
   )
   const tabs = statusFilters.filter((f) => f !== 'ended' || overview.counts.ended > 0)
   const countLine = [
-    `${overview.counts.all} avtal`,
-    overview.counts.active && `${overview.counts.active} gällande`,
-    overview.counts.upcoming && `${overview.counts.upcoming} kommande`,
-    overview.counts.terminated && `${overview.counts.terminated} uppsagt`,
+    m.lease_count({ count: overview.counts.all }),
+    overview.counts.active && m.lease_count_active({ count: overview.counts.active }),
+    overview.counts.upcoming && m.lease_count_upcoming({ count: overview.counts.upcoming }),
+    overview.counts.terminated && m.lease_count_terminated({ count: overview.counts.terminated }),
   ]
     .filter(Boolean)
     .join(' · ')
@@ -97,29 +108,28 @@ function LeasesPage() {
     <div className="grid gap-6 md:gap-7">
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 md:flex-nowrap md:items-end">
         <div className="grid min-w-0 flex-1 gap-1 md:flex-none">
-          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">Avtal</h1>
+          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">{m.nav_leases()}</h1>
           <p className="text-muted-foreground text-sm md:whitespace-nowrap">{countLine}</p>
         </div>
         {/* Phones: the button sits beside the title and the search gets its own row. */}
         <div className="contents md:ml-auto md:flex md:items-center md:gap-2.5">
           {canCreate && (
             <Button asChild className="h-11 md:h-10">
-              <Link to="/leases/new">
+              <Link to="/leases/new" aria-label={m.lease_new()}>
                 <Plus aria-hidden="true" />
-                <span>
-                  Nytt<span className="sr-only sm:not-sr-only"> avtal</span>
-                </span>
+                <span className="sm:hidden">{m.common_new()}</span>
+                <span className="hidden sm:inline">{m.lease_new()}</span>
               </Link>
             </Button>
           )}
           <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-lg border bg-background px-3 md:order-first md:h-10 md:w-60 lg:w-64">
             <Search aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-            <span className="sr-only">Sök avtal</span>
+            <span className="sr-only">{m.lease_search_label()}</span>
             <input
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Sök hyresgäst eller objekt"
+              placeholder={m.lease_search_placeholder()}
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </label>
@@ -129,12 +139,12 @@ function LeasesPage() {
       <Summary overview={overview} />
 
       {leases.length === 0 ? (
-        <p className="text-muted-foreground">Inga avtal ännu.</p>
+        <p className="text-muted-foreground">{m.lease_list_empty()}</p>
       ) : (
         <>
           {/* Phone: chips and cards. */}
           <div className="grid gap-3 md:hidden">
-            <FilterChips label="Filtrera avtal">
+            <FilterChips label={m.lease_filter_label()}>
               {tabs.map((f) => (
                 <Link
                   key={f}
@@ -148,7 +158,9 @@ function LeasesPage() {
               ))}
             </FilterChips>
             {visible.length === 0 ? (
-              <p className="py-6 text-center text-muted-foreground text-sm">Inga avtal matchar.</p>
+              <p className="py-6 text-center text-muted-foreground text-sm">
+                {m.lease_list_no_match()}
+              </p>
             ) : (
               <ul className="grid gap-3">
                 {visible.map((lease) => (
@@ -160,7 +172,10 @@ function LeasesPage() {
 
           {/* Desktop: one card with tabs and the table. */}
           <section className="hidden overflow-hidden rounded-xl border bg-card md:block">
-            <nav aria-label="Filtrera avtal" className="flex flex-wrap gap-1 border-b px-3 py-2.5">
+            <nav
+              aria-label={m.lease_filter_label()}
+              className="flex flex-wrap gap-1 border-b px-3 py-2.5"
+            >
               {tabs.map((f) => (
                 <Link
                   key={f}
@@ -175,7 +190,7 @@ function LeasesPage() {
             </nav>
             {visible.length === 0 ? (
               <p className="px-4 py-10 text-center text-muted-foreground text-sm">
-                Inga avtal matchar.
+                {m.lease_list_no_match()}
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -183,22 +198,22 @@ function LeasesPage() {
                   <thead>
                     <tr className="border-b text-muted-foreground text-xs">
                       <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
-                        Hyresgäst
+                        {m.lease_form_tenant()}
                       </th>
                       <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
-                        Objekt
+                        {m.lease_form_units()}
                       </th>
                       <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 font-semibold">
-                        Period
+                        {m.common_period()}
                       </th>
                       <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3 text-right font-semibold">
-                        Hyra
+                        {m.common_rent()}
                       </th>
                       <th className="hidden whitespace-nowrap px-2.5 py-2.5 font-semibold lg:table-cell lg:px-4 lg:py-3">
-                        Status
+                        {m.common_status()}
                       </th>
                       <th className="whitespace-nowrap px-2.5 py-2.5 lg:px-4 lg:py-3">
-                        <span className="sr-only">Åtgärder</span>
+                        <span className="sr-only">{m.common_actions()}</span>
                       </th>
                     </tr>
                   </thead>
@@ -228,31 +243,39 @@ function Summary({ overview }: { overview: ReturnType<typeof leaseOverview> }) {
   )
   const upcomingHint =
     overview.nextStart &&
-    `Startar ${formatShortDate(overview.nextStart.date)} – ${inDays(overview.nextStart.days)}`
+    m.lease_summary_next_start({
+      date: formatShortDate(overview.nextStart.date),
+      when: inDays(overview.nextStart.days),
+    })
   const endingHint =
     overview.nextEnd &&
-    `Upphör ${formatShortDate(overview.nextEnd.date)} – ${inDays(overview.nextEnd.days)}`
+    m.lease_summary_next_end({
+      date: formatShortDate(overview.nextEnd.date),
+      when: inDays(overview.nextEnd.days),
+    })
 
   return (
     <>
       {/* Phone: one dark card. */}
       <section
-        aria-label="Sammanfattning"
+        aria-label={m.common_summary()}
         className="grid gap-3.5 rounded-2xl bg-primary p-4 text-primary-foreground md:hidden"
       >
         <div className="grid gap-1">
-          <span className="text-primary-foreground/70 text-sm">Hyra, gällande avtal</span>
+          <span className="text-primary-foreground/70 text-sm">{m.lease_summary_rent()}</span>
           <span className="font-bold text-2xl tracking-tight">
             {rent}{' '}
-            <span className="font-medium text-primary-foreground/70 text-sm">/mån exkl. moms</span>
+            <span className="font-medium text-primary-foreground/70 text-sm">
+              {m.lease_summary_rent_unit()}
+            </span>
           </span>
         </div>
         <div className="grid grid-cols-3 gap-2">
           {(
             [
-              ['Gällande', overview.counts.active],
-              ['Kommande', overview.counts.upcoming],
-              ['Uppsagt', overview.counts.terminated],
+              [m.lease_status_active(), overview.counts.active],
+              [m.lease_status_upcoming(), overview.counts.upcoming],
+              [m.lease_status_terminated(), overview.counts.terminated],
             ] as const
           ).map(([label, count]) => (
             <div key={label} className="grid gap-0.5 rounded-lg bg-primary-foreground/10 p-2.5">
@@ -264,25 +287,32 @@ function Summary({ overview }: { overview: ReturnType<typeof leaseOverview> }) {
       </section>
 
       {/* Desktop: four cards. */}
-      <section aria-label="Sammanfattning" className="hidden gap-3 md:grid md:grid-cols-4 lg:gap-4">
-        <StatCard label="Hyra, gällande avtal" hint="exkl. moms">
+      <section
+        aria-label={m.common_summary()}
+        className="hidden gap-3 md:grid md:grid-cols-4 lg:gap-4"
+      >
+        <StatCard label={m.lease_summary_rent()} hint={m.common_excl_vat()}>
           {rent}
-          <span className="font-medium text-muted-foreground text-sm"> /mån</span>
+          <span className="font-medium text-muted-foreground text-sm"> {m.common_per_month()}</span>
         </StatCard>
         <StatCard
-          label="Gällande"
+          label={m.lease_status_active()}
           hint={
             overview.openEndedActive > 0
-              ? `varav ${overview.openEndedActive} tillsvidare`
+              ? m.lease_summary_open_ended({ count: overview.openEndedActive })
               : undefined
           }
         >
           {overview.counts.active}
         </StatCard>
-        <StatCard label="Kommande" hint={upcomingHint} hintClass={toneText.upcoming}>
+        <StatCard
+          label={m.lease_status_upcoming()}
+          hint={upcomingHint}
+          hintClass={toneText.upcoming}
+        >
           {overview.counts.upcoming}
         </StatCard>
-        <StatCard label="Uppsagda" hint={endingHint} hintClass={toneText.ending}>
+        <StatCard label={m.lease_filter_terminated()} hint={endingHint} hintClass={toneText.ending}>
           {overview.counts.terminated}
         </StatCard>
       </section>
@@ -295,7 +325,7 @@ function ProgressBar({ timeline, className }: { timeline: Timeline; className?: 
   return (
     <span
       role="img"
-      aria-label={`${Math.round(timeline.progress * 100)} % av avtalstiden har gått`}
+      aria-label={m.lease_progress_aria({ percent: Math.round(timeline.progress * 100) })}
       className={cn('block h-1 overflow-hidden rounded-full bg-muted', className)}
     >
       <span
@@ -388,7 +418,7 @@ function LeaseActions({ lease, canEdit }: { lease: LeaseView; canEdit: boolean }
           variant="ghost"
           size="icon"
           className="text-muted-foreground"
-          aria-label={`Fler åtgärder för avtal ${lease.number}`}
+          aria-label={m.lease_more_actions({ number: lease.number })}
         >
           <MoreHorizontal aria-hidden="true" />
         </Button>
@@ -396,19 +426,19 @@ function LeaseActions({ lease, canEdit }: { lease: LeaseView; canEdit: boolean }
       <DropdownMenuContent align="end">
         <DropdownMenuItem asChild>
           <Link to="/leases/$leaseId" params={{ leaseId: lease.id }}>
-            Visa avtal
+            {m.lease_view()}
           </Link>
         </DropdownMenuItem>
         {canEdit && (
           <DropdownMenuItem asChild>
             <Link to="/leases/$leaseId/edit" params={{ leaseId: lease.id }}>
-              Ändra avtal
+              {m.lease_edit()}
             </Link>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem asChild>
           <Link to="/tenants/$tenantId" params={{ tenantId: lease.tenant.id }}>
-            Visa hyresgäst
+            {m.lease_view_tenant()}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -446,10 +476,12 @@ function LeaseCard({ lease, timeline }: { lease: LeaseView; timeline: Timeline }
             <span className="whitespace-nowrap font-bold text-base">
               {formatSekShort(lease.rentOre)}
               <span className="font-medium text-muted-foreground text-xs">
-                {lease.rentInterval === 'monthly' ? '/mån' : '/år'}
+                {lease.rentInterval === 'monthly' ? m.common_per_month() : m.common_per_year()}
               </span>
             </span>
-            {lease.vat && <span className="text-muted-foreground text-xs">+ moms</span>}
+            {lease.vat && (
+              <span className="text-muted-foreground text-xs">{m.lease_plus_vat()}</span>
+            )}
           </span>
         </span>
       </Link>

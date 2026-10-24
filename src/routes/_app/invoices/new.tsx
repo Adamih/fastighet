@@ -11,7 +11,9 @@ import { createInvoiceRunFn, invoiceRunPreviewQuery } from '#/features/invoicing
 import { isInvoiceMonth, periodLabel } from '#/features/invoicing/rules'
 import { addMonths, stockholmDate } from '#/lib/dates'
 import { formatSek } from '#/lib/money'
+import { rich } from '#/lib/rich'
 import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/invoices/new')({ component: NewInvoiceRunPage })
 
@@ -41,24 +43,21 @@ function NewInvoiceRunPage() {
   const pending = rows.filter((r) => !r.alreadyInvoiced)
   const pendingTotal = pending.reduce((sum, r) => sum + r.totalOre, 0)
 
-  if (!canCreate) return <p>Du saknar behörighet att skapa avier.</p>
+  if (!canCreate) return <p>{m.invoice_run_forbidden()}</p>
 
   return (
     <div className="grid gap-6">
       <div className="grid gap-1">
         <Link to="/invoices" className="text-muted-foreground text-sm hover:underline">
-          ← Avier
+          ← {m.nav_invoices()}
         </Link>
-        <h1 className="font-semibold text-2xl">Skapa avier</h1>
-        <p className="text-muted-foreground">
-          Välj vilken månad hyran avser. Kvartalsaviserade avtal tas med i januari, april, juli och
-          oktober. Avtal som redan är aviserade för perioden hoppas över, så du kan köra om.
-        </p>
+        <h1 className="font-semibold text-2xl">{m.invoice_run_title()}</h1>
+        <p className="text-muted-foreground">{m.invoice_run_intro()}</p>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:gap-6">
         <div className="grid gap-1.5">
-          <Label htmlFor="month">Hyresmånad</Label>
+          <Label htmlFor="month">{m.invoice_run_month()}</Label>
           <Input
             id="month"
             type="month"
@@ -72,44 +71,43 @@ function NewInvoiceRunPage() {
         </div>
         <div className="flex items-center gap-3 pb-2">
           <Switch id="send" checked={send} onCheckedChange={setSend} />
-          <Label htmlFor="send">Skicka e-post till hyresgäster med e-postadress</Label>
+          <Label htmlFor="send">{m.invoice_run_send()}</Label>
         </div>
       </div>
 
       {result ? (
         <section className="grid gap-2 rounded-lg border p-4 sm:p-6">
-          <h2 className="font-medium text-lg">Klart</h2>
+          <h2 className="font-medium text-lg">{m.invoice_run_done()}</h2>
           <ul className="grid gap-1 text-sm">
-            <li>{result.created} avier skapade</li>
-            {result.skipped > 0 && <li>{result.skipped} redan aviserade, hoppades över</li>}
-            {send && <li>{result.sent} skickade med e-post</li>}
+            <li>{m.invoice_run_created({ count: result.created })}</li>
+            {result.skipped > 0 && <li>{m.invoice_run_skipped({ count: result.skipped })}</li>}
+            {send && <li>{m.invoice_run_sent({ count: result.sent })}</li>}
             {result.withoutEmail > 0 && (
-              <li>{result.withoutEmail} hyresgäster saknar e-post. Skriv ut deras avier.</li>
+              <li>{m.invoice_run_without_email({ count: result.withoutEmail })}</li>
             )}
             {result.failed > 0 && (
-              <li className="text-destructive">
-                {result.failed} kunde inte skickas. Försök igen från avin.
-              </li>
+              <li className="text-destructive">{m.invoice_run_failed({ count: result.failed })}</li>
             )}
           </ul>
           <Link to="/invoices" className="underline">
-            Visa avier
+            {m.invoice_run_view()}
           </Link>
         </section>
       ) : preview.isPending && valid ? (
-        <p className="text-muted-foreground">Räknar…</p>
+        <p className="text-muted-foreground">{m.invoice_run_calculating()}</p>
       ) : preview.error ? (
         <p className="text-destructive text-sm">{preview.error.message}</p>
       ) : preview.data && !preview.data.canInvoice ? (
         <p>
-          Ange ert bankgironummer under{' '}
-          <Link to="/settings" className="underline">
-            Inställningar
-          </Link>{' '}
-          innan du skapar avier.
+          {rich(
+            (link) => m.invoice_run_needs_bankgiro({ link }),
+            <Link to="/settings" className="underline">
+              {m.nav_settings()}
+            </Link>,
+          )}
         </p>
       ) : rows.length === 0 ? (
-        <p className="text-muted-foreground">Inga avtal att avisera för {month}.</p>
+        <p className="text-muted-foreground">{m.invoice_run_nothing({ month })}</p>
       ) : (
         <>
           <MobileList>
@@ -124,14 +122,18 @@ function NewInvoiceRunPage() {
                   {r.tenant.name}
                 </RowTitle>
                 <RowMeta>
-                  Avtal {r.leaseNumber} · {periodLabel(r.period)} · förfaller {r.dueDate}
+                  {m.invoice_run_row_meta({
+                    number: r.leaseNumber,
+                    period: periodLabel(r.period),
+                    due: r.dueDate,
+                  })}
                 </RowMeta>
                 {(r.alreadyInvoiced || r.vatOre > 0 || (!r.tenant.email && send)) && (
                   <span className="text-muted-foreground text-xs">
                     {[
-                      r.alreadyInvoiced && 'Redan aviserad',
-                      r.vatOre > 0 && 'inkl. moms',
-                      !r.alreadyInvoiced && !r.tenant.email && send && 'Ingen e-post',
+                      r.alreadyInvoiced && m.invoice_run_already(),
+                      r.vatOre > 0 && m.common_incl_vat(),
+                      !r.alreadyInvoiced && !r.tenant.email && send && m.invoice_run_no_email(),
                     ]
                       .filter(Boolean)
                       .join(' · ')}
@@ -143,11 +145,11 @@ function NewInvoiceRunPage() {
           <table className={desktopTableClass}>
             <thead className="border-b text-muted-foreground">
               <tr>
-                <th className="py-2 font-medium">Avtal</th>
-                <th className="py-2 font-medium">Hyresgäst</th>
-                <th className="py-2 font-medium">Period</th>
-                <th className="py-2 font-medium">Förfallodag</th>
-                <th className="py-2 text-right font-medium">Belopp</th>
+                <th className="py-2 font-medium">{m.nav_leases()}</th>
+                <th className="py-2 font-medium">{m.lease_form_tenant()}</th>
+                <th className="py-2 font-medium">{m.common_period()}</th>
+                <th className="py-2 font-medium">{m.invoice_due_date()}</th>
+                <th className="py-2 text-right font-medium">{m.common_amount()}</th>
                 <th className="py-2 pl-4 font-medium" />
               </tr>
             </thead>
@@ -163,13 +165,15 @@ function NewInvoiceRunPage() {
                   <td className="py-2 tabular-nums">{r.dueDate}</td>
                   <td className="py-2 text-right tabular-nums">
                     {formatSek(r.totalOre)}
-                    {r.vatOre > 0 && <span className="text-muted-foreground"> inkl. moms</span>}
+                    {r.vatOre > 0 && (
+                      <span className="text-muted-foreground"> {m.common_incl_vat()}</span>
+                    )}
                   </td>
                   <td className="py-2 pl-4 text-xs">
                     {r.alreadyInvoiced
-                      ? 'Redan aviserad'
+                      ? m.invoice_run_already()
                       : !r.tenant.email && send
-                        ? 'Ingen e-post'
+                        ? m.invoice_run_no_email()
                         : ''}
                   </td>
                 </tr>
@@ -183,11 +187,16 @@ function NewInvoiceRunPage() {
               disabled={pending.length === 0 || create.isPending}
               onClick={() => create.mutate({ data: { month, send } })}
             >
-              {pending.length === 0 ? 'Allt är redan aviserat' : `Skapa ${pending.length} avier`}
+              {pending.length === 0
+                ? m.invoice_run_all_done()
+                : m.invoice_run_create({ count: pending.length })}
             </Button>
             {pending.length > 0 && (
               <span className="text-sm">
-                Totalt <span className="font-medium tabular-nums">{formatSek(pendingTotal)}</span>
+                {rich(
+                  (amount) => m.invoice_run_total({ amount }),
+                  <span className="font-medium tabular-nums">{formatSek(pendingTotal)}</span>,
+                )}
               </span>
             )}
           </div>

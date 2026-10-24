@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '#/components/ui/button'
+import { m } from '#/paraglide/messages'
 
 /** A delete action that asks for confirmation inline, without a browser dialog. */
 export function DeleteButton({
@@ -28,7 +29,7 @@ export function DeleteButton({
         {label}
       </Button>
       <Button variant="outline" onClick={() => setConfirming(false)}>
-        Avbryt
+        {m.common_cancel()}
       </Button>
     </span>
   )

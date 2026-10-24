@@ -5,6 +5,7 @@ import { useCan } from '#/features/auth/use-can'
 import { deleteLeaseFn, leaseQuery, updateLeaseFn } from '#/features/leases/functions'
 import { LeaseForm } from '#/features/leases/lease-form'
 import { unitsQuery } from '#/features/properties/functions'
+import { m } from '#/paraglide/messages'
 
 // `$leaseId_` keeps this page out of the lease page's layout.
 export const Route = createFileRoute('/_app/leases/$leaseId_/edit')({
@@ -53,12 +54,10 @@ function EditLeasePage() {
           params={{ leaseId }}
           className="text-muted-foreground text-sm hover:underline"
         >
-          ← Avtal {lease.number}
+          ← {m.lease_number({ number: lease.number })}
         </Link>
-        <h1 className="font-semibold text-2xl">Ändra avtal {lease.number}</h1>
-        <p className="text-muted-foreground">
-          {lease.tenant.name}. Ändringarna gäller kommande avier; redan skapade avier ändras inte.
-        </p>
+        <h1 className="font-semibold text-2xl">{m.lease_edit_title({ number: lease.number })}</h1>
+        <p className="text-muted-foreground">{m.lease_edit_intro({ tenant: lease.tenant.name })}</p>
       </div>
 
       <LeaseForm
@@ -76,7 +75,7 @@ function EditLeasePage() {
           invoiceInterval: lease.invoiceInterval,
           vat: lease.vat,
         }}
-        submitLabel="Spara ändringar"
+        submitLabel={m.common_save_changes()}
         error={update.error}
         onSubmit={({ tenantId: _tenantId, ...value }) =>
           update.mutateAsync({ data: { leaseId, ...value } })
@@ -85,14 +84,11 @@ function EditLeasePage() {
 
       {canManage && (
         <section className="grid gap-2 border-t pt-6">
-          <h2 className="font-medium">Ta bort</h2>
-          <p className="text-muted-foreground text-sm">
-            Bara avtal som aldrig har aviserats kan tas bort. Säg upp avtalet i stället om det har
-            avier.
-          </p>
+          <h2 className="font-medium">{m.common_delete()}</h2>
+          <p className="text-muted-foreground text-sm">{m.lease_delete_rule()}</p>
           <DeleteButton
-            label="Ta bort avtal"
-            question={`Ta bort avtal ${lease.number}?`}
+            label={m.lease_delete()}
+            question={m.lease_delete_confirm({ number: lease.number })}
             pending={remove.isPending}
             onConfirm={() => remove.mutate({ data: { leaseId } })}
           />

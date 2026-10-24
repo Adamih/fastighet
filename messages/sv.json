@@ -25,6 +25,7 @@
   "auth_error_you_cannot_leave_the_organization_as_the_only_owner": "Företaget måste ha minst en ägare",
   "common_actions": "Åtgärder",
   "common_address": "Adress",
+  "common_amount": "Belopp",
   "common_cancel": "Avbryt",
   "common_city": "Ort",
   "common_close": "Stäng",
@@ -45,6 +46,7 @@
     }
   ],
   "common_delete": "Ta bort",
+  "common_delete_named": "Ta bort {name}?",
   "common_edit": "Ändra",
   "common_email": "E-post",
   "common_excl_vat": "exkl. moms",
@@ -64,24 +66,29 @@
       }
     }
   ],
+  "common_incl_vat": "inkl. moms",
   "common_kind": "Typ",
   "common_months_short": "{months} mån",
   "common_more_actions_for": "Fler åtgärder för {name}",
   "common_name": "Namn",
   "common_name_required": "Ange ett namn",
+  "common_new": "Nytt",
   "common_no": "Nej",
   "common_organization_number": "Organisationsnummer",
   "common_organization_number_short": "Org.nr",
   "common_outstanding": "Utestående",
   "common_per_month": "/mån",
   "common_per_year": "/år",
+  "common_period": "Period",
   "common_phone": "Telefon",
   "common_postal_code": "Postnummer",
   "common_rent": "Hyra",
   "common_save_changes": "Spara ändringar",
   "common_show_all": "Visa alla {count}",
   "common_show_fewer": "Visa färre",
+  "common_status": "Status",
   "common_street_address": "Gatuadress",
+  "common_summary": "Sammanfattning",
   "common_today": "i dag",
   "common_tomorrow": "i morgon",
   "common_view": "Visa",
@@ -91,6 +98,7 @@
   "detail_events": "Händelser",
   "detail_no_events": "Inget har hänt ännu.",
   "detail_stats_label": "Nyckeltal",
+  "filter_all": "Alla",
   "forgot_email_required": "Ange din e-postadress",
   "forgot_intro": "Ange din e-postadress så skickar vi en länk för att välja ett nytt lösenord.",
   "forgot_sent": "Om det finns ett konto för {email} har vi skickat en länk för att välja ett nytt lösenord.",
@@ -152,15 +160,188 @@
       }
     }
   ],
+  "invoice_due_date": "Förfallodag",
   "invoice_interval_monthly": "Månadsvis",
   "invoice_interval_quarterly": "Kvartalsvis",
   "invoice_list_empty": "Inga avier ännu.",
   "invoice_none_unpaid": "Inga obetalda avier",
+  "invoice_run_all_done": "Allt är redan aviserat",
+  "invoice_run_already": "Redan aviserad",
+  "invoice_run_calculating": "Räknar…",
+  "invoice_run_create": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Skapa {count} avi",
+        "countPlural=other": "Skapa {count} avier"
+      }
+    }
+  ],
+  "invoice_run_created": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} avi skapad",
+        "countPlural=other": "{count} avier skapade"
+      }
+    }
+  ],
+  "invoice_run_done": "Klart",
+  "invoice_run_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} kunde inte skickas. Försök igen från avin.",
+        "countPlural=other": "{count} kunde inte skickas. Försök igen från avin."
+      }
+    }
+  ],
+  "invoice_run_forbidden": "Du saknar behörighet att skapa avier.",
+  "invoice_run_intro": "Välj vilken månad hyran avser. Kvartalsaviserade avtal tas med i januari, april, juli och oktober. Avtal som redan är aviserade för perioden hoppas över, så du kan köra om.",
+  "invoice_run_month": "Hyresmånad",
+  "invoice_run_needs_bankgiro": "Ange ert bankgironummer under {link} innan du skapar avier.",
+  "invoice_run_no_email": "Ingen e-post",
+  "invoice_run_nothing": "Inga avtal att avisera för {month}.",
+  "invoice_run_row_meta": "Avtal {number} · {period} · förfaller {due}",
+  "invoice_run_send": "Skicka e-post till hyresgäster med e-postadress",
+  "invoice_run_sent": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} skickad med e-post",
+        "countPlural=other": "{count} skickade med e-post"
+      }
+    }
+  ],
+  "invoice_run_skipped": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} redan aviserad, hoppades över",
+        "countPlural=other": "{count} redan aviserade, hoppades över"
+      }
+    }
+  ],
+  "invoice_run_title": "Skapa avier",
+  "invoice_run_total": "Totalt {amount}",
+  "invoice_run_view": "Visa avier",
+  "invoice_run_without_email": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} hyresgäst saknar e-post. Skriv ut avin.",
+        "countPlural=other": "{count} hyresgäster saknar e-post. Skriv ut deras avier."
+      }
+    }
+  ],
   "invoice_status_overdue": "Förfallen",
   "invoice_status_paid": "Betald",
   "invoice_status_unpaid": "Obetald",
   "invoice_status_void": "Makulerad",
   "lease_card_period_open": "Från {start} · tillsvidare",
+  "lease_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} avtal",
+        "countPlural=other": "{count} avtal"
+      }
+    }
+  ],
+  "lease_count_active": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} gällande",
+        "countPlural=other": "{count} gällande"
+      }
+    }
+  ],
+  "lease_count_terminated": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} uppsagt",
+        "countPlural=other": "{count} uppsagda"
+      }
+    }
+  ],
+  "lease_count_upcoming": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} kommande",
+        "countPlural=other": "{count} kommande"
+      }
+    }
+  ],
+  "lease_create": "Skapa avtal",
+  "lease_delete": "Ta bort avtal",
+  "lease_delete_confirm": "Ta bort avtal {number}?",
+  "lease_delete_rule": "Bara avtal som aldrig har aviserats kan tas bort. Säg upp avtalet i stället om det har avier.",
+  "lease_edit": "Ändra avtal",
+  "lease_edit_intro": "{tenant}. Ändringarna gäller kommande avier; redan skapade avier ändras inte.",
+  "lease_edit_title": "Ändra avtal {number}",
   "lease_end_date": "Slutdatum",
   "lease_end_date_renews": "Slutdatum, förlängs",
   "lease_event_created": "Avtalet registrerades",
@@ -170,6 +351,11 @@
   "lease_extension": "Förlängning",
   "lease_fact_end": "Slut",
   "lease_fact_start": "Start",
+  "lease_filter_active": "Gällande",
+  "lease_filter_ended": "Avslutade",
+  "lease_filter_label": "Filtrera avtal",
+  "lease_filter_terminated": "Uppsagda",
+  "lease_filter_upcoming": "Kommande",
   "lease_form_end": "Avtalet löper till",
   "lease_form_extension": "Förlängning (månader)",
   "lease_form_extension_invalid": "Ange antal månader eller lämna tomt",
@@ -194,7 +380,14 @@
   "lease_form_vat": "Momspliktig uthyrning",
   "lease_form_vat_description": "25 % moms läggs på hyran.",
   "lease_list_empty": "Inga avtal ännu.",
+  "lease_list_no_match": "Inga avtal matchar.",
+  "lease_more_actions": "Fler åtgärder för avtal {number}",
   "lease_move_out": "Avflyttning",
+  "lease_new": "Nytt avtal",
+  "lease_new_add_tenant": "Lägg till en hyresgäst",
+  "lease_new_add_unit": "Lägg till objekt på en fastighet",
+  "lease_new_forbidden": "Du saknar behörighet att skapa avtal.",
+  "lease_new_missing": "Ett avtal behöver en hyresgäst och minst ett objekt. {link} först.",
   "lease_next_invoice": "Nästa avi",
   "lease_no_end_date": "Ingen slutdag",
   "lease_note_ended": "Avslutat {date}",
@@ -215,16 +408,25 @@
   "lease_progress_title": "Avtalets gång",
   "lease_renews": "Förlängs",
   "lease_renews_hint": "med {months} mån om ej uppsagt",
+  "lease_search_label": "Sök avtal",
+  "lease_search_placeholder": "Sök hyresgäst eller objekt",
   "lease_since": "sedan {date}",
   "lease_status_active": "Gällande",
   "lease_status_ended": "Avslutat",
   "lease_status_terminated": "Uppsagt",
   "lease_status_upcoming": "Kommande",
+  "lease_summary_next_end": "Upphör {date} – {when}",
+  "lease_summary_next_start": "Startar {date} – {when}",
+  "lease_summary_open_ended": "varav {count} tillsvidare",
+  "lease_summary_rent": "Hyra, gällande avtal",
+  "lease_summary_rent_unit": "/mån exkl. moms",
   "lease_term_label": "Löptid",
   "lease_terminate": "Säg upp",
   "lease_units_count": "Objekt ({count})",
   "lease_vat": "Moms",
   "lease_vat_yes": "Ja, 25 %",
+  "lease_view": "Visa avtal",
+  "lease_view_tenant": "Visa hyresgäst",
   "lease_withdraw_termination": "Ångra uppsägning",
   "login_check_inbox": "Kolla din inkorg",
   "login_check_inbox_body": "Vi har skickat en länk till {email}. Klicka på den för att bekräfta din e-postadress och logga in.",
@@ -273,7 +475,11 @@
       }
     }
   ],
+  "property_delete": "Ta bort fastighet",
+  "property_delete_blocked": "Fastigheten har objekt med avtal och kan inte tas bort.",
+  "property_delete_warning": "Fastigheten och dess {count} objekt tas bort. Det går inte att ångra.",
   "property_designation": "Beteckning",
+  "property_edit_title": "Ändra fastighet",
   "property_form_designation": "Fastighetsbeteckning",
   "property_list_empty": "Inga fastigheter ännu.",
   "property_save": "Spara fastighet",
@@ -381,6 +587,10 @@
   "terminate_title": "Säg upp avtalet",
   "unit_add": "Lägg till objekt",
   "unit_add_description": "Lägenheter, lokaler, parkeringar och förråd.",
+  "unit_delete": "Ta bort objekt",
+  "unit_delete_blocked": "Objektet har avtal och kan inte tas bort.",
+  "unit_delete_confirm": "Ta bort objekt {label}?",
+  "unit_edit_title": "Ändra objekt {label}",
   "unit_form_area": "Yta (m²)",
   "unit_form_area_invalid": "Ange yta i m², t.ex. 72,5",
   "unit_form_label": "Objektsnummer",
@@ -389,6 +599,7 @@
   "unit_kind_commercial": "Lokal",
   "unit_kind_parking": "Parkering",
   "unit_kind_storage": "Förråd",
+  "unit_named": "Objekt {label}",
   "unit_prefix_apartment": "Lgh",
   "unit_prefix_commercial": "Lokal",
   "unit_prefix_parking": "P-plats",

@@ -9,6 +9,7 @@ import {
   updateUnitFn,
 } from '#/features/properties/functions'
 import { UnitForm } from '#/features/properties/unit-form'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/units/$unitId_/edit')({
   loader: ({ context, params }) => context.queryClient.ensureQueryData(unitQuery(params.unitId)),
@@ -53,30 +54,28 @@ function EditUnitPage() {
           params={{ unitId }}
           className="text-muted-foreground text-sm hover:underline"
         >
-          ← Objekt {unit.label}
+          ← {m.unit_named({ label: unit.label })}
         </Link>
-        <h1 className="font-semibold text-2xl">Ändra objekt {unit.label}</h1>
+        <h1 className="font-semibold text-2xl">{m.unit_edit_title({ label: unit.label })}</h1>
       </div>
 
       <UnitForm
         disabled={!canManage}
         defaultValues={{ kind: unit.kind, label: unit.label, areaSqm: unit.areaSqm }}
-        submitLabel="Spara ändringar"
+        submitLabel={m.common_save_changes()}
         error={update.error}
         onSubmit={(value) => update.mutateAsync({ data: { unitId, ...value } })}
       />
 
       {canManage && (
         <section className="grid gap-2 border-t pt-6">
-          <h2 className="font-medium">Ta bort</h2>
+          <h2 className="font-medium">{m.common_delete()}</h2>
           {unit.hasLeases ? (
-            <p className="text-muted-foreground text-sm">
-              Objektet har avtal och kan inte tas bort.
-            </p>
+            <p className="text-muted-foreground text-sm">{m.unit_delete_blocked()}</p>
           ) : (
             <DeleteButton
-              label="Ta bort objekt"
-              question={`Ta bort objekt ${unit.label}?`}
+              label={m.unit_delete()}
+              question={m.unit_delete_confirm({ label: unit.label })}
               pending={remove.isPending}
               onConfirm={() => remove.mutate({ data: { unitId } })}
             />
