@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { X } from 'lucide-react'
 import { DeleteButton } from '#/components/delete-button'
-import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
+import { Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { QueryError } from '#/components/query-error'
 import { SubmissionForm } from '#/components/submission-form'
@@ -15,9 +15,10 @@ import {
   SelectValue,
 } from '#/components/ui/select'
 import { MAX_PARTIES } from '#/features/agreements/parties'
+import { UnitsField } from '#/features/agreements/units-field'
 import { useCan } from '#/features/auth/use-can'
 import { unitsQuery } from '#/features/properties/functions'
-import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
+import type { UnitKind } from '#/features/properties/unit-kinds'
 import { tenantsQuery } from '#/features/tenants/functions'
 import { isIsoDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
@@ -254,34 +255,7 @@ export function LeaseForm({
             onSubmit: ({ value }) => (value.length > 0 ? undefined : m.lease_form_units_required()),
           }}
         >
-          {(field) => (
-            <fieldset className="grid gap-2">
-              <legend className="mb-1 font-medium text-sm">{m.lease_form_units()}</legend>
-              <div className="grid max-h-64 gap-1 overflow-y-auto rounded-md border p-3">
-                {units.map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={field.state.value.includes(u.id)}
-                      onChange={(e) =>
-                        field.handleChange(
-                          e.target.checked
-                            ? [...field.state.value, u.id]
-                            : field.state.value.filter((id) => id !== u.id),
-                        )
-                      }
-                    />
-                    <span>
-                      {u.designation} · <span className="font-medium">{u.label}</span>{' '}
-                      <span className="text-muted-foreground">({unitKindLabels[u.kind]})</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <FieldError />
-            </fieldset>
-          )}
+          {() => <UnitsField label={m.lease_form_units()} units={units} />}
         </form.AppField>
 
         <section className="grid gap-4">

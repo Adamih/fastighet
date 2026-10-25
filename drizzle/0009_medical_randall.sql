@@ -1,0 +1,1 @@
+ALTER TABLE `ownership_terms` ADD `previous_agreement_id` text REFERENCES agreement(id);

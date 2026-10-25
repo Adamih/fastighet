@@ -16,6 +16,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - `agreement.endDate` is the last billed day. The lease program derives it with `effectiveEndDate` and writes it in the same batch as the lease terms. A lease's fixed-term end is `termEndDate`.
   - Avier copy their recipient from `invoiceRecipient` (`features/agreements/parties.ts`): every party's name, and the address and email of the party that receives the invoices.
   - Occupancy and status rules take any agreement through `agreementTerms` (`features/agreements/terms.ts`).
+  - Bostadsrätter live in `features/ownerships` and use the lease permissions. Their owners hold whole-percent shares that add up to 100 (`ownershipParties`).
+  - A sale is a transfer: the sellers' bostadsrätt ends the day before and stays as history, and the buyers get a new one linked by `ownershipTerms.previousAgreementId`. Deleting an uninvoiced buyer bostadsrätt undoes the sale.
+  - Checks shared by every kind (units free, parties exist, invoice history) live in `features/agreements/program.ts`.
 - **Company type and wording.** `organization_settings.kind` is `landlord` or `brf`, chosen during onboarding and changeable in settings. The app context carries it as `companyKind`.
   - UI wording that follows it comes from `companyTerms` (`features/settings/terminology.ts`), e.g. Hyresgäster or Medlemmar.
   - Documents are named by agreement kind through `documentTerms` (Hyresavi/Hyra or Avgiftsavi/Avgift), so a BRF's rental flats still get hyresavier.
@@ -59,7 +62,7 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Auth UI.** Show Better Auth errors through `authErrorMessage` (`src/lib/auth-errors.ts`), which maps error codes to Swedish. Pass every post-login `redirect` through `safeRedirect`.
 - **Seed data** (`scripts/db-seed.ts`) writes through the app's Drizzle schema and pure rules, so a schema change that breaks it fails `bun run typecheck`.
   - When you add a feature, give it seed data and keep `bun run db:reset` working.
-  - Seeded logins are in `scripts/db-seed-constants.ts`.
+  - Seeded logins are in `scripts/db-seed-constants.ts`. The BRF board login belongs to a second seeded company, Brf Linden.
 - **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
 - Use `.validator()` on `createServerFn` (this Start version has no `inputValidator`).
 - Server functions are CSRF-protected (same-origin only). When calling them outside the browser, send `Sec-Fetch-Site: same-origin`.

@@ -11,6 +11,7 @@ import {
 } from '#/components/detail'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
+import { AgreementLink, agreementNumberLabel } from '#/features/agreements/components'
 import { useCan } from '#/features/auth/use-can'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
 import { useAddLeaseDrawer } from '#/features/leases/lease-form'
@@ -194,16 +195,15 @@ function UnitPage() {
                       <li key={l.id}>
                         <PanelRow>
                           <span className="grid min-w-0 gap-0.5">
-                            <Link
-                              to="/leases/$leaseId"
-                              params={{ leaseId: l.id }}
+                            <AgreementLink
+                              agreement={l}
                               className="truncate font-semibold underline-offset-4 hover:underline"
                             >
                               {l.tenantName}
-                            </Link>
+                            </AgreementLink>
                             <span className="truncate text-muted-foreground tabular-nums">
                               {l.startDate.slice(0, 4)}–{(effectiveEndDate(l) ?? '').slice(0, 4)} ·
-                              {m.lease_number({ number: l.number })}
+                              {agreementNumberLabel(l.kind, l.number)}
                             </span>
                           </span>
                           <LeaseStatusBadge status={l.status} />
@@ -252,13 +252,12 @@ function LeaseRow({ lease }: { lease: UnitLease }) {
   return (
     <div className="flex items-center justify-between gap-3 text-[13px]">
       <span className="grid min-w-0 gap-0.5">
-        <Link
-          to="/leases/$leaseId"
-          params={{ leaseId: lease.id }}
+        <AgreementLink
+          agreement={lease}
           className="truncate font-semibold underline-offset-4 hover:underline"
         >
           {lease.tenantName}
-        </Link>
+        </AgreementLink>
         <span className="truncate text-muted-foreground tabular-nums">
           {m.unit_lease_period({ number: lease.number, period: formatPeriod(lease) })}
         </span>

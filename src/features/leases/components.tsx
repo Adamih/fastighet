@@ -17,7 +17,8 @@ const dotStyles: Record<LeaseStatus, string> = {
   ended: 'bg-muted-foreground',
 }
 
-export function LeaseStatusBadge({ status }: { status: LeaseStatus }) {
+/** A lease's status, or another agreement's with its own `label` (e.g. a bostadsrätt's). */
+export function LeaseStatusBadge({ status, label }: { status: LeaseStatus; label?: string }) {
   return (
     <span
       className={cn(
@@ -26,7 +27,7 @@ export function LeaseStatusBadge({ status }: { status: LeaseStatus }) {
       )}
     >
       <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotStyles[status])} />
-      {leaseStatusLabels[status]}
+      {label ?? leaseStatusLabels[status]}
     </span>
   )
 }

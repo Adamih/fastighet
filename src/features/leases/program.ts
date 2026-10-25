@@ -1,13 +1,12 @@
-import { and, count, desc, eq, inArray, min, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
 import {
   agreement,
   agreementParty,
   agreementUnit,
-  invoice,
   leaseTerms,
   tenant,
-  unit,
+  type unit,
 } from '#/db/schema'
 import {
   joinNames,
@@ -15,13 +14,14 @@ import {
   type PartiesProblem,
   primaryParty,
 } from '#/features/agreements/parties'
+import { checkTenantsExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
 import type { CreateLeaseInput, TerminateLeaseInput, UpdateLeaseInput } from './schemas'
-import { earliestMoveOutDate, effectiveEndDate, leaseStatus, periodsOverlap } from './terms'
+import { earliestMoveOutDate, effectiveEndDate, leaseStatus } from './terms'
 
 // A lease is an agreement of kind `lease` with its `leaseTerms`. The view flattens both, so the
 // lease pages see one record: `endDate` is the last billed day, `termEndDate` the fixed term's end.
@@ -158,31 +158,11 @@ const checkLeaseTerms = (
       })
     }
 
-    const unitIds = [...new Set(terms.unitIds)]
-    const units = yield* orgQuery((db, organizationId) =>
-      db.query.unit.findMany({
-        columns: { id: true, label: true },
-        where: and(eq(unit.organizationId, organizationId), inArray(unit.id, unitIds)),
-        with: { agreements: { with: { agreement: true } } },
-      }),
+    return yield* checkUnitsFree(
+      terms.unitIds,
+      { start: terms.startDate, end: effectiveEndDate(terms) },
+      exceptLeaseId,
     )
-    if (units.length !== unitIds.length) {
-      return yield* new NotFound({ entity: 'unit', id: unitIds.join(',') })
-    }
-
-    // Any agreement on the unit counts, whatever its kind; its `endDate` is its last day.
-    const period = { start: terms.startDate, end: effectiveEndDate(terms) }
-    for (const u of units) {
-      for (const { agreement: other } of u.agreements) {
-        if (other.id === exceptLeaseId) continue
-        if (periodsOverlap(period, { start: other.startDate, end: other.endDate })) {
-          return yield* new Conflict({
-            message: `Objekt ${u.label} är redan uthyrt under perioden (avtal ${other.number})`,
-          })
-        }
-      }
-    }
-    return unitIds
   })
 
 const partiesProblemMessages: Record<PartiesProblem, string> = {
@@ -199,22 +179,7 @@ const checkParties = (
   Effect.gen(function* () {
     const result = leaseParties(tenantId, input.coTenantIds, input.invoiceRecipientId)
     if (!result.ok) return yield* new Conflict({ message: partiesProblemMessages[result.problem] })
-    if (input.coTenantIds.length > 0) {
-      const found = yield* orgQuery((db, organizationId) =>
-        db
-          .select({ id: tenant.id })
-          .from(tenant)
-          .where(
-            and(
-              eq(tenant.organizationId, organizationId),
-              inArray(tenant.id, [...input.coTenantIds]),
-            ),
-          ),
-      )
-      if (found.length !== input.coTenantIds.length) {
-        return yield* new NotFound({ entity: 'tenant', id: input.coTenantIds.join(',') })
-      }
-    }
+    yield* checkTenantsExist(input.coTenantIds)
     return result.parties
   })
 
@@ -271,25 +236,6 @@ export const createLease = (input: CreateLeaseInput) =>
     )
     return yield* getLease(leaseId)
   })
-
-/** Invoices on the lease: how many exist at all, and the first period that was invoiced. */
-const invoiceHistory = (leaseId: string) =>
-  orgQuery((db, organizationId) =>
-    db
-      .select({
-        total: count(),
-        firstActivePeriod: min(
-          sql`case when ${invoice.voidedAt} is null then ${invoice.periodStart} end`,
-        ),
-      })
-      .from(invoice)
-      .where(and(eq(invoice.organizationId, organizationId), eq(invoice.agreementId, leaseId))),
-  ).pipe(
-    Effect.map(([row]) => ({
-      total: row?.total ?? 0,
-      firstActivePeriod: (row?.firstActivePeriod as string | null) ?? null,
-    })),
-  )
 
 /**
  * Changes the lease's units, co-tenants, dates and rent. The tenant stays: a new tenant is a new

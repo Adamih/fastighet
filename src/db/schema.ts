@@ -190,6 +190,10 @@ export const ownershipTerms = sqliteTable('ownership_terms', {
   // Insats paid when the right was first granted (upplåtelse).
   depositOre: integer('deposit_ore'),
   grantedOn: text('granted_on'),
+  // The sellers' bostadsrätt when this one came from a transfer (överlåtelse).
+  previousAgreementId: text('previous_agreement_id').references(
+    (): AnySQLiteColumn => agreement.id,
+  ),
 })
 
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))

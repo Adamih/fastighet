@@ -24,6 +24,8 @@ import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/ind
 import { Route as AppInvoicesInvoiceIdRouteImport } from './routes/_app/invoices/$invoiceId'
 import { Route as AppLeasesIndexRouteImport } from './routes/_app/leases/index'
 import { Route as AppLeasesLeaseIdRouteImport } from './routes/_app/leases/$leaseId'
+import { Route as AppOwnershipsIndexRouteImport } from './routes/_app/ownerships/index'
+import { Route as AppOwnershipsOwnershipIdRouteImport } from './routes/_app/ownerships/$ownershipId'
 import { Route as AppPropertiesPropertyIdRouteImport } from './routes/_app/properties/$propertyId'
 import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index'
 import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
@@ -105,6 +107,17 @@ const AppLeasesLeaseIdRoute = AppLeasesLeaseIdRouteImport.update({
   path: '/leases/$leaseId',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOwnershipsIndexRoute = AppOwnershipsIndexRouteImport.update({
+  id: '/ownerships/',
+  path: '/ownerships/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOwnershipsOwnershipIdRoute =
+  AppOwnershipsOwnershipIdRouteImport.update({
+    id: '/ownerships/$ownershipId',
+    path: '/ownerships/$ownershipId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppPropertiesPropertyIdRoute = AppPropertiesPropertyIdRouteImport.update({
   id: '/properties/$propertyId',
   path: '/properties/$propertyId',
@@ -144,12 +157,14 @@ export interface FileRoutesByFullPath {
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/ownerships/$ownershipId': typeof AppOwnershipsOwnershipIdRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices/': typeof AppInvoicesIndexRoute
   '/leases/': typeof AppLeasesIndexRoute
+  '/ownerships/': typeof AppOwnershipsIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -165,12 +180,14 @@ export interface FileRoutesByTo {
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/ownerships/$ownershipId': typeof AppOwnershipsOwnershipIdRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices': typeof AppInvoicesIndexRoute
   '/leases': typeof AppLeasesIndexRoute
+  '/ownerships': typeof AppOwnershipsIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
 }
 export interface FileRoutesById {
@@ -188,12 +205,14 @@ export interface FileRoutesById {
   '/_app/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/_app/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
+  '/_app/ownerships/$ownershipId': typeof AppOwnershipsOwnershipIdRoute
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/_app/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/_app/units/$unitId': typeof AppUnitsUnitIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_app/invoices/': typeof AppInvoicesIndexRoute
   '/_app/leases/': typeof AppLeasesIndexRoute
+  '/_app/ownerships/': typeof AppOwnershipsIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
 }
 export interface FileRouteTypes {
@@ -211,12 +230,14 @@ export interface FileRouteTypes {
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
+    | '/ownerships/$ownershipId'
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
     | '/api/auth/$'
     | '/invoices/'
     | '/leases/'
+    | '/ownerships/'
     | '/tenants/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -232,12 +253,14 @@ export interface FileRouteTypes {
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
+    | '/ownerships/$ownershipId'
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
     | '/api/auth/$'
     | '/invoices'
     | '/leases'
+    | '/ownerships'
     | '/tenants'
   id:
     | '__root__'
@@ -254,12 +277,14 @@ export interface FileRouteTypes {
     | '/_app/credit-notes/$creditNoteId'
     | '/_app/invoices/$invoiceId'
     | '/_app/leases/$leaseId'
+    | '/_app/ownerships/$ownershipId'
     | '/_app/properties/$propertyId'
     | '/_app/tenants/$tenantId'
     | '/_app/units/$unitId'
     | '/api/auth/$'
     | '/_app/invoices/'
     | '/_app/leases/'
+    | '/_app/ownerships/'
     | '/_app/tenants/'
   fileRoutesById: FileRoutesById
 }
@@ -380,6 +405,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLeasesLeaseIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/ownerships/': {
+      id: '/_app/ownerships/'
+      path: '/ownerships'
+      fullPath: '/ownerships/'
+      preLoaderRoute: typeof AppOwnershipsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/ownerships/$ownershipId': {
+      id: '/_app/ownerships/$ownershipId'
+      path: '/ownerships/$ownershipId'
+      fullPath: '/ownerships/$ownershipId'
+      preLoaderRoute: typeof AppOwnershipsOwnershipIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/properties/$propertyId': {
       id: '/_app/properties/$propertyId'
       path: '/properties/$propertyId'
@@ -426,11 +465,13 @@ interface AppRouteChildren {
   AppCreditNotesCreditNoteIdRoute: typeof AppCreditNotesCreditNoteIdRoute
   AppInvoicesInvoiceIdRoute: typeof AppInvoicesInvoiceIdRoute
   AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
+  AppOwnershipsOwnershipIdRoute: typeof AppOwnershipsOwnershipIdRoute
   AppPropertiesPropertyIdRoute: typeof AppPropertiesPropertyIdRoute
   AppTenantsTenantIdRoute: typeof AppTenantsTenantIdRoute
   AppUnitsUnitIdRoute: typeof AppUnitsUnitIdRoute
   AppInvoicesIndexRoute: typeof AppInvoicesIndexRoute
   AppLeasesIndexRoute: typeof AppLeasesIndexRoute
+  AppOwnershipsIndexRoute: typeof AppOwnershipsIndexRoute
   AppTenantsIndexRoute: typeof AppTenantsIndexRoute
 }
 
@@ -442,11 +483,13 @@ const AppRouteChildren: AppRouteChildren = {
   AppCreditNotesCreditNoteIdRoute: AppCreditNotesCreditNoteIdRoute,
   AppInvoicesInvoiceIdRoute: AppInvoicesInvoiceIdRoute,
   AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
+  AppOwnershipsOwnershipIdRoute: AppOwnershipsOwnershipIdRoute,
   AppPropertiesPropertyIdRoute: AppPropertiesPropertyIdRoute,
   AppTenantsTenantIdRoute: AppTenantsTenantIdRoute,
   AppUnitsUnitIdRoute: AppUnitsUnitIdRoute,
   AppInvoicesIndexRoute: AppInvoicesIndexRoute,
   AppLeasesIndexRoute: AppLeasesIndexRoute,
+  AppOwnershipsIndexRoute: AppOwnershipsIndexRoute,
   AppTenantsIndexRoute: AppTenantsIndexRoute,
 }
 

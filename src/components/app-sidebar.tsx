@@ -3,6 +3,7 @@ import {
   Banknote,
   Building2,
   FileText,
+  KeyRound,
   LogOut,
   Receipt,
   Settings,
@@ -39,6 +40,13 @@ const navigation = [
     icon: Users,
     permission: { tenant: ['read'] },
   },
+  {
+    title: m.nav_ownerships,
+    to: '/ownerships',
+    icon: KeyRound,
+    permission: { lease: ['read'] },
+    only: 'brf',
+  },
   { title: m.nav_leases, to: '/leases', icon: FileText, permission: { lease: ['read'] } },
   { title: m.nav_invoices, to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
   { title: m.nav_payments, to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
@@ -50,6 +58,8 @@ const navigation = [
   to: string
   icon: typeof Building2
   permission: Permissions | undefined
+  /** Shown only for this company type. */
+  only?: CompanyKind
 }[]
 
 export function AppSidebar() {
@@ -73,6 +83,7 @@ export function AppSidebar() {
               <SidebarMenu>
                 {navigation.map((item) => {
                   if (item.permission && !can(item.permission)) return null
+                  if ('only' in item && item.only !== app.companyKind) return null
                   const active =
                     item.to === '/'
                       ? pathname === '/' || /^\/(properties|units)\//.test(pathname)

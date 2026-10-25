@@ -1,5 +1,12 @@
 import { expect, test } from 'bun:test'
-import { invoiceRecipient, joinNames, leaseParties, primaryParty } from './parties'
+import {
+  equalShares,
+  invoiceRecipient,
+  joinNames,
+  leaseParties,
+  ownershipParties,
+  primaryParty,
+} from './parties'
 
 const party = (position: number, name: string, receivesInvoices = false) => ({
   position,
@@ -55,4 +62,45 @@ test('lease parties are unique, few, and the receiver is one of them', () => {
     ok: false,
     problem: 'too_many',
   })
+})
+
+test('owners of a bostadsrätt share exactly 100 %', () => {
+  const two = ownershipParties(
+    [
+      { tenantId: 'anna', sharePercent: 50 },
+      { tenantId: 'erik', sharePercent: 50 },
+    ],
+    'erik',
+  )
+  expect(
+    two.ok && two.parties.map((p) => [p.tenantId, p.sharePercent, p.receivesInvoices]),
+  ).toEqual([
+    ['anna', 50, false],
+    ['erik', 50, true],
+  ])
+  expect(ownershipParties([], null)).toEqual({ ok: false, problem: 'none' })
+  expect(ownershipParties([{ tenantId: 'anna', sharePercent: 90 }], null)).toEqual({
+    ok: false,
+    problem: 'shares',
+  })
+  expect(
+    ownershipParties(
+      [
+        { tenantId: 'anna', sharePercent: 50 },
+        { tenantId: 'anna', sharePercent: 50 },
+      ],
+      null,
+    ),
+  ).toEqual({ ok: false, problem: 'duplicate' })
+  expect(ownershipParties([{ tenantId: 'anna', sharePercent: 100 }], 'erik')).toEqual({
+    ok: false,
+    problem: 'receiver',
+  })
+})
+
+test('equal shares add up to 100', () => {
+  expect(equalShares(1)).toEqual([100])
+  expect(equalShares(2)).toEqual([50, 50])
+  expect(equalShares(3)).toEqual([34, 33, 33])
+  expect(equalShares(0)).toEqual([])
 })

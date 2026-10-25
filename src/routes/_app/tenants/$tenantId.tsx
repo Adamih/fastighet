@@ -15,6 +15,7 @@ import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
+import { AgreementLink, agreementNumberLabel } from '#/features/agreements/components'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
@@ -194,13 +195,12 @@ function TenantPage() {
                     {tenant.leases.map((l) => (
                       <PanelRow key={l.id}>
                         <span className="grid min-w-0 gap-0.5">
-                          <Link
-                            to="/leases/$leaseId"
-                            params={{ leaseId: l.id }}
+                          <AgreementLink
+                            agreement={l}
                             className="font-semibold underline-offset-4 hover:underline"
                           >
-                            {m.lease_number({ number: l.number })}
-                          </Link>
+                            {agreementNumberLabel(l.kind, l.number)}
+                          </AgreementLink>
                           <span className="truncate text-muted-foreground tabular-nums">
                             {formatPeriod(l)}
                             {l.role === 'co_tenant' && <> · {m.lease_co_tenant()}</>}

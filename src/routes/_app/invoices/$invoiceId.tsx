@@ -31,6 +31,7 @@ import { Button } from '#/components/ui/button'
 import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
+import { AgreementLink, agreementNumberLabel } from '#/features/agreements/components'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { inForce, voidProblem } from '#/features/invoicing/correction'
@@ -117,15 +118,14 @@ function InvoicePage() {
           <>
             {period} · {invoice.recipientName} ·{' '}
             {can({ lease: ['read'] }) ? (
-              <Link
-                to="/leases/$leaseId"
-                params={{ leaseId: invoice.agreement.id }}
+              <AgreementLink
+                agreement={invoice.agreement}
                 className="underline-offset-4 hover:text-foreground hover:underline"
               >
-                {m.lease_number({ number: invoice.agreement.number })}
-              </Link>
+                {agreementNumberLabel(invoice.agreement.kind, invoice.agreement.number)}
+              </AgreementLink>
             ) : (
-              m.lease_number({ number: invoice.agreement.number })
+              agreementNumberLabel(invoice.agreement.kind, invoice.agreement.number)
             )}
           </>
         }

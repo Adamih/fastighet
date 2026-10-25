@@ -88,3 +88,54 @@ export function leaseParties(
     })),
   }
 }
+
+export type OwnersProblem = 'none' | 'duplicate' | 'too_many' | 'shares' | 'receiver'
+
+/**
+ * The party rows for a bostadsrätt: its owners in the order given, each with a whole-percent
+ * share, together exactly 100 %, and one of them receiving the invoices (the first when null).
+ */
+export function ownershipParties(
+  owners: readonly { tenantId: string; sharePercent: number }[],
+  receiverId: string | null,
+):
+  | {
+      ok: true
+      parties: {
+        tenantId: string
+        role: 'owner'
+        sharePercent: number
+        receivesInvoices: boolean
+        position: number
+      }[]
+    }
+  | { ok: false; problem: OwnersProblem } {
+  if (owners.length === 0) return { ok: false, problem: 'none' }
+  const ids = owners.map((o) => o.tenantId)
+  if (new Set(ids).size !== ids.length) return { ok: false, problem: 'duplicate' }
+  if (ids.length > MAX_PARTIES) return { ok: false, problem: 'too_many' }
+  const validShare = (n: number) => Number.isInteger(n) && n >= 1 && n <= 100
+  const total = owners.reduce((sum, o) => sum + o.sharePercent, 0)
+  if (!owners.every((o) => validShare(o.sharePercent)) || total !== 100) {
+    return { ok: false, problem: 'shares' }
+  }
+  const receiver = receiverId ?? ids[0]
+  if (!ids.includes(receiver)) return { ok: false, problem: 'receiver' }
+  return {
+    ok: true,
+    parties: owners.map((o, index) => ({
+      tenantId: o.tenantId,
+      role: 'owner',
+      sharePercent: o.sharePercent,
+      receivesInvoices: o.tenantId === receiver,
+      position: index + 1,
+    })),
+  }
+}
+
+/** Equal whole-percent shares that add up to 100, the first owners taking the remainder. */
+export function equalShares(count: number): number[] {
+  if (count <= 0) return []
+  const base = Math.floor(100 / count)
+  return Array.from({ length: count }, (_, i) => base + (i < 100 - base * count ? 1 : 0))
+}

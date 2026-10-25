@@ -13,7 +13,7 @@ import { count, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
-import { invoiceRecipient } from '#/features/agreements/parties'
+import { equalShares, invoiceRecipient } from '#/features/agreements/parties'
 import { type CreditRequest, draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
@@ -78,6 +78,7 @@ try {
     process.exitCode = 1
   } else {
     await seed()
+    await seedBrf()
   }
 } finally {
   await dispose()
@@ -907,4 +908,391 @@ async function seed() {
   data       ${Object.keys(properties).length} properties, ${Object.keys(units).length} units, ${Object.keys(tenants).length} tenants, ${leases.length} leases
   invoices   ${invoices.length} (${open.length} open), ${creditNotes.length} credit notes
   payments   ${payments.length} in ${imports.size} bank files (${payments.filter((p) => p.status !== 'matched').length} need attention or ignored)`)
+}
+
+/**
+ * A second company: a small housing cooperative (Brf Linden) with its own board login. Ten
+ * bostadsrätter billed monthly by andelstal, one of them sold three months ago, and a hair salon
+ * renting the commercial unit on a normal lease. Avier come from monthly runs like the landlord's.
+ */
+async function seedBrf() {
+  const today = stockholmDate(Date.now())
+  const thisMonth = `${today.slice(0, 7)}-01`
+  const now = new Date()
+  const rand = random(20261101)
+  const between = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1))
+
+  const board = { id: id(), ...SEED_USERS.brf }
+  await db
+    .insert(schema.user)
+    .values({ ...board, emailVerified: true, createdAt: now, updatedAt: now })
+  await db.insert(schema.account).values({
+    id: id(),
+    accountId: board.id,
+    providerId: 'credential',
+    userId: board.id,
+    password: await hashPassword(SEED_PASSWORD),
+    createdAt: now,
+    updatedAt: now,
+  })
+  const org = { id: id(), name: 'Brf Linden', slug: 'brf-linden' }
+  const orgId = org.id
+  await db.insert(schema.organization).values({ ...org, createdAt: now })
+  await db
+    .insert(schema.member)
+    .values({ id: id(), organizationId: orgId, userId: board.id, role: 'owner', createdAt: now })
+  const settings = {
+    organizationNumber: formatOrganizationNumber(withCheckDigit('769900000')),
+    bankgiro: formatBankgiro(withCheckDigit('990100')),
+  }
+  await db.insert(schema.organizationSettings).values({
+    organizationId: orgId,
+    ...settings,
+    streetAddress: 'Lindgatan 3',
+    postalCode: '75330',
+    city: 'Uppsala',
+    email: 'styrelsen@brflinden.test',
+    fSkatt: false,
+    kind: 'brf',
+  })
+
+  const property = {
+    id: id(),
+    organizationId: orgId,
+    designation: 'Uppsala Svartbäcken 3:12',
+    name: 'Brf Linden',
+    streetAddress: 'Lindgatan 3',
+    postalCode: '75330',
+    city: 'Uppsala',
+  }
+  await db.insert(schema.property).values(property)
+  const unit = (kind: UnitKind, label: string, areaSqm: number | null, rooms: number | null) => ({
+    id: id(),
+    organizationId: orgId,
+    propertyId: property.id,
+    kind,
+    label,
+    areaSqm,
+    rooms,
+  })
+  const flats = [
+    unit('apartment', '1001', 54, 2),
+    unit('apartment', '1002', 76, 3),
+    unit('apartment', '1003', 41, 1),
+    unit('apartment', '1101', 54, 2),
+    unit('apartment', '1102', 76, 3),
+    unit('apartment', '1103', 41, 1),
+    unit('apartment', '1201', 54, 2),
+    unit('apartment', '1202', 76, 3),
+    unit('apartment', '1203', 41, 1),
+    unit('apartment', '1301', 98, 4),
+  ]
+  const salonUnit = unit('commercial', '0101', 62, null)
+  const storage = unit('storage', 'F1', 5, null)
+  await insertAll(schema.unit, [...flats, salonUnit, storage])
+
+  // Members. Couples own together, mostly half each; Lina and Omar 60/40.
+  const person = (name: string, email: string | null) => ({
+    id: id(),
+    organizationId: orgId,
+    kind: 'person' as const,
+    name,
+    organizationNumber: null,
+    email,
+    phone: `07${between(0, 6)}-${between(100, 999)} ${between(10, 99)} ${between(10, 99)}`,
+    streetAddress: property.streetAddress,
+    postalCode: property.postalCode,
+    city: 'Uppsala',
+  })
+  const mail = (name: string) =>
+    `${name
+      .toLowerCase()
+      .replace(/ /g, '.')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')}@medlem.test`
+  const names = [
+    'Karin Lund',
+    'Per Lund',
+    'Hanna Berg',
+    'Jonas Ek',
+    'Lina Holm',
+    'Omar Haddad',
+    'Ulla Sjöberg',
+    'Axel Nyström',
+    'Sanna Nyström',
+    'Ida Karlsson',
+    'Mats Wik',
+    'Rut Åberg',
+    'Nils Åberg',
+    'Tove Lindgren',
+    'Elsa Strand',
+    'Viktor Strand',
+  ]
+  const members = Object.fromEntries(
+    names.map((n) => [n, person(n, n === 'Ulla Sjöberg' ? null : mail(n))]),
+  )
+  const salonOwner = {
+    id: id(),
+    organizationId: orgId,
+    kind: 'company' as const,
+    name: 'Klippet Linden AB',
+    organizationNumber: formatOrganizationNumber(withCheckDigit('559900077')),
+    email: 'info@klippet.test',
+    phone: '018-12 34 56',
+    streetAddress: property.streetAddress,
+    postalCode: property.postalCode,
+    city: 'Uppsala',
+  }
+  await insertAll(schema.tenant, [...Object.values(members), salonOwner])
+
+  // Andelstal by living area; the fee pool is split by it (rounded to whole kronor a month).
+  const totalArea = flats.reduce((sum, f) => sum + (f.areaSqm ?? 0), 0)
+  const yearlyFeesOre = 430_000_00
+  const shareOf = (flat: (typeof flats)[number]) =>
+    Math.round(((flat.areaSqm ?? 0) / totalArea) * 100 * 1000) / 1000
+  const feeOf = (flat: (typeof flats)[number]) =>
+    Math.round((yearlyFeesOre * shareOf(flat)) / 100 / 12 / 100) * 100
+
+  type Agreement = typeof schema.agreement.$inferInsert & {
+    id: string
+    units: { designation: string; label: string }[]
+    parties: { position: number; receivesInvoices: boolean; tenant: (typeof members)[string] }[]
+  }
+  const agreements: Agreement[] = []
+  const owned = (
+    flat: (typeof flats)[number],
+    owners: [string, number][],
+    startDate: string,
+    extra: {
+      endDate?: string
+      previousAgreementId?: string
+      units?: (typeof flats)[number][]
+    } = {},
+  ) => {
+    const ownership: Agreement = {
+      id: id(),
+      organizationId: orgId,
+      number: agreements.length + 1,
+      kind: 'tenant_ownership',
+      startDate,
+      endDate: extra.endDate ?? null,
+      rentOre: feeOf(flat),
+      rentInterval: 'monthly',
+      invoiceInterval: 'monthly',
+      vat: false,
+      createdAt: new Date(`${addDays(startDate, -between(10, 30))}T09:00:00Z`),
+      units: [flat, ...(extra.units ?? [])].map((u) => ({
+        designation: property.designation,
+        label: u.label,
+      })),
+      parties: owners.map(([name], i) => ({
+        position: i + 1,
+        receivesInvoices: i === 0,
+        tenant: members[name],
+      })),
+    }
+    agreements.push(ownership)
+    terms.push({
+      agreementId: ownership.id,
+      organizationId: orgId,
+      shareRatio: shareOf(flat),
+      depositOre: Math.round(((flat.areaSqm ?? 0) * 6_500_00) / 100_000) * 100_000,
+      grantedOn: '2004-05-01',
+      previousAgreementId: extra.previousAgreementId ?? null,
+    })
+    parties.push(
+      ...owners.map(([name, share], i) => ({
+        agreementId: ownership.id,
+        tenantId: members[name].id,
+        organizationId: orgId,
+        role: 'owner' as const,
+        sharePercent: share,
+        receivesInvoices: i === 0,
+        position: i + 1,
+      })),
+    )
+    for (const u of [flat, ...(extra.units ?? [])]) {
+      links.push({ agreementId: ownership.id, unitId: u.id, organizationId: orgId })
+    }
+    return ownership
+  }
+  const terms: (typeof schema.ownershipTerms.$inferInsert)[] = []
+  const parties: (typeof schema.agreementParty.$inferInsert)[] = []
+  const links: (typeof schema.agreementUnit.$inferInsert)[] = []
+  const half = equalShares(2)
+  const couple = (a: string, b: string): [string, number][] => [
+    [a, half[0]],
+    [b, half[1]],
+  ]
+  const [f1001, f1002, f1003, f1101, f1102, f1103, f1201, f1202, f1203, f1301] = flats
+  owned(f1001, couple('Karin Lund', 'Per Lund'), '2015-09-01')
+  owned(f1002, [['Hanna Berg', 100]], '2019-03-01')
+  owned(f1003, [['Jonas Ek', 100]], '2022-06-01')
+  owned(
+    f1101,
+    [
+      ['Lina Holm', 60],
+      ['Omar Haddad', 40],
+    ],
+    '2020-11-01',
+  )
+  owned(f1102, [['Ulla Sjöberg', 100]], '2004-05-01', { units: [storage] })
+  // 1103 was sold three months ago: Ida Karlsson's bostadsrätt ended, Mats Wik's began.
+  const soldOn = addMonths(thisMonth, -3)
+  const sold = owned(f1103, [['Ida Karlsson', 100]], '2018-02-01', { endDate: addDays(soldOn, -1) })
+  owned(f1201, couple('Axel Nyström', 'Sanna Nyström'), '2021-08-01')
+  owned(f1202, couple('Rut Åberg', 'Nils Åberg'), '2010-04-01')
+  owned(f1203, [['Tove Lindgren', 100]], '2023-01-01')
+  owned(f1301, couple('Elsa Strand', 'Viktor Strand'), '2017-10-01')
+  owned(f1103, [['Mats Wik', 100]], soldOn, { previousAgreementId: sold.id })
+
+  // The salon rents the commercial unit on an ordinary lease, with VAT, invoiced quarterly.
+  const salonLease: Agreement = {
+    id: id(),
+    organizationId: orgId,
+    number: agreements.length + 1,
+    kind: 'lease',
+    startDate: '2024-01-01',
+    endDate: null,
+    rentOre: 16_800_000,
+    rentInterval: 'yearly',
+    invoiceInterval: 'quarterly',
+    vat: true,
+    createdAt: new Date('2023-11-20T09:00:00Z'),
+    units: [{ designation: property.designation, label: salonUnit.label }],
+    // biome-ignore lint/suspicious/noExplicitAny: the salon is a company, not a member
+    parties: [{ position: 1, receivesInvoices: true, tenant: salonOwner as any }],
+  }
+  agreements.push(salonLease)
+  parties.push({
+    agreementId: salonLease.id,
+    tenantId: salonOwner.id,
+    organizationId: orgId,
+    role: 'tenant',
+    receivesInvoices: true,
+    position: 1,
+  })
+  links.push({ agreementId: salonLease.id, unitId: salonUnit.id, organizationId: orgId })
+
+  await insertAll(
+    schema.agreement,
+    agreements.map(({ units: _, parties: __, ...a }) => a),
+  )
+  await insertAll(schema.ownershipTerms, terms)
+  await db.insert(schema.leaseTerms).values({
+    agreementId: salonLease.id,
+    organizationId: orgId,
+    termEndDate: '2026-12-31',
+    extensionMonths: 36,
+    noticePeriodMonths: 9,
+  })
+  await insertAll(schema.agreementParty, parties)
+  await insertAll(schema.agreementUnit, links)
+
+  // Monthly runs for the last four months and the coming one, issued 20 days ahead.
+  const invoices: (typeof schema.invoice.$inferInsert & { id: string; line: string })[] = []
+  for (let offset = -4; offset <= 1; offset++) {
+    const monthStart = addMonths(thisMonth, offset)
+    const issueDate = addDays(monthStart, -20)
+    if (issueDate > today) break
+    for (const a of agreements) {
+      const period = invoicePeriod(monthStart.slice(0, 7), a.invoiceInterval)
+      if (!period) continue
+      const terms: RentTerms = {
+        startDate: a.startDate,
+        endDate: a.endDate ?? null,
+        rentOre: a.rentOre,
+        rentInterval: a.rentInterval,
+        invoiceInterval: a.invoiceInterval,
+        vat: a.vat ?? false,
+      }
+      const netOre = rentForPeriod(terms, period)
+      if (netOre <= 0) continue
+      const vatOre = vatFor(netOre, terms.vat)
+      const number = invoices.length + 1
+      const recipient = invoiceRecipient(a.parties)
+      invoices.push({
+        id: id(),
+        organizationId: orgId,
+        number,
+        ocr: ocrFor(number),
+        agreementId: a.id,
+        ...recipient,
+        periodStart: period.start,
+        periodEnd: period.end,
+        issueDate,
+        dueDate: dueDate(period, issueDate),
+        netOre,
+        vatOre,
+        totalOre: netOre + vatOre,
+        sentAt: recipient.recipientEmail
+          ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`)
+          : null,
+        createdAt: new Date(`${issueDate}T07:00:00Z`),
+        line: rentLineDescription(a.units, period, a.kind),
+      })
+    }
+  }
+
+  // Everyone pays by OCR a few days early, except Jonas, whose newest past-due avi is unpaid.
+  const yesterday = addDays(today, -1)
+  const jonas = agreements.find((a) => a.parties[0]?.tenant.name === 'Jonas Ek')
+  const jonasLate = invoices
+    .filter((i) => i.agreementId === jonas?.id && (i.dueDate as string) <= yesterday)
+    .at(-1)
+  const payments: (typeof schema.payment.$inferInsert)[] = []
+  const importId = id()
+  for (const invoice of invoices) {
+    if (invoice === jonasLate) continue
+    const bookingDate = bankDay(addDays(invoice.dueDate as string, -between(0, 4)))
+    if (bookingDate > yesterday) continue
+    invoice.paidOn = bookingDate
+    payments.push({
+      id: id(),
+      organizationId: orgId,
+      importId,
+      bankReference: `BRF${bookingDate.replaceAll('-', '')}${String(payments.length + 1).padStart(5, '0')}`,
+      bookingDate,
+      amountOre: invoice.totalOre,
+      reference: invoice.ocr,
+      payerName: invoice.recipientName.split(' och ')[0].toUpperCase(),
+      status: 'matched',
+      invoiceId: invoice.id,
+      marksInvoicePaid: true,
+      createdAt: new Date(`${yesterday}T08:00:00Z`),
+    })
+  }
+  await insertAll(
+    schema.invoice,
+    invoices.map(({ line: _, ...i }) => i),
+  )
+  await insertAll(
+    schema.invoiceLine,
+    invoices.map((i) => ({
+      invoiceId: i.id,
+      organizationId: orgId,
+      position: 1,
+      description: i.line,
+      netOre: i.netOre,
+      vatRatePercent: i.vatOre > 0 ? VAT_RATE_PERCENT : 0,
+      vatOre: i.vatOre,
+    })),
+  )
+  await db.insert(schema.paymentImport).values({
+    id: importId,
+    organizationId: orgId,
+    fileName: `camt054_${yesterday.replaceAll('-', '')}.xml`,
+    messageId: `BGC${yesterday.replaceAll('-', '')}${between(1000, 9999)}`,
+    importedByUserId: board.id,
+    paymentCount: payments.length,
+    duplicateCount: 0,
+    totalOre: payments.reduce((sum, p) => sum + p.amountOre, 0),
+    createdAt: new Date(`${yesterday}T08:00:00Z`),
+  })
+  await insertAll(schema.payment, payments)
+
+  console.log(`Seeded ${org.name} (BRF):
+  login      ${board.email} (owner)
+  data       ${agreements.length - 1} bostadsrätter for ${flats.length} flats (one sold), 1 lease, ${names.length} members
+  invoices   ${invoices.length}, payments ${payments.length}`)
 }
