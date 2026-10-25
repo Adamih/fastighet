@@ -3,6 +3,7 @@ import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-rout
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
 import { SubmissionForm } from '#/components/submission-form'
+import { Button } from '#/components/ui/button'
 import { getSessionFn } from '#/features/auth/functions'
 import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
@@ -104,6 +105,25 @@ function LoginPage() {
             {mode === 'signIn' ? m.login_sign_in() : m.login_sign_up()}
           </form.SubmitButton>
         </form.AppForm>
+        {/* Development only: fills in the seeded owner and signs in through the form above. The
+            credentials are loaded on click, so they never reach a production bundle. */}
+        {import.meta.env.DEV && mode === 'signIn' && (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 border-dashed sm:h-10"
+            disabled={submitting}
+            onClick={async (event) => {
+              const formElement = event.currentTarget.form
+              const { SEED_PASSWORD, SEED_USERS } = await import('../../scripts/db-seed-constants')
+              form.setFieldValue('email', SEED_USERS.owner.email)
+              form.setFieldValue('password', SEED_PASSWORD)
+              formElement?.requestSubmit()
+            }}
+          >
+            {m.login_dev_owner()}
+          </Button>
+        )}
       </SubmissionForm>
       <div className="flex justify-between text-sm">
         <button
