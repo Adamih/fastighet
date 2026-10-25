@@ -1,6 +1,6 @@
 import { invoicePeriod, type Period } from '#/features/invoicing/rules'
 import { addDays, addMonths, maxDate } from '#/lib/dates'
-import { effectiveEndDate, type LeaseTerms } from './terms'
+import type { LeaseTerms } from './terms'
 
 // Pure rules for the lease page: the next invoice period and what has happened to the lease.
 
@@ -20,7 +20,12 @@ interface LeaseInvoice {
  * later. Null once the lease has been invoiced to its end.
  */
 export function nextInvoicePeriod(
-  lease: LeaseTerms & { invoiceInterval: 'monthly' | 'quarterly' },
+  lease: {
+    startDate: string
+    /** The last billed day. */
+    endDate: string | null
+    invoiceInterval: 'monthly' | 'quarterly'
+  },
   invoices: readonly LeaseInvoice[],
   today: string,
 ): Period | null {
@@ -40,7 +45,7 @@ export function nextInvoicePeriod(
   for (let i = 0; i < 3; i++) {
     const period = invoicePeriod(month, lease.invoiceInterval)
     if (period) {
-      const end = effectiveEndDate(lease)
+      const end = lease.endDate
       return end && period.start > end ? null : period
     }
     month = addMonths(`${month}-01`, 1).slice(0, 7)

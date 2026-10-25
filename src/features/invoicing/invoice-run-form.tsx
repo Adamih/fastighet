@@ -139,27 +139,30 @@ export function InvoiceRunForm({
             <ul className="divide-y overflow-hidden rounded-lg border">
               {rows.map((r) => (
                 <li
-                  key={r.leaseId}
+                  key={r.agreementId}
                   className={cn('grid gap-1 p-3', r.alreadyInvoiced && 'text-muted-foreground')}
                 >
                   <RowTitle
                     end={<span className="font-medium tabular-nums">{formatSek(r.totalOre)}</span>}
                   >
-                    {r.tenant.name}
+                    {r.recipient.recipientName}
                   </RowTitle>
                   <RowMeta>
                     {m.invoice_run_row_meta({
-                      number: r.leaseNumber,
+                      number: r.agreementNumber,
                       period: periodLabel(r.period),
                       due: r.dueDate,
                     })}
                   </RowMeta>
-                  {(r.alreadyInvoiced || r.vatOre > 0 || (!r.tenant.email && send)) && (
+                  {(r.alreadyInvoiced || r.vatOre > 0 || (!r.recipient.recipientEmail && send)) && (
                     <span className="text-muted-foreground text-xs">
                       {[
                         r.alreadyInvoiced && m.invoice_run_already(),
                         r.vatOre > 0 && m.common_incl_vat(),
-                        !r.alreadyInvoiced && !r.tenant.email && send && m.invoice_run_no_email(),
+                        !r.alreadyInvoiced &&
+                          !r.recipient.recipientEmail &&
+                          send &&
+                          m.invoice_run_no_email(),
                       ]
                         .filter(Boolean)
                         .join(' · ')}

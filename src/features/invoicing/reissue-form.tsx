@@ -53,8 +53,11 @@ export function ReissueForm({
             <p className="text-[13px]">{data.description}</p>
             <FactList
               facts={[
-                [m.reissue_recipient(), data.tenant.name],
-                [m.reissue_recipient_email(), data.tenant.email ?? m.invoice_run_no_email()],
+                [m.reissue_recipient(), data.recipient.recipientName],
+                [
+                  m.reissue_recipient_email(),
+                  data.recipient.recipientEmail ?? m.invoice_run_no_email(),
+                ],
                 [m.common_period(), periodLabel(data.period)],
                 [m.invoice_due_date(), data.dueDate],
                 ...(data.vatOre > 0

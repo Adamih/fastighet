@@ -20,7 +20,7 @@ export type InvoiceFilter = (typeof invoiceFilters)[number]
 
 export const ListInvoicesInput = Schema.Struct({
   filter: Schema.Literals(invoiceFilters),
-  leaseId: Schema.optional(Schema.String),
+  agreementId: Schema.optional(Schema.String),
 })
 export type ListInvoicesInput = typeof ListInvoicesInput.Type
 

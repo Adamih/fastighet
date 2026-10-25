@@ -10,7 +10,7 @@ export const CreateLeaseInput = Schema.Struct({
     Schema.isMinLength(1, { message: 'Välj minst ett objekt' }),
   ),
   startDate: IsoDate,
-  endDate: Schema.NullOr(IsoDate),
+  termEndDate: Schema.NullOr(IsoDate),
   extensionMonths: Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0))),
   noticePeriodMonths: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   rentOre: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

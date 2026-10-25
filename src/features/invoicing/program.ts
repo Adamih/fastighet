@@ -1,6 +1,7 @@
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
-import { creditNote, creditNoteLine, invoice, invoiceLine, lease, payment } from '#/db/schema'
+import { agreement, creditNote, creditNoteLine, invoice, invoiceLine, payment } from '#/db/schema'
+import { invoiceRecipient } from '#/features/agreements/parties'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
@@ -42,7 +43,10 @@ import type {
 
 const read: Permissions = { invoice: ['read'] }
 const manage: Permissions = { invoice: ['manage'] }
-/** A run reads every lease, so it also needs to be allowed to read leases. */
+/**
+ * A run reads every agreement (leases and bostadsrätter alike); seeing agreements is the lease
+ * permission, so it also needs that.
+ */
 const runInvoices: Permissions = { invoice: ['manage'], lease: ['read'] }
 /** Paying money back is booked like a payment. */
 const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
@@ -50,21 +54,32 @@ const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
 // ---------------------------------------------------------------------------------------------
 // Invoice runs
 
-/** What a run for `month` would invoice. Leases already invoiced for the period are flagged. */
+/** What billing reads from an agreement: its parties (the recipient) and units (the line). */
+const billingDetails = {
+  parties: { with: { tenant: true } },
+  units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
+} as const
+
+type BillingAgreement = typeof agreement.$inferSelect & {
+  parties: Parameters<typeof invoiceRecipient>[0][number][]
+  units: { unit: { label: string; property: { designation: string } } }[]
+}
+
+const unitsOf = (a: BillingAgreement) =>
+  a.units.map(({ unit }) => ({ designation: unit.property.designation, label: unit.label }))
+
+/** What a run for `month` would invoice. Agreements already invoiced for the period are flagged. */
 export const previewInvoiceRun = (month: string) =>
   Effect.gen(function* () {
     yield* requirePermission(runInvoices)
     const issueDate = yield* today
     const settings = yield* loadSettings
 
-    const leases = yield* orgQuery((db, organizationId) =>
-      db.query.lease.findMany({
-        where: eq(lease.organizationId, organizationId),
-        orderBy: lease.number,
-        with: {
-          tenant: true,
-          units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
-        },
+    const agreements: BillingAgreement[] = yield* orgQuery((db, organizationId) =>
+      db.query.agreement.findMany({
+        where: eq(agreement.organizationId, organizationId),
+        orderBy: agreement.number,
+        with: billingDetails,
       }),
     )
     // Every period in a run starts on the first of the month, whatever the invoice interval.
@@ -73,38 +88,32 @@ export const previewInvoiceRun = (month: string) =>
     const periodStart = `${month}-01`
     const invoiced = yield* orgQuery((db, organizationId) =>
       db
-        .select({ leaseId: invoice.leaseId })
+        .select({ agreementId: invoice.agreementId })
         .from(invoice)
         .where(
           and(eq(invoice.organizationId, organizationId), eq(invoice.periodStart, periodStart)),
         ),
     )
-    const alreadyInvoiced = new Set(invoiced.map((i) => i.leaseId))
+    const alreadyInvoiced = new Set(invoiced.map((i) => i.agreementId))
 
-    const rows = leases.flatMap((l) => {
-      const period = invoicePeriod(month, l.invoiceInterval)
+    const rows = agreements.flatMap((a) => {
+      const period = invoicePeriod(month, a.invoiceInterval)
       if (!period) return []
-      const netOre = rentForPeriod(l, period)
+      const netOre = rentForPeriod(a, period)
       if (netOre <= 0) return []
-      const vatOre = vatFor(netOre, l.vat)
+      const vatOre = vatFor(netOre, a.vat)
       return [
         {
-          leaseId: l.id,
-          leaseNumber: l.number,
-          tenant: l.tenant,
+          agreementId: a.id,
+          agreementNumber: a.number,
+          recipient: invoiceRecipient(a.parties),
           period,
-          description: rentLineDescription(
-            l.units.map(({ unit }) => ({
-              designation: unit.property.designation,
-              label: unit.label,
-            })),
-            period,
-          ),
+          description: rentLineDescription(unitsOf(a), period),
           netOre,
           vatOre,
           totalOre: netOre + vatOre,
           dueDate: dueDate(period, issueDate),
-          alreadyInvoiced: alreadyInvoiced.has(l.id),
+          alreadyInvoiced: alreadyInvoiced.has(a.id),
         },
       ]
     })
@@ -150,13 +159,8 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
             organizationId,
             number,
             ocr: ocrFor(number),
-            leaseId: row.leaseId,
-            tenantId: row.tenant.id,
-            recipientName: row.tenant.name,
-            recipientStreetAddress: row.tenant.streetAddress,
-            recipientPostalCode: row.tenant.postalCode,
-            recipientCity: row.tenant.city,
-            recipientEmail: row.tenant.email,
+            agreementId: row.agreementId,
+            ...row.recipient,
             periodStart: row.period.start,
             periodEnd: row.period.end,
             issueDate: preview.issueDate,
@@ -181,7 +185,7 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
       createdIds.push(...chunk.map((c) => c.id))
     }
 
-    const withEmail = pending.filter((r) => r.tenant.email).length
+    const withEmail = pending.filter((r) => r.recipient.recipientEmail).length
     let sent = 0
     const failedInvoiceIds: string[] = []
     if (input.send && createdIds.length > 0) {
@@ -226,12 +230,12 @@ export const listInvoices = (input: ListInvoicesInput) =>
       db.query.invoice.findMany({
         where: and(
           eq(invoice.organizationId, organizationId),
-          input.leaseId ? eq(invoice.leaseId, input.leaseId) : undefined,
+          input.agreementId ? eq(invoice.agreementId, input.agreementId) : undefined,
         ),
         orderBy: desc(invoice.number),
         with: {
           creditNotes: { columns: { totalOre: true, refund: true, refundedOn: true } },
-          lease: {
+          agreement: {
             columns: { id: true },
             with: {
               units: {
@@ -248,11 +252,11 @@ export const listInvoices = (input: ListInvoicesInput) =>
       }),
     )
     const on = yield* today
-    const views = rows.map(({ lease: leaseRow, creditNotes, ...row }) => ({
+    const views = rows.map(({ agreement: billed, creditNotes, ...row }) => ({
       ...toView(row, on),
       refundDueOre: refunds(creditNotes).refundDueOre,
       units: showUnits
-        ? leaseRow.units.map(({ unit }) => ({
+        ? billed.units.map(({ unit }) => ({
             kind: unit.kind,
             label: unit.label,
             designation: unit.property.designation,
@@ -270,7 +274,7 @@ export const getInvoice = (invoiceId: string) =>
         where: and(eq(invoice.id, invoiceId), eq(invoice.organizationId, organizationId)),
         with: {
           lines: { orderBy: invoiceLine.position },
-          lease: { columns: { id: true, number: true } },
+          agreement: { columns: { id: true, number: true, kind: true } },
           creditNotes: {
             columns: {
               id: true,
@@ -639,16 +643,13 @@ export const previewReissue = (invoiceId: string) =>
     const inv = yield* getInvoice(invoiceId)
     const issueDate = yield* today
     const settings = yield* loadSettings
-    const leaseRow = yield* orgQuery((db, organizationId) =>
-      db.query.lease.findFirst({
-        where: and(eq(lease.id, inv.leaseId), eq(lease.organizationId, organizationId)),
-        with: {
-          tenant: true,
-          units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
-        },
+    const billed: BillingAgreement | undefined = yield* orgQuery((db, organizationId) =>
+      db.query.agreement.findFirst({
+        where: and(eq(agreement.id, inv.agreementId), eq(agreement.organizationId, organizationId)),
+        with: billingDetails,
       }),
     )
-    if (!leaseRow) return yield* new NotFound({ entity: 'lease', id: inv.leaseId })
+    if (!billed) return yield* new NotFound({ entity: 'agreement', id: inv.agreementId })
     const others = yield* orgQuery((db, organizationId) =>
       db
         .select({
@@ -660,28 +661,22 @@ export const previewReissue = (invoiceId: string) =>
         .where(
           and(
             eq(invoice.organizationId, organizationId),
-            eq(invoice.leaseId, inv.leaseId),
+            eq(invoice.agreementId, inv.agreementId),
             eq(invoice.periodStart, inv.periodStart),
             ne(invoice.id, inv.id),
           ),
         ),
     )
     const period = { start: inv.periodStart, end: inv.periodEnd }
-    const netOre = rentForPeriod(leaseRow, period)
-    const vatOre = vatFor(netOre, leaseRow.vat)
+    const netOre = rentForPeriod(billed, period)
+    const vatOre = vatFor(netOre, billed.vat)
     const problem = reissueProblem(inv, others, netOre)
     return {
       invoiceId: inv.id,
-      leaseId: leaseRow.id,
-      tenant: leaseRow.tenant,
+      agreementId: billed.id,
+      recipient: invoiceRecipient(billed.parties),
       period,
-      description: rentLineDescription(
-        leaseRow.units.map(({ unit }) => ({
-          designation: unit.property.designation,
-          label: unit.label,
-        })),
-        period,
-      ),
+      description: rentLineDescription(unitsOf(billed), period),
       netOre,
       vatOre,
       totalOre: netOre + vatOre,
@@ -696,7 +691,7 @@ export type ReissuePreview = Effect.Success<ReturnType<typeof previewReissue>>
 
 /**
  * Issues the corrected avi: the next number, linked to the avi it replaces. The unique index on
- * lease and period stops a second one if two are issued at once.
+ * agreement and period stops a second one if two are issued at once.
  */
 export const reissueInvoice = (invoiceId: string) =>
   Effect.gen(function* () {
@@ -716,7 +711,6 @@ export const reissueInvoice = (invoiceId: string) =>
     )
     const number = maxNumber + 1
     const id = crypto.randomUUID()
-    const { tenant } = preview
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db.insert(invoice).values({
@@ -724,13 +718,8 @@ export const reissueInvoice = (invoiceId: string) =>
           organizationId,
           number,
           ocr: ocrFor(number),
-          leaseId: preview.leaseId,
-          tenantId: tenant.id,
-          recipientName: tenant.name,
-          recipientStreetAddress: tenant.streetAddress,
-          recipientPostalCode: tenant.postalCode,
-          recipientCity: tenant.city,
-          recipientEmail: tenant.email,
+          agreementId: preview.agreementId,
+          ...preview.recipient,
           periodStart: preview.period.start,
           periodEnd: preview.period.end,
           issueDate: preview.issueDate,

@@ -5,6 +5,7 @@ const today = '2026-10-24'
 const lease = {
   startDate: '2025-08-01',
   endDate: null,
+  termEndDate: null,
   extensionMonths: null,
   noticePeriodMonths: 3,
   moveOutDate: null,
@@ -72,14 +73,15 @@ describe('nextInvoicePeriod', () => {
   })
 
   test('nothing after the last day of a terminated lease', () => {
-    const terminated = { ...lease, moveOutDate: '2026-10-31' }
+    const terminated = { ...lease, endDate: '2026-10-31' }
     expect(
       nextInvoicePeriod(terminated, [invoice(1, '2026-10-01', '2026-10-31')], today),
     ).toBeNull()
   })
 
-  test('a fixed term that renews keeps going past its end date', () => {
-    const renewing = { ...lease, endDate: '2026-10-31', extensionMonths: 12 }
+  test('a fixed term that renews keeps going past its term end', () => {
+    // A renewing fixed term has no last billed day.
+    const renewing = { ...lease, termEndDate: '2026-10-31', extensionMonths: 12, endDate: null }
     expect(nextInvoicePeriod(renewing, [invoice(1, '2026-10-01', '2026-10-31')], today)).toEqual({
       start: '2026-11-01',
       end: '2026-11-30',

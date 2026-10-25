@@ -1,6 +1,8 @@
 import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { leaseUnit, property, unit } from '#/db/schema'
+import { agreementParty, agreementUnit, property, unit } from '#/db/schema'
+import { joinNames, primaryParty } from '#/features/agreements/parties'
+import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus, occupyingLease } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -45,28 +47,25 @@ export const getProperty = (propertyId: string) =>
       db.query.unit.findMany({
         where: and(eq(unit.propertyId, propertyId), eq(unit.organizationId, organizationId)),
         orderBy: asc(unit.label),
-        with: {
-          leases: {
-            with: { lease: { with: { tenant: { columns: { name: true } } } } },
-          },
-        },
+        with: { agreements: { with: { agreement: { with: occupantDetails } } } },
       }),
     )
     const on = yield* today
     // Who occupies each unit comes from the leases, so it is only shown to those who may read them.
     const showOccupancy = yield* hasPermission({ lease: ['read'] })
-    const units = rows.map(({ leases, ...u }) => {
+    const units = rows.map(({ agreements, ...u }) => {
       if (!showOccupancy) return { ...u, occupancy: null }
       const occupant = occupyingLease(
-        leases.map((l) => l.lease),
+        agreements.map((a) => occupantView(a.agreement)),
         on,
       )
       return {
         ...u,
         occupancy: occupant && {
           leaseId: occupant.lease.id,
+          kind: occupant.lease.kind,
           number: occupant.lease.number,
-          tenantName: occupant.lease.tenant.name,
+          tenantName: occupant.lease.tenantName,
           status: occupant.status,
           startDate: occupant.lease.startDate,
           moveOutDate: occupant.lease.moveOutDate,
@@ -78,6 +77,34 @@ export const getProperty = (propertyId: string) =>
     })
     return { ...found, units }
   })
+
+/** An agreement on a unit: its parties' names, for occupancy and the unit's history. */
+const occupantDetails = {
+  leaseTerms: true,
+  parties: {
+    orderBy: agreementParty.position,
+    with: { tenant: { columns: { id: true, name: true, kind: true } } },
+  },
+} as const
+
+const occupantView = <
+  A extends Parameters<typeof agreementTerms>[0] & {
+    parties: {
+      position: number
+      tenant: { id: string; name: string; kind: 'person' | 'company' }
+    }[]
+  },
+>(
+  row: A,
+) => {
+  const { parties, leaseTerms: _, ...agreement } = row
+  return {
+    ...agreement,
+    ...agreementTerms(row),
+    tenant: primaryParty(parties).tenant,
+    tenantName: joinNames(parties.map((p) => p.tenant.name)),
+  }
+}
 
 /** Every unit in the company with its property, for pickers such as the lease form. */
 export const listUnits = Effect.gen(function* () {
@@ -152,10 +179,13 @@ const leasedUnitLabels = (unitIds: readonly string[]) =>
     : orgQuery((db, organizationId) =>
         db
           .selectDistinct({ label: unit.label })
-          .from(leaseUnit)
-          .innerJoin(unit, eq(unit.id, leaseUnit.unitId))
+          .from(agreementUnit)
+          .innerJoin(unit, eq(unit.id, agreementUnit.unitId))
           .where(
-            and(eq(leaseUnit.organizationId, organizationId), inArray(leaseUnit.unitId, unitIds)),
+            and(
+              eq(agreementUnit.organizationId, organizationId),
+              inArray(agreementUnit.unitId, unitIds),
+            ),
           ),
       ).pipe(Effect.map((rows) => rows.map((r) => r.label).sort()))
 
@@ -203,24 +233,21 @@ export const getUnitDetail = (unitId: string) =>
         where: and(eq(unit.id, unitId), eq(unit.organizationId, organizationId)),
         with: {
           property: { columns: { id: true, designation: true, name: true } },
-          leases: {
-            with: {
-              lease: { with: { tenant: { columns: { id: true, name: true, kind: true } } } },
-            },
-          },
+          agreements: { with: { agreement: { with: occupantDetails } } },
         },
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'unit', id: unitId })
-    const { leases, ...found } = row
+    const { agreements, ...found } = row
     const on = yield* today
     const showLeases = yield* hasPermission({ lease: ['read'] })
     return {
       ...found,
-      hasLeases: leases.length > 0,
+      hasLeases: agreements.length > 0,
       leases: showLeases
-        ? leases
-            .map(({ lease }) => ({ ...lease, status: leaseStatus(lease, on) }))
+        ? agreements
+            .map(({ agreement }) => occupantView(agreement))
+            .map((lease) => ({ ...lease, status: leaseStatus(lease, on) }))
             .sort((a, b) => b.startDate.localeCompare(a.startDate))
         : [],
     }

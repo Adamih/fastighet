@@ -50,6 +50,13 @@
       "when": 1792927066908,
       "tag": "0006_lethal_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792929746109,
+      "tag": "0007_agreements",
+      "breakpoints": true
     }
   ]
 }

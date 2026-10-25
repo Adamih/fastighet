@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test'
 import { unitAvailability } from './availability'
 
 const today = '2026-10-24'
-const lease = (startDate: string, extra: { endDate?: string; moveOutDate?: string } = {}) => ({
+const lease = (startDate: string, extra: { termEndDate?: string; moveOutDate?: string } = {}) => ({
   startDate,
-  endDate: extra.endDate ?? null,
+  termEndDate: extra.termEndDate ?? null,
   extensionMonths: null,
   noticePeriodMonths: 3,
   moveOutDate: extra.moveOutDate ?? null,

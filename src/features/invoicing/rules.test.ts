@@ -54,9 +54,6 @@ const periodOf = (month: string, interval: 'monthly' | 'quarterly') => {
 const monthly: RentTerms = {
   startDate: '2026-01-01',
   endDate: null,
-  extensionMonths: null,
-  noticePeriodMonths: 3,
-  moveOutDate: null,
   rentOre: 845000,
   rentInterval: 'monthly',
   invoiceInterval: 'monthly',
@@ -112,7 +109,7 @@ describe('rentForPeriod', () => {
   })
 
   test('move-out mid-quarter only charges the covered days', () => {
-    const movesOut = { ...yearlyQuarterly, moveOutDate: '2026-11-15' }
+    const movesOut = { ...yearlyQuarterly, endDate: '2026-11-15' }
     const q4 = rentForPeriod(movesOut, periodOf('2026-10', 'quarterly'))
     // October in full (833 333) + 15/30 of November (833 333 → 416 667)
     expect(q4).toBe(833333 + 416667)
@@ -123,7 +120,7 @@ describe('rentForPeriod', () => {
       rentForPeriod({ ...monthly, startDate: '2027-01-01' }, periodOf('2026-12', 'monthly')),
     ).toBe(0)
     expect(
-      rentForPeriod({ ...monthly, moveOutDate: '2026-11-30' }, periodOf('2026-12', 'monthly')),
+      rentForPeriod({ ...monthly, endDate: '2026-11-30' }, periodOf('2026-12', 'monthly')),
     ).toBe(0)
   })
 

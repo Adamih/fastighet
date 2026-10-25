@@ -5,7 +5,7 @@ import { addMonths, endOfMonth } from '#/lib/dates'
 export interface LeaseTerms {
   readonly startDate: string
   /** Set for a fixed-term lease (tidsbestämt); null for an open-ended one (tillsvidare). */
-  readonly endDate: string | null
+  readonly termEndDate: string | null
   /** How long a fixed-term lease is extended when nobody gives notice in time (förlängning). */
   readonly extensionMonths: number | null
   readonly noticePeriodMonths: number
@@ -14,10 +14,15 @@ export interface LeaseTerms {
 
 export type LeaseStatus = 'upcoming' | 'active' | 'terminated' | 'ended'
 
-/** The last day of the lease, or null if it runs until someone gives notice. */
-export function effectiveEndDate(terms: LeaseTerms): string | null {
+/**
+ * The last day of the lease, or null if it runs until someone gives notice. Stored as the
+ * agreement's `endDate` (the last billed day) whenever the lease terms are written.
+ */
+export function effectiveEndDate(
+  terms: Pick<LeaseTerms, 'termEndDate' | 'extensionMonths' | 'moveOutDate'>,
+): string | null {
   if (terms.moveOutDate) return terms.moveOutDate
-  return terms.endDate && !terms.extensionMonths ? terms.endDate : null
+  return terms.termEndDate && !terms.extensionMonths ? terms.termEndDate : null
 }
 
 export function leaseStatus(terms: LeaseTerms, today: string): LeaseStatus {
@@ -37,10 +42,12 @@ export function leaseStatus(terms: LeaseTerms, today: string): LeaseStatus {
  */
 export function earliestMoveOutDate(terms: LeaseTerms, noticeDate: string): string {
   const afterNotice = endOfMonth(addMonths(noticeDate, terms.noticePeriodMonths))
-  if (!terms.endDate) return afterNotice
-  if (!terms.extensionMonths) return terms.endDate > afterNotice ? terms.endDate : afterNotice
+  if (!terms.termEndDate) return afterNotice
+  if (!terms.extensionMonths) {
+    return terms.termEndDate > afterNotice ? terms.termEndDate : afterNotice
+  }
 
-  let termEnd = terms.endDate
+  let termEnd = terms.termEndDate
   while (addMonths(termEnd, -terms.noticePeriodMonths) < noticeDate) {
     termEnd = addMonths(termEnd, terms.extensionMonths)
   }

@@ -9,6 +9,7 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
+import { agreementKinds, partyRoles } from '#/features/agreements/kinds'
 import { invoiceIntervals, rentIntervals, tenantKinds } from '#/features/leases/options'
 import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
@@ -96,73 +97,136 @@ export const tenant = sqliteTable(
   (t) => [index('tenant_org_name_idx').on(t.organizationId, t.name)],
 )
 
-export const lease = sqliteTable(
-  'lease',
+// An agreement is what a run invoices: a lease (hyresavtal) or a bostadsrätt. It holds what
+// billing needs; lease-only and ownership-only details live in their own tables. Parties are the
+// tenants or owners on it (`agreementParty`).
+export const agreement = sqliteTable(
+  'agreement',
   {
     id: id(),
     organizationId: organizationId(),
-    // Avtalsnummer, sequential per organization.
+    // Avtalsnummer, sequential per organization across all kinds.
     number: integer('number').notNull(),
-    tenantId: text('tenant_id')
-      .notNull()
-      .references(() => tenant.id),
+    kind: text('kind', { enum: agreementKinds }).notNull(),
     startDate: text('start_date').notNull(),
+    // The last day that is billed, or null while it runs until further notice. For a lease this
+    // is derived from its terms (`effectiveEndDate`) and written with them; see `leaseTerms`.
     endDate: text('end_date'),
-    extensionMonths: integer('extension_months'),
-    noticePeriodMonths: integer('notice_period_months').notNull(),
     rentOre: integer('rent_ore').notNull(),
     rentInterval: text('rent_interval', { enum: rentIntervals }).notNull(),
     invoiceInterval: text('invoice_interval', { enum: invoiceIntervals }).notNull(),
     // Rent is subject to VAT (frivillig skattskyldighet for commercial premises).
     vat: integer('vat', { mode: 'boolean' }).notNull().default(false),
-    noticeDate: text('notice_date'),
-    moveOutDate: text('move_out_date'),
     createdAt: createdAt(),
   },
-  (t) => [
-    uniqueIndex('lease_org_number_uq').on(t.organizationId, t.number),
-    index('lease_org_tenant_idx').on(t.organizationId, t.tenantId),
-  ],
+  (t) => [uniqueIndex('agreement_org_number_uq').on(t.organizationId, t.number)],
 )
 
-export const leaseUnit = sqliteTable(
-  'lease_unit',
+export const agreementUnit = sqliteTable(
+  'agreement_unit',
   {
-    leaseId: text('lease_id')
+    agreementId: text('agreement_id')
       .notNull()
-      .references(() => lease.id, { onDelete: 'cascade' }),
+      .references(() => agreement.id, { onDelete: 'cascade' }),
     unitId: text('unit_id')
       .notNull()
       .references(() => unit.id),
     organizationId: organizationId(),
   },
   (t) => [
-    primaryKey({ columns: [t.leaseId, t.unitId] }),
-    index('lease_unit_unit_idx').on(t.unitId),
+    primaryKey({ columns: [t.agreementId, t.unitId] }),
+    index('agreement_unit_unit_idx').on(t.unitId),
   ],
 )
+
+// The tenants (or owners) on an agreement. Exactly one receives the invoices; the invoice copies
+// the names of all of them and that party's address.
+export const agreementParty = sqliteTable(
+  'agreement_party',
+  {
+    agreementId: text('agreement_id')
+      .notNull()
+      .references(() => agreement.id, { onDelete: 'cascade' }),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenant.id),
+    organizationId: organizationId(),
+    role: text('role', { enum: partyRoles }).notNull(),
+    // Ownership share in percent, for co-owners of a bostadsrätt.
+    sharePercent: integer('share_percent'),
+    receivesInvoices: integer('receives_invoices', { mode: 'boolean' }).notNull().default(false),
+    // Order on documents: the first party is named first.
+    position: integer('position').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.agreementId, t.tenantId] }),
+    index('agreement_party_org_tenant_idx').on(t.organizationId, t.tenantId),
+  ],
+)
+
+// A lease's own terms. `agreement.endDate` is derived from them and written in the same batch.
+export const leaseTerms = sqliteTable('lease_terms', {
+  agreementId: text('agreement_id')
+    .primaryKey()
+    .references(() => agreement.id, { onDelete: 'cascade' }),
+  organizationId: organizationId(),
+  // Set for a fixed-term lease (tidsbestämt); null for an open-ended one (tillsvidare).
+  termEndDate: text('term_end_date'),
+  extensionMonths: integer('extension_months'),
+  noticePeriodMonths: integer('notice_period_months').notNull(),
+  noticeDate: text('notice_date'),
+  moveOutDate: text('move_out_date'),
+})
+
+// A bostadsrätt's own details. Only the basics so far; the BRF registers come later.
+export const ownershipTerms = sqliteTable('ownership_terms', {
+  agreementId: text('agreement_id')
+    .primaryKey()
+    .references(() => agreement.id, { onDelete: 'cascade' }),
+  organizationId: organizationId(),
+  // Andelstal: the apartment's share of the association's fees.
+  shareRatio: real('share_ratio'),
+  // Insats paid when the right was first granted (upplåtelse).
+  depositOre: integer('deposit_ore'),
+  grantedOn: text('granted_on'),
+})
 
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
 
 export const unitRelations = relations(unit, ({ one, many }) => ({
   property: one(property, { fields: [unit.propertyId], references: [property.id] }),
-  leases: many(leaseUnit),
+  agreements: many(agreementUnit),
 }))
 
 export const tenantRelations = relations(tenant, ({ many }) => ({
-  leases: many(lease),
+  agreements: many(agreementParty),
   invoices: many(invoice),
 }))
 
-export const leaseRelations = relations(lease, ({ one, many }) => ({
-  tenant: one(tenant, { fields: [lease.tenantId], references: [tenant.id] }),
-  units: many(leaseUnit),
+export const agreementRelations = relations(agreement, ({ one, many }) => ({
+  parties: many(agreementParty),
+  units: many(agreementUnit),
+  leaseTerms: one(leaseTerms),
+  ownershipTerms: one(ownershipTerms),
   invoices: many(invoice),
 }))
 
-export const leaseUnitRelations = relations(leaseUnit, ({ one }) => ({
-  lease: one(lease, { fields: [leaseUnit.leaseId], references: [lease.id] }),
-  unit: one(unit, { fields: [leaseUnit.unitId], references: [unit.id] }),
+export const agreementUnitRelations = relations(agreementUnit, ({ one }) => ({
+  agreement: one(agreement, { fields: [agreementUnit.agreementId], references: [agreement.id] }),
+  unit: one(unit, { fields: [agreementUnit.unitId], references: [unit.id] }),
+}))
+
+export const agreementPartyRelations = relations(agreementParty, ({ one }) => ({
+  agreement: one(agreement, { fields: [agreementParty.agreementId], references: [agreement.id] }),
+  tenant: one(tenant, { fields: [agreementParty.tenantId], references: [tenant.id] }),
+}))
+
+export const leaseTermsRelations = relations(leaseTerms, ({ one }) => ({
+  agreement: one(agreement, { fields: [leaseTerms.agreementId], references: [agreement.id] }),
+}))
+
+export const ownershipTermsRelations = relations(ownershipTerms, ({ one }) => ({
+  agreement: one(agreement, { fields: [ownershipTerms.agreementId], references: [agreement.id] }),
 }))
 
 /** Seller details printed on invoices. One row per organization, created on first save. */
@@ -191,9 +255,10 @@ export const invoice = sqliteTable(
     organizationId: organizationId(),
     number: integer('number').notNull(),
     ocr: text('ocr').notNull(),
-    leaseId: text('lease_id')
+    agreementId: text('agreement_id')
       .notNull()
-      .references(() => lease.id),
+      .references(() => agreement.id),
+    // The party that received the invoice.
     tenantId: text('tenant_id')
       .notNull()
       .references(() => tenant.id),
@@ -222,11 +287,11 @@ export const invoice = sqliteTable(
   },
   (t) => [
     uniqueIndex('invoice_org_number_uq').on(t.organizationId, t.number),
-    // A lease has at most one avi in force per period. Voided and fully credited avier no longer
+    // An agreement has at most one avi in force per period. Voided and fully credited avier no longer
     // count, so a corrected one can replace them. Invoice runs skip any period already invoiced,
     // which keeps them safe to repeat.
-    uniqueIndex('invoice_lease_period_uq')
-      .on(t.leaseId, t.periodStart)
+    uniqueIndex('invoice_agreement_period_uq')
+      .on(t.agreementId, t.periodStart)
       .where(sql`${t.voidedAt} is null and ${t.creditedOre} < ${t.totalOre}`),
     index('invoice_org_due_idx').on(t.organizationId, t.dueDate),
   ],
@@ -250,7 +315,7 @@ export const invoiceLine = sqliteTable(
 )
 
 export const invoiceRelations = relations(invoice, ({ one, many }) => ({
-  lease: one(lease, { fields: [invoice.leaseId], references: [lease.id] }),
+  agreement: one(agreement, { fields: [invoice.agreementId], references: [agreement.id] }),
   tenant: one(tenant, { fields: [invoice.tenantId], references: [tenant.id] }),
   lines: many(invoiceLine),
   payments: many(payment),

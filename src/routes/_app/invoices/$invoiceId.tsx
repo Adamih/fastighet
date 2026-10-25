@@ -118,13 +118,13 @@ function InvoicePage() {
             {can({ lease: ['read'] }) ? (
               <Link
                 to="/leases/$leaseId"
-                params={{ leaseId: invoice.lease.id }}
+                params={{ leaseId: invoice.agreement.id }}
                 className="underline-offset-4 hover:text-foreground hover:underline"
               >
-                {m.lease_number({ number: invoice.lease.number })}
+                {m.lease_number({ number: invoice.agreement.number })}
               </Link>
             ) : (
-              m.lease_number({ number: invoice.lease.number })
+              m.lease_number({ number: invoice.agreement.number })
             )}
           </>
         }
@@ -536,7 +536,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
             <dt className="text-muted-foreground">Fakturadatum</dt>
             <dd className="tabular-nums">{invoice.issueDate}</dd>
             <dt className="text-muted-foreground">Avtal</dt>
-            <dd className="tabular-nums">{invoice.lease.number}</dd>
+            <dd className="tabular-nums">{invoice.agreement.number}</dd>
             {invoice.replaces && (
               <>
                 <dt className="text-muted-foreground">Ersätter faktura</dt>

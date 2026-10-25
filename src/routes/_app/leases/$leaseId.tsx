@@ -67,7 +67,7 @@ export const Route = createFileRoute('/_app/leases/$leaseId')({
   loader: ({ context, params }) => {
     // Invoices are optional data: prefetch (which never throws) so the page renders with them.
     void context.queryClient.prefetchQuery(
-      invoicesQuery({ filter: 'all', leaseId: params.leaseId }),
+      invoicesQuery({ filter: 'all', agreementId: params.leaseId }),
     )
     return context.queryClient.ensureQueryData(leaseQuery(params.leaseId))
   },
@@ -81,7 +81,7 @@ function LeasePage() {
   const { leaseId } = Route.useParams()
   const { data: lease } = useSuspenseQuery(leaseQuery(leaseId))
   const { data: invoices = [] } = useQuery({
-    ...invoicesQuery({ filter: 'all', leaseId }),
+    ...invoicesQuery({ filter: 'all', agreementId: leaseId }),
     enabled: canReadInvoices,
   })
   const terminate = useTerminateLeaseDrawer(lease)
@@ -254,7 +254,7 @@ function LeasePage() {
                   [m.lease_fact_start(), lease.startDate],
                   [
                     m.lease_fact_end(),
-                    effectiveEndDate(lease) ?? lease.endDate ?? m.lease_open_ended(),
+                    effectiveEndDate(lease) ?? lease.termEndDate ?? m.lease_open_ended(),
                   ],
                   [
                     m.common_rent(),
@@ -267,7 +267,7 @@ function LeasePage() {
                   ],
                   [
                     m.lease_extension(),
-                    lease.endDate && lease.extensionMonths
+                    lease.termEndDate && lease.extensionMonths
                       ? m.common_months_short({ months: lease.extensionMonths })
                       : '–',
                   ],
@@ -318,10 +318,10 @@ function LeaseStats({
               inDays(daysUntil(today, end)),
               toneText.ending,
             ]
-          : lease.endDate
+          : lease.termEndDate
             ? [
                 m.lease_renews(),
-                formatShortDate(lease.endDate),
+                formatShortDate(lease.termEndDate),
                 m.lease_renews_hint({ months: lease.extensionMonths ?? 0 }),
                 undefined,
               ]
@@ -405,8 +405,8 @@ function LeaseProgress({ lease, timeline }: { lease: LeaseView; timeline: Timeli
       : []),
     end
       ? [end, lease.moveOutDate ? m.lease_move_out() : m.lease_end_date()]
-      : lease.endDate
-        ? [lease.endDate, m.lease_end_date_renews()]
+      : lease.termEndDate
+        ? [lease.termEndDate, m.lease_end_date_renews()]
         : [m.lease_open_ended(), m.lease_no_end_date()],
   ]
   return (

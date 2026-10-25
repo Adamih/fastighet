@@ -33,18 +33,18 @@ export function LeaseStatusBadge({ status }: { status: LeaseStatus }) {
 
 export function formatPeriod(lease: {
   startDate: string
-  endDate: string | null
+  termEndDate: string | null
   extensionMonths: number | null
   moveOutDate: string | null
 }) {
   if (lease.moveOutDate) return `${lease.startDate} – ${lease.moveOutDate}`
-  if (!lease.endDate) return m.lease_period_open_dash({ start: lease.startDate })
+  if (!lease.termEndDate) return m.lease_period_open_dash({ start: lease.startDate })
   if (lease.extensionMonths) {
     return m.lease_period_renewing({
       start: lease.startDate,
-      end: lease.endDate,
+      end: lease.termEndDate,
       months: lease.extensionMonths,
     })
   }
-  return `${lease.startDate} – ${lease.endDate}`
+  return `${lease.startDate} – ${lease.termEndDate}`
 }

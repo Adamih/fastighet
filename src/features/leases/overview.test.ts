@@ -15,7 +15,7 @@ import type { LeaseStatus } from './terms'
 const today = '2026-10-23'
 const base = {
   startDate: '2025-08-01',
-  endDate: null as string | null,
+  termEndDate: null as string | null,
   extensionMonths: null as number | null,
   noticePeriodMonths: 3,
   moveOutDate: null as string | null,
@@ -52,7 +52,7 @@ describe('leaseTimeline', () => {
 
   test('fixed term that renews', () => {
     const t = leaseTimeline(
-      { ...base, startDate: '2024-01-01', endDate: '2026-12-31', extensionMonths: 36 },
+      { ...base, startDate: '2024-01-01', termEndDate: '2026-12-31', extensionMonths: 36 },
       today,
     )
     expect(t).toMatchObject({
@@ -64,7 +64,7 @@ describe('leaseTimeline', () => {
   })
 
   test('fixed term without renewal ends by itself', () => {
-    const t = leaseTimeline({ ...base, endDate: '2026-10-24' }, today)
+    const t = leaseTimeline({ ...base, termEndDate: '2026-10-24' }, today)
     expect(t).toMatchObject({ note: 'Upphör i morgon', tone: 'ending' })
   })
 
@@ -110,7 +110,7 @@ test('leaseOverview matches the seed company', () => {
     {
       ...base,
       startDate: '2024-01-01',
-      endDate: '2026-12-31',
+      termEndDate: '2026-12-31',
       extensionMonths: 36,
       rentOre: 18000000,
       rentInterval: 'yearly' as const,

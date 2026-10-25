@@ -10,7 +10,7 @@ import {
 
 const openEnded: LeaseTerms = {
   startDate: '2026-01-01',
-  endDate: null,
+  termEndDate: null,
   extensionMonths: null,
   noticePeriodMonths: 3,
   moveOutDate: null,
@@ -19,7 +19,7 @@ const openEnded: LeaseTerms = {
 // Typical commercial lease: three years, nine months' notice, extended three years at a time.
 const commercial: LeaseTerms = {
   startDate: '2025-01-01',
-  endDate: '2027-12-31',
+  termEndDate: '2027-12-31',
   extensionMonths: 36,
   noticePeriodMonths: 9,
   moveOutDate: null,
@@ -38,7 +38,7 @@ describe('leaseStatus', () => {
     expect(leaseStatus(terminated, '2026-05-01')).toBe('ended')
   })
   test('fixed term without extension ends by itself', () => {
-    const fixed = { ...openEnded, endDate: '2026-06-30' }
+    const fixed = { ...openEnded, termEndDate: '2026-06-30' }
     expect(leaseStatus(fixed, '2026-06-30')).toBe('active')
     expect(leaseStatus(fixed, '2026-07-01')).toBe('ended')
   })
@@ -67,7 +67,7 @@ describe('earliestMoveOutDate', () => {
     expect(earliestMoveOutDate(commercial, '2031-06-15')).toBe('2033-12-31')
   })
   test('fixed term without extension never ends before its end date', () => {
-    const fixed = { ...openEnded, endDate: '2026-12-31' }
+    const fixed = { ...openEnded, termEndDate: '2026-12-31' }
     expect(earliestMoveOutDate(fixed, '2026-02-01')).toBe('2026-12-31')
     expect(earliestMoveOutDate(fixed, '2026-11-01')).toBe('2027-02-28')
   })

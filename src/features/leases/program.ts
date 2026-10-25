@@ -1,6 +1,15 @@
 import { and, count, desc, eq, inArray, min, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { invoice, lease, leaseUnit, tenant, unit } from '#/db/schema'
+import {
+  agreement,
+  agreementParty,
+  agreementUnit,
+  invoice,
+  leaseTerms,
+  tenant,
+  unit,
+} from '#/db/schema'
+import { primaryParty } from '#/features/agreements/parties'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -9,32 +18,53 @@ import { today } from '#/server/today'
 import type { CreateLeaseInput, TerminateLeaseInput, UpdateLeaseInput } from './schemas'
 import { earliestMoveOutDate, effectiveEndDate, leaseStatus, periodsOverlap } from './terms'
 
-const withTenantAndUnits = {
-  tenant: { columns: { id: true, name: true, kind: true } },
+// A lease is an agreement of kind `lease` with its `leaseTerms`. The view flattens both, so the
+// lease pages see one record: `endDate` is the last billed day, `termEndDate` the fixed term's end.
+const withLeaseDetails = {
+  leaseTerms: true,
+  parties: {
+    orderBy: agreementParty.position,
+    with: { tenant: { columns: { id: true, name: true, kind: true } } },
+  },
   units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
 } as const
 
-type LeaseRow = typeof lease.$inferSelect & {
-  tenant: { id: string; name: string; kind: 'person' | 'company' }
+type LeaseRow = typeof agreement.$inferSelect & {
+  leaseTerms: typeof leaseTerms.$inferSelect | null
+  parties: (typeof agreementParty.$inferSelect & {
+    tenant: { id: string; name: string; kind: 'person' | 'company' }
+  })[]
   units: {
     unit: typeof unit.$inferSelect & { property: { id: string; designation: string } }
   }[]
 }
 
-const toView = (row: LeaseRow, on: string) => ({
-  ...row,
-  units: row.units
-    .map(({ unit }) => ({
-      id: unit.id,
-      label: unit.label,
-      kind: unit.kind,
-      areaSqm: unit.areaSqm,
-      propertyId: unit.property.id,
-      designation: unit.property.designation,
-    }))
-    .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label)),
-  status: leaseStatus(row, on),
-})
+const toView = ({ leaseTerms: terms, parties, ...row }: LeaseRow, on: string) => {
+  if (!terms) throw new Error(`Lease ${row.id} has no lease terms`)
+  const { agreementId: _, organizationId: __, ...leaseFields } = terms
+  const lease = { ...row, ...leaseFields }
+  return {
+    ...lease,
+    /** The tenant named first; the one the lease pages show. */
+    tenant: primaryParty(parties).tenant,
+    parties: parties.map((p) => ({
+      ...p.tenant,
+      role: p.role,
+      receivesInvoices: p.receivesInvoices,
+    })),
+    units: row.units
+      .map(({ unit }) => ({
+        id: unit.id,
+        label: unit.label,
+        kind: unit.kind,
+        areaSqm: unit.areaSqm,
+        propertyId: unit.property.id,
+        designation: unit.property.designation,
+      }))
+      .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label)),
+    status: leaseStatus(lease, on),
+  }
+}
 
 export type LeaseView = ReturnType<typeof toView>
 
@@ -44,10 +74,10 @@ const manage: Permissions = { lease: ['manage'] }
 export const listLeases = Effect.gen(function* () {
   yield* requirePermission(read)
   const rows = yield* orgQuery((db, organizationId) =>
-    db.query.lease.findMany({
-      where: eq(lease.organizationId, organizationId),
-      orderBy: desc(lease.number),
-      with: withTenantAndUnits,
+    db.query.agreement.findMany({
+      where: and(eq(agreement.organizationId, organizationId), eq(agreement.kind, 'lease')),
+      orderBy: desc(agreement.number),
+      with: withLeaseDetails,
     }),
   )
   const on = yield* today
@@ -58,22 +88,27 @@ export const getLease = (leaseId: string) =>
   Effect.gen(function* () {
     yield* requirePermission(read)
     const row = yield* orgQuery((db, organizationId) =>
-      db.query.lease.findFirst({
-        where: and(eq(lease.id, leaseId), eq(lease.organizationId, organizationId)),
-        with: withTenantAndUnits,
+      db.query.agreement.findFirst({
+        where: and(
+          eq(agreement.id, leaseId),
+          eq(agreement.organizationId, organizationId),
+          eq(agreement.kind, 'lease'),
+        ),
+        with: withLeaseDetails,
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'lease', id: leaseId })
+    const view = toView(row, yield* today)
     // Contact details are tenant data, shown only to those who may read tenants.
     const contact = (yield* hasPermission({ tenant: ['read'] }))
       ? yield* orgQuery((db, organizationId) =>
           db.query.tenant.findFirst({
             columns: { email: true, phone: true },
-            where: and(eq(tenant.id, row.tenantId), eq(tenant.organizationId, organizationId)),
+            where: and(eq(tenant.id, view.tenant.id), eq(tenant.organizationId, organizationId)),
           }),
         )
       : undefined
-    return { ...toView(row, yield* today), contact: contact ?? null }
+    return { ...view, contact: contact ?? null }
   })
 
 /**
@@ -87,14 +122,14 @@ const checkLeaseTerms = (
   terms: {
     unitIds: readonly string[]
     startDate: string
-    endDate: string | null
+    termEndDate: string | null
     extensionMonths: number | null
     moveOutDate: string | null
   },
   exceptLeaseId?: string,
 ) =>
   Effect.gen(function* () {
-    if (terms.endDate && terms.endDate < terms.startDate) {
+    if (terms.termEndDate && terms.termEndDate < terms.startDate) {
       return yield* new Conflict({ message: 'Slutdatum kan inte vara före startdatum' })
     }
     if (terms.moveOutDate && terms.moveOutDate < terms.startDate) {
@@ -108,21 +143,19 @@ const checkLeaseTerms = (
       db.query.unit.findMany({
         columns: { id: true, label: true },
         where: and(eq(unit.organizationId, organizationId), inArray(unit.id, unitIds)),
-        with: { leases: { with: { lease: true } } },
+        with: { agreements: { with: { agreement: true } } },
       }),
     )
     if (units.length !== unitIds.length) {
       return yield* new NotFound({ entity: 'unit', id: unitIds.join(',') })
     }
 
-    const period = {
-      start: terms.startDate,
-      end: effectiveEndDate({ ...terms, noticePeriodMonths: 0 }),
-    }
+    // Any agreement on the unit counts, whatever its kind; its `endDate` is its last day.
+    const period = { start: terms.startDate, end: effectiveEndDate(terms) }
     for (const u of units) {
-      for (const { lease: other } of u.leases) {
+      for (const { agreement: other } of u.agreements) {
         if (other.id === exceptLeaseId) continue
-        if (periodsOverlap(period, { start: other.startDate, end: effectiveEndDate(other) })) {
+        if (periodsOverlap(period, { start: other.startDate, end: other.endDate })) {
           return yield* new Conflict({
             message: `Objekt ${u.label} är redan uthyrt under perioden (avtal ${other.number})`,
           })
@@ -135,7 +168,7 @@ const checkLeaseTerms = (
 export const createLease = (input: CreateLeaseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
-    const extensionMonths = input.endDate ? input.extensionMonths : null
+    const extensionMonths = input.termEndDate ? input.extensionMonths : null
 
     const owner = yield* orgQuery((db, organizationId) =>
       db.query.tenant.findFirst({
@@ -151,21 +184,40 @@ export const createLease = (input: CreateLeaseInput) =>
     yield* orgQuery((db, organizationId) =>
       // D1 batches run as one transaction. The subquery numbers the lease in the same statement.
       db.batch([
-        db.insert(lease).values({
+        db.insert(agreement).values({
           id: leaseId,
           organizationId,
-          number: sql`(select coalesce(max(${lease.number}), 0) + 1 from ${lease} where ${lease.organizationId} = ${organizationId})`,
-          tenantId: owner.id,
+          number: sql`(select coalesce(max(${agreement.number}), 0) + 1 from ${agreement} where ${agreement.organizationId} = ${organizationId})`,
+          kind: 'lease',
           startDate: input.startDate,
-          endDate: input.endDate,
-          extensionMonths,
-          noticePeriodMonths: input.noticePeriodMonths,
+          endDate: effectiveEndDate({
+            termEndDate: input.termEndDate,
+            extensionMonths,
+            moveOutDate: null,
+          }),
           rentOre: input.rentOre,
           rentInterval: input.rentInterval,
           invoiceInterval: input.invoiceInterval,
           vat: input.vat,
         }),
-        db.insert(leaseUnit).values(unitIds.map((unitId) => ({ leaseId, unitId, organizationId }))),
+        db.insert(leaseTerms).values({
+          agreementId: leaseId,
+          organizationId,
+          termEndDate: input.termEndDate,
+          extensionMonths,
+          noticePeriodMonths: input.noticePeriodMonths,
+        }),
+        db.insert(agreementParty).values({
+          agreementId: leaseId,
+          tenantId: owner.id,
+          organizationId,
+          role: 'tenant',
+          receivesInvoices: true,
+          position: 1,
+        }),
+        db
+          .insert(agreementUnit)
+          .values(unitIds.map((unitId) => ({ agreementId: leaseId, unitId, organizationId }))),
       ]),
     )
     return yield* getLease(leaseId)
@@ -182,7 +234,7 @@ const invoiceHistory = (leaseId: string) =>
         ),
       })
       .from(invoice)
-      .where(and(eq(invoice.organizationId, organizationId), eq(invoice.leaseId, leaseId))),
+      .where(and(eq(invoice.organizationId, organizationId), eq(invoice.agreementId, leaseId))),
   ).pipe(
     Effect.map(([row]) => ({
       total: row?.total ?? 0,
@@ -198,7 +250,7 @@ export const updateLease = (input: UpdateLeaseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const current = yield* getLease(input.leaseId)
-    const extensionMonths = input.endDate ? input.extensionMonths : null
+    const extensionMonths = input.termEndDate ? input.extensionMonths : null
 
     const history = yield* invoiceHistory(current.id)
     if (history.firstActivePeriod && input.startDate > history.firstActivePeriod) {
@@ -215,26 +267,44 @@ export const updateLease = (input: UpdateLeaseInput) =>
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db
-          .update(lease)
+          .update(agreement)
           .set({
             startDate: input.startDate,
-            endDate: input.endDate,
-            extensionMonths,
-            noticePeriodMonths: input.noticePeriodMonths,
+            endDate: effectiveEndDate({
+              termEndDate: input.termEndDate,
+              extensionMonths,
+              moveOutDate: current.moveOutDate,
+            }),
             rentOre: input.rentOre,
             rentInterval: input.rentInterval,
             invoiceInterval: input.invoiceInterval,
             vat: input.vat,
           })
-          .where(and(eq(lease.id, current.id), eq(lease.organizationId, organizationId))),
+          .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
         db
-          .delete(leaseUnit)
+          .update(leaseTerms)
+          .set({
+            termEndDate: input.termEndDate,
+            extensionMonths,
+            noticePeriodMonths: input.noticePeriodMonths,
+          })
           .where(
-            and(eq(leaseUnit.leaseId, current.id), eq(leaseUnit.organizationId, organizationId)),
+            and(
+              eq(leaseTerms.agreementId, current.id),
+              eq(leaseTerms.organizationId, organizationId),
+            ),
           ),
         db
-          .insert(leaseUnit)
-          .values(unitIds.map((unitId) => ({ leaseId: current.id, unitId, organizationId }))),
+          .delete(agreementUnit)
+          .where(
+            and(
+              eq(agreementUnit.agreementId, current.id),
+              eq(agreementUnit.organizationId, organizationId),
+            ),
+          ),
+        db
+          .insert(agreementUnit)
+          .values(unitIds.map((unitId) => ({ agreementId: current.id, unitId, organizationId }))),
       ]),
     )
     return yield* getLease(current.id)
@@ -262,10 +332,21 @@ export const terminateLease = (input: TerminateLeaseInput) =>
     }
 
     yield* orgQuery((db, organizationId) =>
-      db
-        .update(lease)
-        .set({ noticeDate: input.noticeDate, moveOutDate })
-        .where(and(eq(lease.id, current.id), eq(lease.organizationId, organizationId))),
+      db.batch([
+        db
+          .update(leaseTerms)
+          .set({ noticeDate: input.noticeDate, moveOutDate })
+          .where(
+            and(
+              eq(leaseTerms.agreementId, current.id),
+              eq(leaseTerms.organizationId, organizationId),
+            ),
+          ),
+        db
+          .update(agreement)
+          .set({ endDate: moveOutDate })
+          .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
+      ]),
     )
     return yield* getLease(current.id)
   })
@@ -288,17 +369,29 @@ export const withdrawTermination = (leaseId: string) =>
       current.id,
     )
     yield* orgQuery((db, organizationId) =>
-      db
-        .update(lease)
-        .set({ noticeDate: null, moveOutDate: null })
-        .where(
-          and(
-            eq(lease.id, current.id),
-            eq(lease.organizationId, organizationId),
-            // Guards against a concurrent change between the read above and this write.
-            eq(lease.moveOutDate, current.moveOutDate as string),
+      db.batch([
+        db
+          .update(leaseTerms)
+          .set({ noticeDate: null, moveOutDate: null })
+          .where(
+            and(
+              eq(leaseTerms.agreementId, current.id),
+              eq(leaseTerms.organizationId, organizationId),
+              // Guards against a concurrent change between the read above and this write.
+              eq(leaseTerms.moveOutDate, current.moveOutDate as string),
+            ),
           ),
-        ),
+        db
+          .update(agreement)
+          .set({ endDate: effectiveEndDate({ ...current, moveOutDate: null }) })
+          .where(
+            and(
+              eq(agreement.id, current.id),
+              eq(agreement.organizationId, organizationId),
+              eq(agreement.endDate, current.moveOutDate as string),
+            ),
+          ),
+      ]),
     )
     return yield* getLease(current.id)
   })
@@ -316,8 +409,8 @@ export const deleteLease = (leaseId: string) =>
     }
     yield* orgQuery((db, organizationId) =>
       db
-        .delete(lease)
-        .where(and(eq(lease.id, current.id), eq(lease.organizationId, organizationId))),
+        .delete(agreement)
+        .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
     )
     return { tenantId: current.tenant.id }
   })

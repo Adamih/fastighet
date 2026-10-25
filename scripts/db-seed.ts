@@ -13,6 +13,7 @@ import { count, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
+import { invoiceRecipient } from '#/features/agreements/parties'
 import { type CreditRequest, draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
@@ -26,7 +27,7 @@ import {
   VAT_RATE_PERCENT,
   vatFor,
 } from '#/features/invoicing/rules'
-import { earliestMoveOutDate, type LeaseTerms } from '#/features/leases/terms'
+import { earliestMoveOutDate, effectiveEndDate, type LeaseTerms } from '#/features/leases/terms'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
 import { addDays, addMonths, stockholmDate } from '#/lib/dates'
@@ -247,6 +248,7 @@ async function seed() {
     erik: person('Erik Lindqvist', 'erik.lindqvist@hyresgast.test', units.l1002),
     fatima: person('Fatima Ali', 'fatima.ali@hyresgast.test', units.l1003),
     mikael: person('Mikael Andersson', 'mikael.andersson@hyresgast.test', units.l1101),
+    sofia: person('Sofia Andersson', 'sofia.andersson@hyresgast.test', units.l1101),
     emma: person('Emma Johansson', 'emma.johansson@hyresgast.test', units.l1102),
     lars: person('Lars Nilsson', 'lars.nilsson@hyresgast.test', {
       streetAddress: 'Kungsgatan 18',
@@ -278,7 +280,7 @@ async function seed() {
   // --- Leases, numbered in the order they were signed.
   const openEnded = (startDate: string, noticePeriodMonths = 3): LeaseTerms => ({
     startDate,
-    endDate: null,
+    termEndDate: null,
     extensionMonths: null,
     noticePeriodMonths,
     moveOutDate: null,
@@ -292,6 +294,8 @@ async function seed() {
   interface SeedLease {
     key: string
     tenant: keyof typeof tenants
+    /** Others on the same lease; the first tenant receives the avier. */
+    coTenants?: (keyof typeof tenants)[]
     units: Unit[]
     terms: LeaseTerms & { noticeDate?: string }
     rentOre: number
@@ -301,9 +305,9 @@ async function seed() {
     payer: Payer
   }
   const monthly = { rentInterval: 'monthly', invoiceInterval: 'monthly', vat: false } as const
-  const commercial = (startDate: string, endDate: string): LeaseTerms => ({
+  const commercial = (startDate: string, termEndDate: string): LeaseTerms => ({
     startDate,
-    endDate,
+    termEndDate,
     extensionMonths: 36,
     noticePeriodMonths: 9,
     moveOutDate: null,
@@ -401,6 +405,7 @@ async function seed() {
     {
       key: 'mikael',
       tenant: 'mikael',
+      coTenants: ['sofia'],
       units: [units.l1101, units.lP2],
       terms: openEnded(addMonths(thisMonth, -18)),
       rentOre: 815_000,
@@ -464,20 +469,26 @@ async function seed() {
       payer: 'paper',
     },
   ]
-  const leases = seedLeases.map((l, i) => ({ ...l, id: id(), number: i + 1 }))
+  const leases = seedLeases.map((l, i) => ({
+    ...l,
+    id: id(),
+    number: i + 1,
+    parties: [l.tenant, ...(l.coTenants ?? [])].map((key, index) => ({
+      position: index + 1,
+      receivesInvoices: index === 0,
+      tenant: tenants[key],
+    })),
+  }))
+  // Leases are agreements with lease terms; the agreement's end date is the last billed day.
   await insertAll(
-    schema.lease,
+    schema.agreement,
     leases.map((l) => ({
       id: l.id,
       organizationId: orgId,
       number: l.number,
-      tenantId: tenants[l.tenant].id,
+      kind: 'lease' as const,
       startDate: l.terms.startDate,
-      endDate: l.terms.endDate,
-      extensionMonths: l.terms.extensionMonths,
-      noticePeriodMonths: l.terms.noticePeriodMonths,
-      moveOutDate: l.terms.moveOutDate,
-      noticeDate: l.terms.noticeDate ?? null,
+      endDate: effectiveEndDate(l.terms),
       rentOre: l.rentOre,
       rentInterval: l.rentInterval,
       invoiceInterval: l.invoiceInterval,
@@ -486,9 +497,34 @@ async function seed() {
     })),
   )
   await insertAll(
-    schema.leaseUnit,
+    schema.leaseTerms,
+    leases.map((l) => ({
+      agreementId: l.id,
+      organizationId: orgId,
+      termEndDate: l.terms.termEndDate,
+      extensionMonths: l.terms.extensionMonths,
+      noticePeriodMonths: l.terms.noticePeriodMonths,
+      moveOutDate: l.terms.moveOutDate,
+      noticeDate: l.terms.noticeDate ?? null,
+    })),
+  )
+  await insertAll(
+    schema.agreementParty,
     leases.flatMap((l) =>
-      l.units.map((u) => ({ leaseId: l.id, unitId: u.id, organizationId: orgId })),
+      l.parties.map((p, index) => ({
+        agreementId: l.id,
+        tenantId: p.tenant.id,
+        organizationId: orgId,
+        role: index === 0 ? ('tenant' as const) : ('co_tenant' as const),
+        receivesInvoices: p.receivesInvoices,
+        position: p.position,
+      })),
+    ),
+  )
+  await insertAll(
+    schema.agreementUnit,
+    leases.flatMap((l) =>
+      l.units.map((u) => ({ agreementId: l.id, unitId: u.id, organizationId: orgId })),
     ),
   )
 
@@ -511,7 +547,7 @@ async function seed() {
   ) => {
     const netOre = rentForPeriod(terms, period)
     if (netOre <= 0) return
-    const tenant = tenants[lease.tenant]
+    const recipient = invoiceRecipient(lease.parties)
     const vatOre = vatFor(netOre, lease.vat)
     const number = invoices.length + 1
     invoices.push({
@@ -520,13 +556,8 @@ async function seed() {
       organizationId: orgId,
       number,
       ocr: ocrFor(number),
-      leaseId: lease.id,
-      tenantId: tenant.id,
-      recipientName: tenant.name,
-      recipientStreetAddress: tenant.streetAddress,
-      recipientPostalCode: tenant.postalCode,
-      recipientCity: tenant.city,
-      recipientEmail: tenant.email,
+      agreementId: lease.id,
+      ...recipient,
       periodStart: period.start,
       periodEnd: period.end,
       issueDate,
@@ -534,13 +565,17 @@ async function seed() {
       netOre,
       vatOre,
       totalOre: netOre + vatOre,
-      sentAt: tenant.email ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`) : null,
+      sentAt: recipient.recipientEmail ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`) : null,
       createdAt: new Date(`${issueDate}T07:00:00Z`),
       line: rentLineDescription(lease.units, period),
       credits: [],
     })
   }
-  const termsOf = (l: (typeof leases)[number]): RentTerms => ({ ...l.terms, ...l })
+  const termsOf = (l: (typeof leases)[number]): RentTerms => ({
+    ...l,
+    startDate: l.terms.startDate,
+    endDate: effectiveEndDate(l.terms),
+  })
   let oskarCredited: Invoice | undefined
   for (let offset = -8; offset <= 1; offset++) {
     const monthStart = addMonths(thisMonth, offset)
@@ -552,7 +587,7 @@ async function seed() {
       // When this month's run went out, Oskar still lived there: invoice him as the lease was.
       const asSigned =
         lease.key === 'oskar' && offset === 0
-          ? { ...termsOf(lease), moveOutDate: null, noticeDate: null }
+          ? { ...termsOf(lease), endDate: null }
           : termsOf(lease)
       const before = invoices.length
       invoiceFor(lease, period, issueDate, asSigned)
@@ -710,7 +745,10 @@ async function seed() {
       bookingDate: date,
       amountOre: due,
       reference: invoice.ocr,
-      payerName: invoice.recipientName.toUpperCase(),
+      // The bank names the account holder: the party that receives the avier.
+      payerName: (
+        Object.values(tenants).find((t) => t.id === invoice.tenantId)?.name ?? invoice.recipientName
+      ).toUpperCase(),
       invoice,
       status: 'matched',
       note: null,

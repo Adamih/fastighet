@@ -1,4 +1,3 @@
-import { effectiveEndDate, type LeaseTerms } from '#/features/leases/terms'
 import {
   addDays,
   addMonths,
@@ -18,7 +17,11 @@ export interface Period {
   readonly end: string
 }
 
-export interface RentTerms extends LeaseTerms {
+/** What billing needs from an agreement, whatever its kind. */
+export interface RentTerms {
+  readonly startDate: string
+  /** The last billed day (`agreement.endDate`), or null while it runs until further notice. */
+  readonly endDate: string | null
   readonly rentOre: number
   readonly rentInterval: 'monthly' | 'yearly'
   readonly invoiceInterval: 'monthly' | 'quarterly'
@@ -59,7 +62,7 @@ function monthlyRent(terms: RentTerms, monthStart: string): number {
  */
 export function rentForPeriod(terms: RentTerms, period: Period): number {
   const leaseStart = terms.startDate
-  const leaseEnd = effectiveEndDate(terms)
+  const leaseEnd = terms.endDate
   let total = 0
   for (let month = period.start; month <= period.end; month = addMonths(month, 1)) {
     const monthEnd = endOfMonth(month)

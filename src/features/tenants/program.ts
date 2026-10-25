@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { invoice, lease, tenant } from '#/db/schema'
+import { invoice, tenant } from '#/db/schema'
+import { agreementTerms } from '#/features/agreements/terms'
 import { invoiceStatus } from '#/features/invoicing/rules'
 import { leaseStatus } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
@@ -15,7 +16,22 @@ import type { CreateTenantInput, UpdateTenantInput } from './schemas'
 const read: Permissions = { tenant: ['read'] }
 const manage: Permissions = { tenant: ['manage'] }
 
-/** Tenants by name, each with their leases (newest first) for those who may read leases and units. */
+/** A party's agreements (leases, or a bostadsrätt), newest first, with lease-shaped terms. */
+const partyAgreements = <A extends Parameters<typeof agreementTerms>[0] & { number: number }>(
+  parties: readonly { agreement: A }[],
+  on: string,
+) =>
+  parties
+    .map(({ agreement }) => {
+      const terms = agreementTerms(agreement)
+      return { ...agreement, ...terms, status: leaseStatus(terms, on) }
+    })
+    .sort((a, b) => b.number - a.number)
+
+/**
+ * Tenants by name, each with every agreement they are a party on (newest first) for those who
+ * may read leases and units.
+ */
 export const listTenants = Effect.gen(function* () {
   yield* requirePermission(read)
   const showLeases = yield* hasPermission({ lease: ['read'], property: ['read'] })
@@ -24,42 +40,46 @@ export const listTenants = Effect.gen(function* () {
       where: eq(tenant.organizationId, organizationId),
       orderBy: asc(tenant.name),
       with: {
-        leases: {
-          orderBy: desc(lease.number),
-          with: { units: { with: { unit: { columns: { kind: true, label: true } } } } },
+        agreements: {
+          with: {
+            agreement: {
+              with: {
+                leaseTerms: true,
+                units: { with: { unit: { columns: { kind: true, label: true } } } },
+              },
+            },
+          },
         },
       },
     }),
   )
   const on = yield* today
-  return rows.map(({ leases, ...row }) => ({
+  return rows.map(({ agreements, ...row }) => ({
     ...row,
     leases: showLeases
-      ? leases.map((l) => ({
-          id: l.id,
-          number: l.number,
-          status: leaseStatus(l, on),
-          units: l.units.map(({ unit }) => unit),
+      ? partyAgreements(agreements, on).map((a) => ({
+          id: a.id,
+          kind: a.kind,
+          number: a.number,
+          status: a.status,
+          units: a.units.map(({ unit }) => unit),
         }))
       : [],
   }))
 })
 
-/** The tenant with all their leases, for the checks below. No permission check of its own. */
+/** The tenant with every agreement they are on, for the checks below. No permission check. */
 const loadTenant = (tenantId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
       db.query.tenant.findFirst({
         where: and(eq(tenant.id, tenantId), eq(tenant.organizationId, organizationId)),
-        with: { leases: { orderBy: desc(lease.number) } },
+        with: { agreements: { with: { agreement: { with: { leaseTerms: true } } } } },
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'tenant', id: tenantId })
-    const on = yield* today
-    return {
-      ...row,
-      leases: row.leases.map((l) => ({ ...l, status: leaseStatus(l, on) })),
-    }
+    const { agreements, ...found } = row
+    return { ...found, leases: partyAgreements(agreements, yield* today) }
   })
 
 /**
@@ -86,7 +106,19 @@ export const getTenant = (tenantId: string) =>
               paidOn: true,
               voidedAt: true,
             },
-            where: and(eq(invoice.tenantId, found.id), eq(invoice.organizationId, organizationId)),
+            // Every avi on their agreements, and any addressed to them.
+            where: and(
+              eq(invoice.organizationId, organizationId),
+              or(
+                eq(invoice.tenantId, found.id),
+                found.leases.length > 0
+                  ? inArray(
+                      invoice.agreementId,
+                      found.leases.map((l) => l.id),
+                    )
+                  : undefined,
+              ),
+            ),
             orderBy: desc(invoice.number),
           }),
         )

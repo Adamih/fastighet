@@ -72,7 +72,7 @@ export function leaseTimeline(
   lease: LeaseTerms & { status: LeaseStatus },
   today: string,
 ): Timeline {
-  const end = effectiveEndDate(lease) ?? lease.endDate
+  const end = effectiveEndDate(lease) ?? lease.termEndDate
   const period = end
     ? `${lease.startDate} → ${end}`
     : m.lease_period_open({ start: lease.startDate })
@@ -118,7 +118,7 @@ export function leaseTimeline(
       tone: 'ending',
     }
   }
-  if (lease.endDate && lease.extensionMonths) {
+  if (lease.termEndDate && lease.extensionMonths) {
     return {
       period,
       cardPeriod,
@@ -127,12 +127,12 @@ export function leaseTimeline(
       tone: 'renewing',
     }
   }
-  if (lease.endDate) {
+  if (lease.termEndDate) {
     return {
       period,
       cardPeriod,
       progress,
-      note: m.lease_note_ends({ when: inDays(daysUntil(today, lease.endDate)) }),
+      note: m.lease_note_ends({ when: inDays(daysUntil(today, lease.termEndDate)) }),
       tone: 'ending',
     }
   }
@@ -180,7 +180,7 @@ export function leaseOverview(leases: readonly OverviewLease[], today: string) {
       (sum, l) => sum + monthlyRentOre(l),
       0,
     ),
-    openEndedActive: active.filter((l) => l.endDate === null).length,
+    openEndedActive: active.filter((l) => l.termEndDate === null).length,
     nextStart: nextStart && { date: nextStart, days: daysUntil(today, nextStart) },
     nextEnd: nextEnd && { date: nextEnd, days: daysUntil(today, nextEnd) },
   }

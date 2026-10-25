@@ -28,7 +28,7 @@ export interface LeaseFormValues {
   tenantId: string
   unitIds: string[]
   startDate: string
-  endDate: string | null
+  termEndDate: string | null
   extensionMonths: number | null
   noticePeriodMonths: number
   rentOre: number
@@ -41,7 +41,7 @@ export const emptyLease: LeaseFormValues = {
   tenantId: '',
   unitIds: [],
   startDate: '',
-  endDate: null,
+  termEndDate: null,
   extensionMonths: 36,
   noticePeriodMonths: 3,
   rentOre: 0,
@@ -83,8 +83,8 @@ export function LeaseForm({
       tenantId: defaultValues.tenantId,
       unitIds: defaultValues.unitIds,
       startDate: defaultValues.startDate,
-      fixedTerm: defaultValues.endDate !== null,
-      endDate: defaultValues.endDate ?? '',
+      fixedTerm: defaultValues.termEndDate !== null,
+      termEndDate: defaultValues.termEndDate ?? '',
       extensionMonths:
         defaultValues.extensionMonths === null ? '' : String(defaultValues.extensionMonths),
       noticePeriodMonths: String(defaultValues.noticePeriodMonths),
@@ -98,7 +98,7 @@ export function LeaseForm({
         tenantId: value.tenantId,
         unitIds: value.unitIds,
         startDate: value.startDate,
-        endDate: value.fixedTerm ? value.endDate : null,
+        termEndDate: value.fixedTerm ? value.termEndDate : null,
         extensionMonths:
           value.fixedTerm && value.extensionMonths.trim() ? Number(value.extensionMonths) : null,
         noticePeriodMonths: Number(value.noticePeriodMonths),
@@ -185,7 +185,7 @@ export function LeaseForm({
             {(fixedTerm) =>
               fixedTerm && (
                 <div className="grid gap-4">
-                  <form.AppField name="endDate" validators={date}>
+                  <form.AppField name="termEndDate" validators={date}>
                     {(field) => <field.TextField label={m.lease_form_end()} type="date" />}
                   </form.AppField>
                   <form.AppField
@@ -357,7 +357,7 @@ function EditLeaseForm({
         tenantId: lease.tenant.id,
         unitIds: lease.units.map((u) => u.id),
         startDate: lease.startDate,
-        endDate: lease.endDate,
+        termEndDate: lease.termEndDate,
         extensionMonths: lease.extensionMonths,
         noticePeriodMonths: lease.noticePeriodMonths,
         rentOre: lease.rentOre,

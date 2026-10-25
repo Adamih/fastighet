@@ -11,6 +11,11 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Permissions.** `src/lib/permissions.ts` defines Better Auth's access-control statements and roles. Permission evaluation uses Better Auth: `auth.api.hasPermission` on the server and `authClient.organization.checkRolePermission` in the UI. Start domain programs with `yield* requirePermission(...)` (`src/server/authorize.ts`): `read` to view a resource, `manage` to create, edit, delete or act on it. Missing access fails with `Forbidden`. Owners and admins have full access; members manage daily work and can only read settings. Deleting still requires the history checks below.
   - Check every affected resource: booking payments requires `payment:manage` and `invoice:manage`; invoice runs also require `lease:read`. Embedded optional data requires read access to its resource (`hasPermission`); invoice seller details use the internal settings loader.
   - Gate navigation and controls with `useCan()` and disable edit forms without manage access. UI checks mirror server checks; they never replace them. Team listing is open to all members. Better Auth enforces member/invitation permissions and owner protections.
+- **Agreements.** Runs invoice an `agreement`: a lease (`kind: 'lease'`) or a bostadsrätt (`tenant_ownership`).
+  - Billing code (runs, rules, matching, reissue) uses only the agreement, its parties (`agreementParty`) and its units. It never uses `leaseTerms`.
+  - `agreement.endDate` is the last billed day. The lease program derives it with `effectiveEndDate` and writes it in the same batch as the lease terms. A lease's fixed-term end is `termEndDate`.
+  - Avier copy their recipient from `invoiceRecipient` (`features/agreements/parties.ts`): every party's name, and the address and email of the party that receives the invoices.
+  - Occupancy and status rules take any agreement through `agreementTerms` (`features/agreements/terms.ts`).
 - **Deleting keeps history.**
   - Delete a record only when nothing depends on it, and check first so the user gets a `Conflict` explaining why. Foreign keys are only the backstop.
   - Units that have ever been on a lease, tenants with leases, and leases with invoices can't be deleted. Terminate the lease instead.
