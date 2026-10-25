@@ -33,7 +33,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
-import { inForce } from '#/features/invoicing/correction'
+import { inForce, voidProblem } from '#/features/invoicing/correction'
 import { remainingOre } from '#/features/invoicing/credit'
 import { useCreditInvoiceDrawer } from '#/features/invoicing/credit-note-form'
 import {
@@ -172,11 +172,22 @@ function InvoicePage() {
                     {m.invoice_undo_payment()}
                   </DropdownMenuItem>
                 )}
-                {open && invoice.creditedOre === 0 && (
+                {voidProblem(invoice) === null ? (
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmVoid(true)}>
                     <Ban aria-hidden="true" />
                     {m.invoice_void()}
                   </DropdownMenuItem>
+                ) : (
+                  // A sent avi is corrected with a credit note; say so where voiding used to be.
+                  voidProblem(invoice) === 'sent' && (
+                    <DropdownMenuItem disabled className="items-start">
+                      <Ban aria-hidden="true" className="mt-0.5" />
+                      <span className="grid gap-0.5">
+                        {m.invoice_void()}
+                        <span className="text-xs">{m.invoice_void_sent_hint()}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  )
                 )}
               </MoreActions>
             )}

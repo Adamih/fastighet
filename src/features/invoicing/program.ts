@@ -16,6 +16,8 @@ import {
   refundProblem,
   refunds,
   reissueProblem,
+  type VoidProblem,
+  voidProblem,
 } from './correction'
 import { type CreditProblem, draftCreditNote } from './credit'
 import { matchesFilter } from './overview'
@@ -424,20 +426,20 @@ export const unmarkInvoicePaid = (invoiceId: string) =>
     return yield* getInvoice(inv.id)
   })
 
-/** Voids an unpaid invoice that has no credit notes. It keeps its number. */
+const voidProblemMessages: Record<VoidProblem, string> = {
+  void: 'Avin är redan makulerad',
+  paid: 'En betald avi kan inte makuleras',
+  credited: 'En krediterad avi kan inte makuleras. Kreditera resten i stället.',
+  sent: 'En skickad avi kan inte makuleras. Kreditera den i stället.',
+}
+
+/** Voids an unsent, unpaid invoice that has no credit notes. It keeps its number. */
 export const voidInvoice = (invoiceId: string) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
-    if (inv.status === 'void') return yield* new Conflict({ message: 'Avin är redan makulerad' })
-    if (inv.status === 'paid') {
-      return yield* new Conflict({ message: 'En betald avi kan inte makuleras' })
-    }
-    if (inv.creditedOre > 0) {
-      return yield* new Conflict({
-        message: 'En krediterad avi kan inte makuleras. Kreditera resten i stället.',
-      })
-    }
+    const problem = voidProblem(inv)
+    if (problem) return yield* new Conflict({ message: voidProblemMessages[problem] })
     yield* updateInvoice(inv.id, { voidedAt: new Date(yield* Clock.currentTimeMillis) })
     return yield* getInvoice(inv.id)
   })

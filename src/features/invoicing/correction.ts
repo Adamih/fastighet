@@ -14,6 +14,25 @@ interface InvoiceAmounts {
 export const inForce = (invoice: InvoiceAmounts) =>
   invoice.voidedAt === null && invoice.creditedOre < invoice.totalOre
 
+export type VoidProblem = 'void' | 'paid' | 'credited' | 'sent'
+
+/**
+ * Why an avi can't be voided, or null when it can. Voiding is only for mistakes caught before
+ * the tenant received the avi; once it has been sent, it is corrected with a credit note.
+ */
+export function voidProblem(invoice: {
+  readonly voidedAt: Date | null
+  readonly paidOn: string | null
+  readonly creditedOre: number
+  readonly sentAt: Date | null
+}): VoidProblem | null {
+  if (invoice.voidedAt) return 'void'
+  if (invoice.paidOn) return 'paid'
+  if (invoice.creditedOre > 0) return 'credited'
+  if (invoice.sentAt) return 'sent'
+  return null
+}
+
 interface RefundableNote {
   readonly totalOre: number
   /** Credited after the invoice was paid, so the amount goes back to the tenant. */

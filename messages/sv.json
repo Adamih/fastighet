@@ -421,6 +421,7 @@
   "invoice_void_confirm": "Makulera avi {number}? Den behåller sitt nummer men ska inte betalas.",
   "invoice_void_confirm_action": "Makulera",
   "invoice_void_no_payment": "Makulerad – ska inte betalas",
+  "invoice_void_sent_hint": "Avin är skickad – kreditera den i stället",
   "lease_card_period_open": "Från {start} · tillsvidare",
   "lease_count": [
     {

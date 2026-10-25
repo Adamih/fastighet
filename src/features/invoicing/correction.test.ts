@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { inForce, refundProblem, refunds, reissueProblem } from './correction'
+import { inForce, refundProblem, refunds, reissueProblem, voidProblem } from './correction'
 
 const avi = (overrides: Partial<Parameters<typeof inForce>[0]> = {}) => ({
   voidedAt: null,
@@ -46,4 +46,13 @@ test('a corrected avi replaces a voided or fully credited one, once', () => {
   expect(reissueProblem(avi(), [], 845000)).toBe('in_force')
   expect(reissueProblem(voided, [avi()], 845000)).toBe('already_replaced')
   expect(reissueProblem(voided, [], 0)).toBe('no_rent')
+})
+
+test('only an unsent, unpaid avi without credit notes can be voided', () => {
+  const unsent = { voidedAt: null, paidOn: null, creditedOre: 0, sentAt: null }
+  expect(voidProblem(unsent)).toBeNull()
+  expect(voidProblem({ ...unsent, sentAt: new Date(0) })).toBe('sent')
+  expect(voidProblem({ ...unsent, creditedOre: 100000 })).toBe('credited')
+  expect(voidProblem({ ...unsent, paidOn: '2026-10-01' })).toBe('paid')
+  expect(voidProblem({ ...unsent, voidedAt: new Date(0) })).toBe('void')
 })

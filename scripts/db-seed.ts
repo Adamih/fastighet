@@ -560,13 +560,14 @@ async function seed() {
         oskarCredited = invoices.at(-1)
       }
     }
-    // Two months back Ahmed's avi went out with his old address. It was voided and a corrected
-    // avi issued for the same period ("Ny avi för perioden").
+    // Two months back Ahmed's avi was created with his old address and caught before it was sent.
+    // It was voided and a corrected avi issued for the same period ("Ny avi för perioden").
     const ahmed = leases.find((l) => l.key === 'ahmed')
     const wrong = invoices.find((i) => i.lease === ahmed && i.issueDate === issueDate)
     if (offset === -2 && ahmed && wrong) {
       const correctedOn = addDays(issueDate, 2)
       wrong.voidedAt = new Date(`${correctedOn}T09:00:00Z`)
+      wrong.sentAt = null
       invoiceFor(
         ahmed,
         { start: wrong.periodStart, end: wrong.periodEnd },
