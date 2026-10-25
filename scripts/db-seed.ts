@@ -276,7 +276,7 @@ async function seed() {
       city: 'Uppsala',
     }),
   }
-  await insertAll(schema.tenant, Object.values(tenants))
+  await insertAll(schema.party, Object.values(tenants))
 
   // --- Leases, numbered in the order they were signed.
   const openEnded = (startDate: string, noticePeriodMonths = 3): LeaseTerms => ({
@@ -477,7 +477,7 @@ async function seed() {
     parties: [l.tenant, ...(l.coTenants ?? [])].map((key, index) => ({
       position: index + 1,
       receivesInvoices: index === 0,
-      tenant: tenants[key],
+      party: tenants[key],
     })),
   }))
   // Leases are agreements with lease terms; the agreement's end date is the last billed day.
@@ -514,7 +514,7 @@ async function seed() {
     leases.flatMap((l) =>
       l.parties.map((p, index) => ({
         agreementId: l.id,
-        tenantId: p.tenant.id,
+        partyId: p.party.id,
         organizationId: orgId,
         role: index === 0 ? ('tenant' as const) : ('co_tenant' as const),
         receivesInvoices: p.receivesInvoices,
@@ -748,7 +748,7 @@ async function seed() {
       reference: invoice.ocr,
       // The bank names the account holder: the party that receives the avier.
       payerName: (
-        Object.values(tenants).find((t) => t.id === invoice.tenantId)?.name ?? invoice.recipientName
+        Object.values(tenants).find((t) => t.id === invoice.partyId)?.name ?? invoice.recipientName
       ).toUpperCase(),
       invoice,
       status: 'matched',
@@ -1043,7 +1043,7 @@ async function seedBrf() {
     postalCode: property.postalCode,
     city: 'Uppsala',
   }
-  await insertAll(schema.tenant, [...Object.values(members), salonOwner])
+  await insertAll(schema.party, [...Object.values(members), salonOwner])
 
   // Andelstal by living area; the fee pool is split by it (rounded to whole kronor a month).
   const totalArea = flats.reduce((sum, f) => sum + (f.areaSqm ?? 0), 0)
@@ -1056,7 +1056,7 @@ async function seedBrf() {
   type Agreement = typeof schema.agreement.$inferInsert & {
     id: string
     units: { designation: string; label: string }[]
-    parties: { position: number; receivesInvoices: boolean; tenant: (typeof members)[string] }[]
+    parties: { position: number; receivesInvoices: boolean; party: (typeof members)[string] }[]
   }
   const agreements: Agreement[] = []
   const owned = (
@@ -1088,7 +1088,7 @@ async function seedBrf() {
       parties: owners.map(([name], i) => ({
         position: i + 1,
         receivesInvoices: i === 0,
-        tenant: members[name],
+        party: members[name],
       })),
     }
     agreements.push(ownership)
@@ -1103,7 +1103,7 @@ async function seedBrf() {
     parties.push(
       ...owners.map(([name, share], i) => ({
         agreementId: ownership.id,
-        tenantId: members[name].id,
+        partyId: members[name].id,
         organizationId: orgId,
         role: 'owner' as const,
         sharePercent: share,
@@ -1161,12 +1161,12 @@ async function seedBrf() {
     createdAt: new Date('2023-11-20T09:00:00Z'),
     units: [{ designation: property.designation, label: salonUnit.label }],
     // biome-ignore lint/suspicious/noExplicitAny: the salon is a company, not a member
-    parties: [{ position: 1, receivesInvoices: true, tenant: salonOwner as any }],
+    parties: [{ position: 1, receivesInvoices: true, party: salonOwner as any }],
   }
   agreements.push(salonLease)
   parties.push({
     agreementId: salonLease.id,
-    tenantId: salonOwner.id,
+    partyId: salonOwner.id,
     organizationId: orgId,
     role: 'tenant',
     receivesInvoices: true,
@@ -1236,7 +1236,7 @@ async function seedBrf() {
 
   // Everyone pays by OCR a few days early, except Jonas, whose newest past-due avi is unpaid.
   const yesterday = addDays(today, -1)
-  const jonas = agreements.find((a) => a.parties[0]?.tenant.name === 'Jonas Ek')
+  const jonas = agreements.find((a) => a.parties[0]?.party.name === 'Jonas Ek')
   const jonasLate = invoices
     .filter((i) => i.agreementId === jonas?.id && (i.dueDate as string) <= yesterday)
     .at(-1)

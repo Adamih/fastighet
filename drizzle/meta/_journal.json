@@ -71,6 +71,13 @@
       "when": 1792949202707,
       "tag": "0009_medical_randall",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792949986736,
+      "tag": "0010_party",
+      "breakpoints": true
     }
   ]
 }

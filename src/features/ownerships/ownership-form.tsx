@@ -58,7 +58,7 @@ const parseRatio = (value: string) => {
 
 /** The receiver, if it is one of the owners other than the first (who receives by default). */
 export const receiverOf = (owners: readonly OwnerValue[], receiverId: string) =>
-  receiverId && owners.some((o, i) => i > 0 && o.tenantId === receiverId) ? receiverId : null
+  receiverId && owners.some((o, i) => i > 0 && o.partyId === receiverId) ? receiverId : null
 
 const toInput = (value: OwnershipFormValues): CreateOwnershipInput => ({
   owners: toOwners(value.owners),
@@ -87,8 +87,8 @@ export const receiverOptions = (
   tenants: readonly { id: string; name: string }[],
 ) =>
   owners.map((o) => ({
-    value: o.tenantId,
-    label: tenants.find((t) => t.id === o.tenantId)?.name ?? '',
+    value: o.partyId,
+    label: tenants.find((t) => t.id === o.partyId)?.name ?? '',
   }))
 
 /** A bostadsrätt's owners, units, fee and details. Shared by the add and edit drawers. */
@@ -349,7 +349,7 @@ export function useEditOwnershipDrawer(ownership: OwnershipView) {
             units={choices.units ?? []}
             defaultValues={{
               owners: ownership.owners.map((o) => ({
-                tenantId: o.id,
+                partyId: o.id,
                 share: String(o.sharePercent),
               })),
               invoiceRecipientId:

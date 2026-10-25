@@ -1,20 +1,13 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
-import {
-  agreement,
-  agreementParty,
-  agreementUnit,
-  leaseTerms,
-  tenant,
-  type unit,
-} from '#/db/schema'
+import { agreement, agreementParty, agreementUnit, leaseTerms, party, type unit } from '#/db/schema'
 import {
   joinNames,
   leaseParties,
   type PartiesProblem,
   primaryParty,
 } from '#/features/agreements/parties'
-import { checkTenantsExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
+import { checkPartiesExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -29,7 +22,7 @@ const withLeaseDetails = {
   leaseTerms: true,
   parties: {
     orderBy: agreementParty.position,
-    with: { tenant: { columns: { id: true, name: true, kind: true } } },
+    with: { party: { columns: { id: true, name: true, kind: true } } },
   },
   units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
 } as const
@@ -37,7 +30,7 @@ const withLeaseDetails = {
 type LeaseRow = typeof agreement.$inferSelect & {
   leaseTerms: typeof leaseTerms.$inferSelect | null
   parties: (typeof agreementParty.$inferSelect & {
-    tenant: { id: string; name: string; kind: 'person' | 'company' }
+    party: { id: string; name: string; kind: 'person' | 'company' }
   })[]
   units: {
     unit: typeof unit.$inferSelect & { property: { id: string; designation: string } }
@@ -51,11 +44,11 @@ const toView = ({ leaseTerms: terms, parties, ...row }: LeaseRow, on: string) =>
   return {
     ...lease,
     /** The tenant named first; the one the lease pages show. */
-    tenant: primaryParty(parties).tenant,
+    tenant: primaryParty(parties).party,
     /** Every tenant's name, as the avier print them. */
-    partyNames: joinNames(parties.map((p) => p.tenant.name)),
+    partyNames: joinNames(parties.map((p) => p.party.name)),
     parties: parties.map((p) => ({
-      ...p.tenant,
+      ...p.party,
       role: p.role,
       receivesInvoices: p.receivesInvoices,
     })),
@@ -109,12 +102,12 @@ export const getLease = (leaseId: string) =>
     // Contact details are tenant data, shown only to those who may read tenants.
     const contacts = (yield* hasPermission({ tenant: ['read'] }))
       ? yield* orgQuery((db, organizationId) =>
-          db.query.tenant.findMany({
+          db.query.party.findMany({
             columns: { id: true, email: true, phone: true },
             where: and(
-              eq(tenant.organizationId, organizationId),
+              eq(party.organizationId, organizationId),
               inArray(
-                tenant.id,
+                party.id,
                 view.parties.map((p) => p.id),
               ),
             ),
@@ -179,7 +172,7 @@ const checkParties = (
   Effect.gen(function* () {
     const result = leaseParties(tenantId, input.coTenantIds, input.invoiceRecipientId)
     if (!result.ok) return yield* new Conflict({ message: partiesProblemMessages[result.problem] })
-    yield* checkTenantsExist(input.coTenantIds)
+    yield* checkPartiesExist(input.coTenantIds)
     return result.parties
   })
 
@@ -189,9 +182,9 @@ export const createLease = (input: CreateLeaseInput) =>
     const extensionMonths = input.termEndDate ? input.extensionMonths : null
 
     const owner = yield* orgQuery((db, organizationId) =>
-      db.query.tenant.findFirst({
+      db.query.party.findFirst({
         columns: { id: true },
-        where: and(eq(tenant.id, input.tenantId), eq(tenant.organizationId, organizationId)),
+        where: and(eq(party.id, input.tenantId), eq(party.organizationId, organizationId)),
       }),
     )
     if (!owner) return yield* new NotFound({ entity: 'tenant', id: input.tenantId })

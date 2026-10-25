@@ -79,8 +79,10 @@ export const unit = sqliteTable(
   ],
 )
 
-export const tenant = sqliteTable(
-  'tenant',
+// The register of people and companies who can be on an agreement: tenants, co-tenants and the
+// owners of a bostadsrätt. The UI calls them hyresgäster or medlemmar after the company type.
+export const party = sqliteTable(
+  'party',
   {
     id: id(),
     organizationId: organizationId(),
@@ -95,12 +97,12 @@ export const tenant = sqliteTable(
     city: text('city'),
     createdAt: createdAt(),
   },
-  (t) => [index('tenant_org_name_idx').on(t.organizationId, t.name)],
+  (t) => [index('party_org_name_idx').on(t.organizationId, t.name)],
 )
 
 // An agreement is what a run invoices: a lease (hyresavtal) or a bostadsrätt. It holds what
 // billing needs; lease-only and ownership-only details live in their own tables. Parties are the
-// tenants or owners on it (`agreementParty`).
+// tenants or owners on it (`agreementParty`, pointing at the `party` register).
 export const agreement = sqliteTable(
   'agreement',
   {
@@ -148,9 +150,9 @@ export const agreementParty = sqliteTable(
     agreementId: text('agreement_id')
       .notNull()
       .references(() => agreement.id, { onDelete: 'cascade' }),
-    tenantId: text('tenant_id')
+    partyId: text('party_id')
       .notNull()
-      .references(() => tenant.id),
+      .references(() => party.id),
     organizationId: organizationId(),
     role: text('role', { enum: partyRoles }).notNull(),
     // Ownership share in percent, for co-owners of a bostadsrätt.
@@ -160,8 +162,8 @@ export const agreementParty = sqliteTable(
     position: integer('position').notNull(),
   },
   (t) => [
-    primaryKey({ columns: [t.agreementId, t.tenantId] }),
-    index('agreement_party_org_tenant_idx').on(t.organizationId, t.tenantId),
+    primaryKey({ columns: [t.agreementId, t.partyId] }),
+    index('agreement_party_org_party_idx').on(t.organizationId, t.partyId),
   ],
 )
 
@@ -203,7 +205,7 @@ export const unitRelations = relations(unit, ({ one, many }) => ({
   agreements: many(agreementUnit),
 }))
 
-export const tenantRelations = relations(tenant, ({ many }) => ({
+export const partyRelations = relations(party, ({ many }) => ({
   agreements: many(agreementParty),
   invoices: many(invoice),
 }))
@@ -223,7 +225,7 @@ export const agreementUnitRelations = relations(agreementUnit, ({ one }) => ({
 
 export const agreementPartyRelations = relations(agreementParty, ({ one }) => ({
   agreement: one(agreement, { fields: [agreementParty.agreementId], references: [agreement.id] }),
-  tenant: one(tenant, { fields: [agreementParty.tenantId], references: [tenant.id] }),
+  party: one(party, { fields: [agreementParty.partyId], references: [party.id] }),
 }))
 
 export const leaseTermsRelations = relations(leaseTerms, ({ one }) => ({
@@ -266,9 +268,9 @@ export const invoice = sqliteTable(
       .notNull()
       .references(() => agreement.id),
     // The party that received the invoice.
-    tenantId: text('tenant_id')
+    partyId: text('party_id')
       .notNull()
-      .references(() => tenant.id),
+      .references(() => party.id),
     recipientName: text('recipient_name').notNull(),
     recipientStreetAddress: text('recipient_street_address'),
     recipientPostalCode: text('recipient_postal_code'),
@@ -323,7 +325,7 @@ export const invoiceLine = sqliteTable(
 
 export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   agreement: one(agreement, { fields: [invoice.agreementId], references: [agreement.id] }),
-  tenant: one(tenant, { fields: [invoice.tenantId], references: [tenant.id] }),
+  party: one(party, { fields: [invoice.partyId], references: [party.id] }),
   lines: many(invoiceLine),
   payments: many(payment),
   creditNotes: many(creditNote),

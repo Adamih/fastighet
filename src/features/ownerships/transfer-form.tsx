@@ -32,7 +32,7 @@ export function TransferForm({
   }[]
   onSubmit: (value: {
     transferDate: string
-    owners: { tenantId: string; sharePercent: number }[]
+    owners: { partyId: string; sharePercent: number }[]
     invoiceRecipientId: string | null
   }) => Promise<unknown>
 }) {

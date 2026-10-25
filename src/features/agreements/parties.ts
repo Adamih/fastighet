@@ -4,7 +4,7 @@
 export interface Party {
   readonly position: number
   readonly receivesInvoices: boolean
-  readonly tenant: {
+  readonly party: {
     readonly id: string
     readonly name: string
     readonly streetAddress: string | null
@@ -31,14 +31,14 @@ export function invoiceRecipient(parties: readonly Party[]) {
   const ordered = byPosition(parties)
   const receiver = ordered.find((p) => p.receivesInvoices) ?? ordered[0]
   if (!receiver) throw new Error('An agreement has at least one party')
-  const { tenant } = receiver
+  const { party } = receiver
   return {
-    tenantId: tenant.id,
-    recipientName: joinNames(ordered.map((p) => p.tenant.name)),
-    recipientStreetAddress: tenant.streetAddress,
-    recipientPostalCode: tenant.postalCode,
-    recipientCity: tenant.city,
-    recipientEmail: tenant.email,
+    partyId: party.id,
+    recipientName: joinNames(ordered.map((p) => p.party.name)),
+    recipientStreetAddress: party.streetAddress,
+    recipientPostalCode: party.postalCode,
+    recipientCity: party.city,
+    recipientEmail: party.email,
   }
 }
 
@@ -66,7 +66,7 @@ export function leaseParties(
   | {
       ok: true
       parties: {
-        tenantId: string
+        partyId: string
         role: 'tenant' | 'co_tenant'
         receivesInvoices: boolean
         position: number
@@ -81,7 +81,7 @@ export function leaseParties(
   return {
     ok: true,
     parties: ids.map((id, index) => ({
-      tenantId: id,
+      partyId: id,
       role: index === 0 ? 'tenant' : 'co_tenant',
       receivesInvoices: id === receiver,
       position: index + 1,
@@ -96,13 +96,13 @@ export type OwnersProblem = 'none' | 'duplicate' | 'too_many' | 'shares' | 'rece
  * share, together exactly 100 %, and one of them receiving the invoices (the first when null).
  */
 export function ownershipParties(
-  owners: readonly { tenantId: string; sharePercent: number }[],
+  owners: readonly { partyId: string; sharePercent: number }[],
   receiverId: string | null,
 ):
   | {
       ok: true
       parties: {
-        tenantId: string
+        partyId: string
         role: 'owner'
         sharePercent: number
         receivesInvoices: boolean
@@ -111,7 +111,7 @@ export function ownershipParties(
     }
   | { ok: false; problem: OwnersProblem } {
   if (owners.length === 0) return { ok: false, problem: 'none' }
-  const ids = owners.map((o) => o.tenantId)
+  const ids = owners.map((o) => o.partyId)
   if (new Set(ids).size !== ids.length) return { ok: false, problem: 'duplicate' }
   if (ids.length > MAX_PARTIES) return { ok: false, problem: 'too_many' }
   const validShare = (n: number) => Number.isInteger(n) && n >= 1 && n <= 100
@@ -124,10 +124,10 @@ export function ownershipParties(
   return {
     ok: true,
     parties: owners.map((o, index) => ({
-      tenantId: o.tenantId,
+      partyId: o.partyId,
       role: 'owner',
       sharePercent: o.sharePercent,
-      receivesInvoices: o.tenantId === receiver,
+      receivesInvoices: o.partyId === receiver,
       position: index + 1,
     })),
   }

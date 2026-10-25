@@ -13,10 +13,10 @@ import { equalShares, MAX_PARTIES, ownershipParties } from '#/features/agreement
 import { m } from '#/paraglide/messages'
 
 /** The form's owners: who, and their share as typed (whole percent). */
-export type OwnerValue = { tenantId: string; share: string }
+export type OwnerValue = { partyId: string; share: string }
 
 export const toOwners = (owners: readonly OwnerValue[]) =>
-  owners.map((o) => ({ tenantId: o.tenantId, sharePercent: Number(o.share.trim()) }))
+  owners.map((o) => ({ partyId: o.partyId, sharePercent: Number(o.share.trim()) }))
 
 /** Validates the owners field on submit: at least one owner and shares that add up to 100. */
 export const ownersValidator = {
@@ -39,15 +39,15 @@ export function OwnersField({
   label: string
   tenants: readonly { id: string; name: string }[]
   /** Called with the removed owner, e.g. to reset who receives the avier. */
-  onRemove?: (tenantId: string) => void
+  onRemove?: (partyId: string) => void
 }) {
   const field = useFieldContext<OwnerValue[]>()
   const owners = field.state.value
   const nameOf = (id: string) => tenants.find((t) => t.id === id)?.name ?? ''
-  const available = tenants.filter((t) => !owners.some((o) => o.tenantId === t.id))
+  const available = tenants.filter((t) => !owners.some((o) => o.partyId === t.id))
   const withEqualShares = (ids: string[]) => {
     const shares = equalShares(ids.length)
-    return ids.map((tenantId, i) => ({ tenantId, share: String(shares[i]) }))
+    return ids.map((partyId, i) => ({ partyId, share: String(shares[i]) }))
   }
   const total = toOwners(owners).reduce((sum, o) => sum + (o.sharePercent || 0), 0)
 
@@ -58,12 +58,12 @@ export function OwnersField({
         <ul className="grid gap-1.5">
           {owners.map((owner, index) => (
             <li
-              key={owner.tenantId}
+              key={owner.partyId}
               className="flex items-center gap-2 rounded-md border py-1 pr-1 pl-3 text-sm"
             >
-              <span className="min-w-0 flex-1 truncate">{nameOf(owner.tenantId)}</span>
+              <span className="min-w-0 flex-1 truncate">{nameOf(owner.partyId)}</span>
               <Input
-                aria-label={m.ownership_share_label({ name: nameOf(owner.tenantId) })}
+                aria-label={m.ownership_share_label({ name: nameOf(owner.partyId) })}
                 inputMode="numeric"
                 value={owner.share}
                 onChange={(e) =>
@@ -79,14 +79,14 @@ export function OwnersField({
                 variant="ghost"
                 size="icon"
                 className="size-11 sm:size-8"
-                aria-label={m.ownership_remove_owner({ name: nameOf(owner.tenantId) })}
+                aria-label={m.ownership_remove_owner({ name: nameOf(owner.partyId) })}
                 onClick={() => {
                   field.handleChange(
                     withEqualShares(
-                      owners.filter((o) => o.tenantId !== owner.tenantId).map((o) => o.tenantId),
+                      owners.filter((o) => o.partyId !== owner.partyId).map((o) => o.partyId),
                     ),
                   )
-                  onRemove?.(owner.tenantId)
+                  onRemove?.(owner.partyId)
                 }}
               >
                 <X aria-hidden="true" />
@@ -100,7 +100,7 @@ export function OwnersField({
         <Select
           value=""
           onValueChange={(id) =>
-            field.handleChange(withEqualShares([...owners.map((o) => o.tenantId), id]))
+            field.handleChange(withEqualShares([...owners.map((o) => o.partyId), id]))
           }
         >
           <SelectTrigger

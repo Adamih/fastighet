@@ -5,7 +5,7 @@ import { IsoDate } from '#/lib/schemas'
 export const OwnershipIdInput = Schema.Struct({ ownershipId: Schema.String })
 
 const Owners = Schema.Array(
-  Schema.Struct({ tenantId: Schema.String, sharePercent: Schema.Int }),
+  Schema.Struct({ partyId: Schema.String, sharePercent: Schema.Int }),
 ).check(Schema.isMinLength(1, { message: 'Välj minst en ägare' }))
 
 /** A bostadsrätt: its owners, the apartment (and any storage or parking), and the fee. */

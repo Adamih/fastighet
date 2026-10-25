@@ -19,6 +19,7 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Bostadsrätter live in `features/ownerships` and use the lease permissions. Their owners hold whole-percent shares that add up to 100 (`ownershipParties`).
   - A sale is a transfer: the sellers' bostadsrätt ends the day before and stays as history, and the buyers get a new one linked by `ownershipTerms.previousAgreementId`. Deleting an uninvoiced buyer bostadsrätt undoes the sale.
   - Checks shared by every kind (units free, parties exist, invoice history) live in `features/agreements/program.ts`.
+  - People and companies on agreements are in the `party` table (`agreementParty.partyId`, `invoice.partyId`). The register's UI module (`features/tenants`), its `/tenants` routes and the `tenant` permission keep their names; the UI calls them hyresgäster or medlemmar after the company type.
 - **Company type and wording.** `organization_settings.kind` is `landlord` or `brf`, chosen during onboarding and changeable in settings. The app context carries it as `companyKind`.
   - UI wording that follows it comes from `companyTerms` (`features/settings/terminology.ts`), e.g. Hyresgäster or Medlemmar.
   - Documents are named by agreement kind through `documentTerms` (Hyresavi/Hyra or Avgiftsavi/Avgift), so a BRF's rental flats still get hyresavier.

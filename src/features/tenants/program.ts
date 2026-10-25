@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { invoice, tenant } from '#/db/schema'
+import { invoice, party } from '#/db/schema'
 import type { PartyRole } from '#/features/agreements/kinds'
 import { agreementTerms } from '#/features/agreements/terms'
 import { invoiceStatus } from '#/features/invoicing/rules'
@@ -38,9 +38,9 @@ export const listTenants = Effect.gen(function* () {
   yield* requirePermission(read)
   const showLeases = yield* hasPermission({ lease: ['read'], property: ['read'] })
   const rows = yield* orgQuery((db, organizationId) =>
-    db.query.tenant.findMany({
-      where: eq(tenant.organizationId, organizationId),
-      orderBy: asc(tenant.name),
+    db.query.party.findMany({
+      where: eq(party.organizationId, organizationId),
+      orderBy: asc(party.name),
       with: {
         agreements: {
           with: {
@@ -74,8 +74,8 @@ export const listTenants = Effect.gen(function* () {
 const loadTenant = (tenantId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
-      db.query.tenant.findFirst({
-        where: and(eq(tenant.id, tenantId), eq(tenant.organizationId, organizationId)),
+      db.query.party.findFirst({
+        where: and(eq(party.id, tenantId), eq(party.organizationId, organizationId)),
         with: { agreements: { with: { agreement: { with: { leaseTerms: true } } } } },
       }),
     )
@@ -112,7 +112,7 @@ export const getTenant = (tenantId: string) =>
             where: and(
               eq(invoice.organizationId, organizationId),
               or(
-                eq(invoice.tenantId, found.id),
+                eq(invoice.partyId, found.id),
                 found.leases.length > 0
                   ? inArray(
                       invoice.agreementId,
@@ -152,12 +152,12 @@ const ensureUniqueOrganizationNumber = (organizationNumber: string | null, excep
   Effect.gen(function* () {
     if (!organizationNumber) return
     const existing = yield* orgQuery((db, organizationId) =>
-      db.query.tenant.findFirst({
+      db.query.party.findFirst({
         columns: { name: true },
         where: and(
-          eq(tenant.organizationId, organizationId),
-          eq(tenant.organizationNumber, organizationNumber),
-          exceptId ? ne(tenant.id, exceptId) : undefined,
+          eq(party.organizationId, organizationId),
+          eq(party.organizationNumber, organizationNumber),
+          exceptId ? ne(party.id, exceptId) : undefined,
         ),
       }),
     )
@@ -175,7 +175,7 @@ export const createTenant = (input: CreateTenantInput) =>
     yield* ensureUniqueOrganizationNumber(values.organizationNumber)
     const [created] = yield* orgQuery((db, organizationId) =>
       db
-        .insert(tenant)
+        .insert(party)
         .values({ organizationId, ...values })
         .returning(),
     )
@@ -191,9 +191,9 @@ export const updateTenant = (input: UpdateTenantInput) =>
     yield* ensureUniqueOrganizationNumber(values.organizationNumber, current.id)
     yield* orgQuery((db, organizationId) =>
       db
-        .update(tenant)
+        .update(party)
         .set(values)
-        .where(and(eq(tenant.id, current.id), eq(tenant.organizationId, organizationId))),
+        .where(and(eq(party.id, current.id), eq(party.organizationId, organizationId))),
     )
     return yield* getTenant(current.id)
   })
@@ -209,7 +209,7 @@ export const deleteTenant = (tenantId: string) =>
     }
     yield* orgQuery((db, organizationId) =>
       db
-        .delete(tenant)
-        .where(and(eq(tenant.id, current.id), eq(tenant.organizationId, organizationId))),
+        .delete(party)
+        .where(and(eq(party.id, current.id), eq(party.organizationId, organizationId))),
     )
   })

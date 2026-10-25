@@ -1,6 +1,6 @@
 import { and, count, eq, inArray, min, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { invoice, tenant, unit } from '#/db/schema'
+import { invoice, party, unit } from '#/db/schema'
 import { periodsOverlap } from '#/features/leases/terms'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
@@ -45,18 +45,18 @@ export const checkUnitsFree = (
     return ids
   })
 
-/** That every tenant (party) belongs to the company. */
-export const checkTenantsExist = (tenantIds: readonly string[]) =>
+/** That every party belongs to the company. */
+export const checkPartiesExist = (partyIds: readonly string[]) =>
   Effect.gen(function* () {
-    if (tenantIds.length === 0) return
+    if (partyIds.length === 0) return
     const found = yield* orgQuery((db, organizationId) =>
       db
-        .select({ id: tenant.id })
-        .from(tenant)
-        .where(and(eq(tenant.organizationId, organizationId), inArray(tenant.id, [...tenantIds]))),
+        .select({ id: party.id })
+        .from(party)
+        .where(and(eq(party.organizationId, organizationId), inArray(party.id, [...partyIds]))),
     )
-    if (found.length !== new Set(tenantIds).size) {
-      return yield* new NotFound({ entity: 'tenant', id: tenantIds.join(',') })
+    if (found.length !== new Set(partyIds).size) {
+      return yield* new NotFound({ entity: 'party', id: partyIds.join(',') })
     }
   })
 

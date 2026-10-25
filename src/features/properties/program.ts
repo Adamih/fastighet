@@ -83,7 +83,7 @@ const occupantDetails = {
   leaseTerms: true,
   parties: {
     orderBy: agreementParty.position,
-    with: { tenant: { columns: { id: true, name: true, kind: true } } },
+    with: { party: { columns: { id: true, name: true, kind: true } } },
   },
 } as const
 
@@ -91,7 +91,7 @@ const occupantView = <
   A extends Parameters<typeof agreementTerms>[0] & {
     parties: {
       position: number
-      tenant: { id: string; name: string; kind: 'person' | 'company' }
+      party: { id: string; name: string; kind: 'person' | 'company' }
     }[]
   },
 >(
@@ -101,8 +101,8 @@ const occupantView = <
   return {
     ...agreement,
     ...agreementTerms(row),
-    tenant: primaryParty(parties).tenant,
-    tenantName: joinNames(parties.map((p) => p.tenant.name)),
+    tenant: primaryParty(parties).party,
+    tenantName: joinNames(parties.map((p) => p.party.name)),
   }
 }
 

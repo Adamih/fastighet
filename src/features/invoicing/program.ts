@@ -57,7 +57,7 @@ const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
 
 /** What billing reads from an agreement: its parties (the recipient) and units (the line). */
 const billingDetails = {
-  parties: { with: { tenant: true } },
+  parties: { with: { party: true } },
   units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
 } as const
 

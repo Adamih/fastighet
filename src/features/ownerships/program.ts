@@ -5,7 +5,7 @@ import {
   agreementParty,
   agreementUnit,
   ownershipTerms,
-  tenant,
+  party,
   type unit,
 } from '#/db/schema'
 import {
@@ -14,7 +14,7 @@ import {
   ownershipParties,
   primaryParty,
 } from '#/features/agreements/parties'
-import { checkTenantsExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
+import { checkPartiesExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
 import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
@@ -34,7 +34,7 @@ const withOwnershipDetails = {
   ownershipTerms: true,
   parties: {
     orderBy: agreementParty.position,
-    with: { tenant: { columns: { id: true, name: true, kind: true } } },
+    with: { party: { columns: { id: true, name: true, kind: true } } },
   },
   units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
 } as const
@@ -42,7 +42,7 @@ const withOwnershipDetails = {
 type OwnershipRow = typeof agreement.$inferSelect & {
   ownershipTerms: typeof ownershipTerms.$inferSelect | null
   parties: (typeof agreementParty.$inferSelect & {
-    tenant: { id: string; name: string; kind: 'person' | 'company' }
+    party: { id: string; name: string; kind: 'person' | 'company' }
   })[]
   units: {
     unit: typeof unit.$inferSelect & { property: { id: string; designation: string } }
@@ -56,10 +56,10 @@ const toView = ({ ownershipTerms: terms, parties, ...row }: OwnershipRow, on: st
   grantedOn: terms?.grantedOn ?? null,
   previousAgreementId: terms?.previousAgreementId ?? null,
   /** The owner named first. */
-  owner: primaryParty(parties).tenant,
-  ownerNames: joinNames(parties.map((p) => p.tenant.name)),
+  owner: primaryParty(parties).party,
+  ownerNames: joinNames(parties.map((p) => p.party.name)),
   owners: parties.map((p) => ({
-    ...p.tenant,
+    ...p.party,
     sharePercent: p.sharePercent ?? 0,
     receivesInvoices: p.receivesInvoices,
   })),
@@ -132,12 +132,12 @@ export const getOwnership = (ownershipId: string) =>
     // Contact details are tenant data, shown only to those who may read tenants.
     const contacts = (yield* hasPermission({ tenant: ['read'] }))
       ? yield* orgQuery((db, organizationId) =>
-          db.query.tenant.findMany({
+          db.query.party.findMany({
             columns: { id: true, email: true, phone: true },
             where: and(
-              eq(tenant.organizationId, organizationId),
+              eq(party.organizationId, organizationId),
               inArray(
-                tenant.id,
+                party.id,
                 view.owners.map((o) => o.id),
               ),
             ),
@@ -164,13 +164,13 @@ const ownersProblemMessages: Record<OwnersProblem, string> = {
 }
 
 const checkOwners = (input: {
-  owners: readonly { tenantId: string; sharePercent: number }[]
+  owners: readonly { partyId: string; sharePercent: number }[]
   invoiceRecipientId: string | null
 }) =>
   Effect.gen(function* () {
     const result = ownershipParties(input.owners, input.invoiceRecipientId)
     if (!result.ok) return yield* new Conflict({ message: ownersProblemMessages[result.problem] })
-    yield* checkTenantsExist(input.owners.map((o) => o.tenantId))
+    yield* checkPartiesExist(input.owners.map((o) => o.partyId))
     return result.parties
   })
 

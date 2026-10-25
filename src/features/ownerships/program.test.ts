@@ -56,7 +56,7 @@ function harness() {
     INSERT INTO property (id, organization_id, designation) VALUES ('p', 'org', 'Uppsala 1:1');
     INSERT INTO unit (id, organization_id, property_id, kind, label) VALUES
       ('u1', 'org', 'p', 'apartment', '1001'), ('f1', 'org', 'p', 'storage', 'F1');
-    INSERT INTO tenant (id, organization_id, kind, name) VALUES
+    INSERT INTO party (id, organization_id, kind, name) VALUES
       ('anna', 'org', 'person', 'Anna'), ('erik', 'org', 'person', 'Erik'),
       ('maja', 'org', 'person', 'Maja');
   `)
@@ -73,8 +73,8 @@ const fail = (promise: Promise<unknown>) =>
 
 const ownership = {
   owners: [
-    { tenantId: 'anna', sharePercent: 50 },
-    { tenantId: 'erik', sharePercent: 50 },
+    { partyId: 'anna', sharePercent: 50 },
+    { partyId: 'erik', sharePercent: 50 },
   ],
   invoiceRecipientId: 'erik',
   unitIds: ['u1', 'f1'],
@@ -117,7 +117,7 @@ test('a transfer ends the sellers’ bostadsrätt and starts the buyers’; dele
     transferOwnership({
       ownershipId: sellerId,
       transferDate: '2026-11-01',
-      owners: [{ tenantId: 'maja', sharePercent: 100 }],
+      owners: [{ partyId: 'maja', sharePercent: 100 }],
       invoiceRecipientId: null,
     }),
   )
@@ -136,7 +136,7 @@ test('a transfer ends the sellers’ bostadsrätt and starts the buyers’; dele
         transferOwnership({
           ownershipId: sellerId,
           transferDate: '2026-12-01',
-          owners: [{ tenantId: 'anna', sharePercent: 100 }],
+          owners: [{ partyId: 'anna', sharePercent: 100 }],
           invoiceRecipientId: null,
         }),
       ),
