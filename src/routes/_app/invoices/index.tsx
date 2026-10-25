@@ -11,6 +11,7 @@ import {
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { owedOrTotal } from '#/features/invoicing/credit'
 import { invoicesQuery, markInvoicePaidFn } from '#/features/invoicing/functions'
 import { useCreateInvoiceRunDrawer } from '#/features/invoicing/invoice-run-form'
 import {
@@ -289,6 +290,25 @@ function objectLine(invoice: Invoice) {
   return [units.designations, units.labels.join(', ')].filter(Boolean).join(' · ')
 }
 
+/** "av 8 450 kr" under a partly credited open avi, or what is still to be paid back. */
+function AmountNote({ invoice }: { invoice: Invoice }) {
+  if (invoice.refundDueOre > 0) {
+    return (
+      <span className="whitespace-nowrap font-medium text-amber-700 text-xs dark:text-amber-300">
+        {m.invoice_list_refund_due({ amount: formatSekShort(invoice.refundDueOre) })}
+      </span>
+    )
+  }
+  if (isOpen(invoice) && invoice.creditedOre > 0) {
+    return (
+      <span className="whitespace-nowrap font-normal text-muted-foreground text-xs">
+        {m.invoice_amount_of({ total: formatSekShort(invoice.totalOre) })}
+      </span>
+    )
+  }
+  return null
+}
+
 interface RowProps {
   invoice: Invoice
   today: string
@@ -345,8 +365,13 @@ function InvoiceRow({ invoice, today, canManage, busy, markPaid }: RowProps) {
           )}
         </div>
       </td>
-      <td className={cn(td, 'whitespace-nowrap text-right font-semibold tabular-nums')}>
-        {formatSekShort(invoice.totalOre)}
+      <td className={cn(td, 'text-right tabular-nums')}>
+        <div className="grid gap-0.5">
+          <span className="whitespace-nowrap font-semibold">
+            {formatSekShort(owedOrTotal(invoice))}
+          </span>
+          <AmountNote invoice={invoice} />
+        </div>
       </td>
       <td className={td}>
         <InvoiceStatusBadge status={invoice.status} />
@@ -419,7 +444,10 @@ function InvoiceCard({ invoice, canManage, busy, markPaid }: Omit<RowProps, 'tod
               {invoice.sentAt ? m.invoice_sent_email() : m.invoice_not_sent()}
             </span>
           </span>
-          <span className="shrink-0 font-bold text-xl">{formatSekShort(invoice.totalOre)}</span>
+          <span className="grid shrink-0 justify-items-end gap-0.5">
+            <span className="font-bold text-xl">{formatSekShort(owedOrTotal(invoice))}</span>
+            <AmountNote invoice={invoice} />
+          </span>
         </span>
       </Link>
       {canManage && isOpen(invoice) && (

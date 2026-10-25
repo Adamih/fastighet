@@ -17,6 +17,7 @@ import { Button } from '#/components/ui/button'
 import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { owedOrTotal } from '#/features/invoicing/credit'
 import { invoiceOverview } from '#/features/invoicing/overview'
 import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
@@ -242,7 +243,7 @@ function TenantPage() {
                         </Link>
                         <span className="flex shrink-0 items-center gap-3">
                           <span className="font-semibold tabular-nums">
-                            {formatSekShort(i.totalOre)}
+                            {formatSekShort(owedOrTotal(i))}
                           </span>
                           <InvoiceStatusBadge status={i.status} />
                         </span>

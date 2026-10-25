@@ -14,6 +14,10 @@ import {
   listInvoices,
   markInvoicePaid,
   previewInvoiceRun,
+  previewReissue,
+  refundCreditNote,
+  reissueInvoice,
+  undoCreditNoteRefund,
   unmarkInvoicePaid,
   voidInvoice,
 } from './program'
@@ -26,6 +30,7 @@ import {
   type ListInvoicesInput,
   ListInvoicesInput as ListInvoicesSchema,
   MarkPaidInput,
+  RefundCreditNoteInput,
 } from './schemas'
 
 const std = validate
@@ -98,6 +103,44 @@ export const getCreditNoteFn = createServerFn({ method: 'GET' })
 export const emailCreditNoteFn = createServerFn({ method: 'POST' })
   .validator(std(CreditNoteIdInput))
   .handler(({ data }) => runApp(emailCreditNote(data.creditNoteId)))
+
+export const refundCreditNoteFn = createServerFn({ method: 'POST' })
+  .validator(std(RefundCreditNoteInput))
+  .handler(({ data }) => runApp(refundCreditNote(data)))
+
+export const undoCreditNoteRefundFn = createServerFn({ method: 'POST' })
+  .validator(std(CreditNoteIdInput))
+  .handler(({ data }) => runApp(undoCreditNoteRefund(data.creditNoteId)))
+
+export const previewReissueFn = createServerFn({ method: 'GET' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(previewReissue(data.invoiceId)))
+
+export const reissueInvoiceFn = createServerFn({ method: 'POST' })
+  .validator(
+    validate(
+      Schema.Struct({
+        ...InvoiceIdInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(
+      once(
+        'reissueInvoice',
+        data,
+        { invoice: ['manage'], lease: ['read'] },
+        reissueInvoice(data.invoiceId),
+      ),
+    ),
+  )
+
+export const reissuePreviewQuery = (invoiceId: string) =>
+  queryOptions({
+    queryKey: ['invoices', 'reissue', invoiceId],
+    queryFn: () => previewReissueFn({ data: { invoiceId } }),
+  })
 
 export const creditNoteQuery = (creditNoteId: string) =>
   queryOptions({

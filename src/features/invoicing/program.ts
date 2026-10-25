@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
 import { creditNote, creditNoteLine, invoice, invoiceLine, lease, payment } from '#/db/schema'
 import { loadSettings } from '#/features/settings/program'
@@ -10,6 +10,13 @@ import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
+import {
+  type RefundProblem,
+  type ReissueProblem,
+  refundProblem,
+  refunds,
+  reissueProblem,
+} from './correction'
 import { type CreditProblem, draftCreditNote } from './credit'
 import { matchesFilter } from './overview'
 import {
@@ -28,12 +35,15 @@ import type {
   CreateInvoiceRunInput,
   ListInvoicesInput,
   MarkPaidInput,
+  RefundCreditNoteInput,
 } from './schemas'
 
 const read: Permissions = { invoice: ['read'] }
 const manage: Permissions = { invoice: ['manage'] }
 /** A run reads every lease, so it also needs to be allowed to read leases. */
 const runInvoices: Permissions = { invoice: ['manage'], lease: ['read'] }
+/** Paying money back is booked like a payment. */
+const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
 
 // ---------------------------------------------------------------------------------------------
 // Invoice runs
@@ -56,6 +66,8 @@ export const previewInvoiceRun = (month: string) =>
       }),
     )
     // Every period in a run starts on the first of the month, whatever the invoice interval.
+    // Any avi for the period counts, voided and credited ones too: a run never re-issues a period
+    // someone corrected. A corrected avi is issued from the avi it replaces instead.
     const periodStart = `${month}-01`
     const invoiced = yield* orgQuery((db, organizationId) =>
       db
@@ -216,6 +228,7 @@ export const listInvoices = (input: ListInvoicesInput) =>
         ),
         orderBy: desc(invoice.number),
         with: {
+          creditNotes: { columns: { totalOre: true, refund: true, refundedOn: true } },
           lease: {
             columns: { id: true },
             with: {
@@ -233,8 +246,9 @@ export const listInvoices = (input: ListInvoicesInput) =>
       }),
     )
     const on = yield* today
-    const views = rows.map(({ lease: leaseRow, ...row }) => ({
+    const views = rows.map(({ lease: leaseRow, creditNotes, ...row }) => ({
       ...toView(row, on),
+      refundDueOre: refunds(creditNotes).refundDueOre,
       units: showUnits
         ? leaseRow.units.map(({ unit }) => ({
             kind: unit.kind,
@@ -256,8 +270,21 @@ export const getInvoice = (invoiceId: string) =>
           lines: { orderBy: invoiceLine.position },
           lease: { columns: { id: true, number: true } },
           creditNotes: {
-            columns: { id: true, number: true, issueDate: true, totalOre: true, reason: true },
+            columns: {
+              id: true,
+              number: true,
+              issueDate: true,
+              totalOre: true,
+              reason: true,
+              refund: true,
+              refundedOn: true,
+            },
             orderBy: creditNote.number,
+          },
+          replaces: { columns: { id: true, number: true } },
+          replacedBy: {
+            columns: { id: true, number: true, issueDate: true },
+            orderBy: invoice.number,
           },
           payments: {
             columns: {
@@ -276,7 +303,7 @@ export const getInvoice = (invoiceId: string) =>
     const seller = yield* loadSettings
     // Bank payments are listed only for those who may read payments.
     const payments = (yield* hasPermission({ payment: ['read'] })) ? row.payments : []
-    return { ...toView(row, yield* today), payments, seller }
+    return { ...toView(row, yield* today), ...refunds(row.creditNotes), payments, seller }
   })
 
 export type InvoiceView = Effect.Success<ReturnType<typeof getInvoice>>
@@ -362,9 +389,22 @@ export const unmarkInvoicePaid = (invoiceId: string) =>
     yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
     if (inv.status !== 'paid') return yield* new Conflict({ message: 'Avin är inte betald' })
-    // A bank payment that paid the invoice goes back to "needs attention" with it.
+    const refunded = inv.creditNotes.find((n) => n.refundedOn)
+    if (refunded) {
+      return yield* new Conflict({
+        message: `Kreditfaktura ${refunded.number} är återbetald. Ångra återbetalningen först.`,
+      })
+    }
+    // A bank payment that paid the invoice goes back to "needs attention" with it, and credit
+    // notes that were to be paid back lower what is owed instead.
     yield* orgQuery((db, organizationId) =>
       db.batch([
+        db
+          .update(creditNote)
+          .set({ refund: false })
+          .where(
+            and(eq(creditNote.invoiceId, inv.id), eq(creditNote.organizationId, organizationId)),
+          ),
         db
           .update(invoice)
           .set({ paidOn: null })
@@ -454,6 +494,7 @@ export const createCreditNote = (input: CreateCreditNoteInput) =>
           netOre: draft.netOre,
           vatOre: draft.vatOre,
           totalOre: draft.totalOre,
+          refund: inv.status === 'paid',
         }),
         db.insert(creditNoteLine).values(
           draft.lines.map((line, index) => ({
@@ -523,7 +564,7 @@ export const emailCreditNote = (creditNoteId: string) =>
         net: negative(note.netOre),
         vat: note.vatOre > 0 ? negative(note.vatOre) : null,
         total: negative(note.totalOre),
-        refund: note.invoice.paidOn !== null,
+        refund: note.refund,
         sellerDetails: sellerDetails(note.seller, note.vatOre > 0),
       },
     })
@@ -535,4 +576,178 @@ export const emailCreditNote = (creditNoteId: string) =>
         .where(and(eq(creditNote.id, note.id), eq(creditNote.organizationId, organizationId))),
     )
     return true
+  })
+
+const refundProblemMessages: Record<RefundProblem, string> = {
+  not_refund: 'Kreditfakturan dras av från avin och betalas inte tillbaka',
+  already_refunded: 'Återbetalningen är redan registrerad',
+  future: 'Datumet kan inte vara i framtiden',
+  before_credit: 'Datumet kan inte vara före kreditfakturan',
+}
+
+/** Records that a credit note on a paid invoice has been paid back to the tenant. */
+export const refundCreditNote = (input: RefundCreditNoteInput) =>
+  Effect.gen(function* () {
+    yield* requirePermission(refundMoney)
+    const note = yield* getCreditNote(input.creditNoteId)
+    const problem = refundProblem(note, input.refundedOn, yield* today)
+    if (problem) return yield* new Conflict({ message: refundProblemMessages[problem] })
+    yield* updateCreditNote(note.id, { refundedOn: input.refundedOn })
+    return yield* getCreditNote(note.id)
+  })
+
+export const undoCreditNoteRefund = (creditNoteId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(refundMoney)
+    const note = yield* getCreditNote(creditNoteId)
+    if (!note.refundedOn) {
+      return yield* new Conflict({ message: 'Ingen återbetalning är registrerad' })
+    }
+    yield* updateCreditNote(note.id, { refundedOn: null })
+    return yield* getCreditNote(note.id)
+  })
+
+const updateCreditNote = (creditNoteId: string, values: Partial<typeof creditNote.$inferInsert>) =>
+  orgQuery((db, organizationId) =>
+    db
+      .update(creditNote)
+      .set(values)
+      .where(and(eq(creditNote.id, creditNoteId), eq(creditNote.organizationId, organizationId))),
+  )
+
+// ---------------------------------------------------------------------------------------------
+// Corrected avier
+
+/** Reissuing reads the lease's current terms, so it also needs to be allowed to read leases. */
+const reissue: Permissions = { invoice: ['manage'], lease: ['read'] }
+
+const reissueProblemMessages: Record<ReissueProblem, string> = {
+  in_force: 'Avin gäller fortfarande. Makulera eller kreditera den först.',
+  already_replaced: 'Det finns redan en avi för perioden',
+  no_rent: 'Avtalet har ingen hyra för perioden',
+}
+
+/**
+ * The corrected avi for a voided or fully credited avi's period: the lease's rent for the period
+ * as the lease is now, to the tenant's current details, due by the usual rule from today.
+ */
+export const previewReissue = (invoiceId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(reissue)
+    const inv = yield* getInvoice(invoiceId)
+    const issueDate = yield* today
+    const settings = yield* loadSettings
+    const leaseRow = yield* orgQuery((db, organizationId) =>
+      db.query.lease.findFirst({
+        where: and(eq(lease.id, inv.leaseId), eq(lease.organizationId, organizationId)),
+        with: {
+          tenant: true,
+          units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
+        },
+      }),
+    )
+    if (!leaseRow) return yield* new NotFound({ entity: 'lease', id: inv.leaseId })
+    const others = yield* orgQuery((db, organizationId) =>
+      db
+        .select({
+          voidedAt: invoice.voidedAt,
+          totalOre: invoice.totalOre,
+          creditedOre: invoice.creditedOre,
+        })
+        .from(invoice)
+        .where(
+          and(
+            eq(invoice.organizationId, organizationId),
+            eq(invoice.leaseId, inv.leaseId),
+            eq(invoice.periodStart, inv.periodStart),
+            ne(invoice.id, inv.id),
+          ),
+        ),
+    )
+    const period = { start: inv.periodStart, end: inv.periodEnd }
+    const netOre = rentForPeriod(leaseRow, period)
+    const vatOre = vatFor(netOre, leaseRow.vat)
+    const problem = reissueProblem(inv, others, netOre)
+    return {
+      invoiceId: inv.id,
+      leaseId: leaseRow.id,
+      tenant: leaseRow.tenant,
+      period,
+      description: rentLineDescription(
+        leaseRow.units.map(({ unit }) => ({
+          designation: unit.property.designation,
+          label: unit.label,
+        })),
+        period,
+      ),
+      netOre,
+      vatOre,
+      totalOre: netOre + vatOre,
+      issueDate,
+      dueDate: dueDate(period, issueDate),
+      canInvoice: settings.bankgiro !== null,
+      problem: problem && reissueProblemMessages[problem],
+    }
+  })
+
+export type ReissuePreview = Effect.Success<ReturnType<typeof previewReissue>>
+
+/**
+ * Issues the corrected avi: the next number, linked to the avi it replaces. The unique index on
+ * lease and period stops a second one if two are issued at once.
+ */
+export const reissueInvoice = (invoiceId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(reissue)
+    const preview = yield* previewReissue(invoiceId)
+    if (preview.problem) return yield* new Conflict({ message: preview.problem })
+    if (!preview.canInvoice) {
+      return yield* new Conflict({
+        message: 'Ange bankgironummer under Inställningar innan du skapar avier.',
+      })
+    }
+    const [{ maxNumber }] = yield* orgQuery((db, organizationId) =>
+      db
+        .select({ maxNumber: sql<number>`coalesce(max(${invoice.number}), 0)` })
+        .from(invoice)
+        .where(eq(invoice.organizationId, organizationId)),
+    )
+    const number = maxNumber + 1
+    const id = crypto.randomUUID()
+    const { tenant } = preview
+    yield* orgQuery((db, organizationId) =>
+      db.batch([
+        db.insert(invoice).values({
+          id,
+          organizationId,
+          number,
+          ocr: ocrFor(number),
+          leaseId: preview.leaseId,
+          tenantId: tenant.id,
+          recipientName: tenant.name,
+          recipientStreetAddress: tenant.streetAddress,
+          recipientPostalCode: tenant.postalCode,
+          recipientCity: tenant.city,
+          recipientEmail: tenant.email,
+          periodStart: preview.period.start,
+          periodEnd: preview.period.end,
+          issueDate: preview.issueDate,
+          dueDate: preview.dueDate,
+          netOre: preview.netOre,
+          vatOre: preview.vatOre,
+          totalOre: preview.totalOre,
+          replacesInvoiceId: preview.invoiceId,
+        }),
+        db.insert(invoiceLine).values({
+          invoiceId: id,
+          organizationId,
+          position: 1,
+          description: preview.description,
+          netOre: preview.netOre,
+          vatRatePercent: preview.vatOre > 0 ? VAT_RATE_PERCENT : 0,
+          vatOre: preview.vatOre,
+        }),
+      ]),
+    )
+    return { id }
   })

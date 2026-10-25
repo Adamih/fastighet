@@ -1,5 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import {
+  type AnySQLiteColumn,
   index,
   integer,
   primaryKey,
@@ -214,12 +215,19 @@ export const invoice = sqliteTable(
     // Sum of the credit notes issued against this invoice (incl. VAT). Updated in the same batch
     // that creates a credit note; what is still owed is totalOre - creditedOre.
     creditedOre: integer('credited_ore').notNull().default(0),
+    // A corrected avi issued for the same lease and period after this one was voided or credited
+    // in full points back to the avi it replaces.
+    replacesInvoiceId: text('replaces_invoice_id').references((): AnySQLiteColumn => invoice.id),
     createdAt: createdAt(),
   },
   (t) => [
     uniqueIndex('invoice_org_number_uq').on(t.organizationId, t.number),
-    // A lease is invoiced at most once per period, which makes invoice runs safe to repeat.
-    uniqueIndex('invoice_lease_period_uq').on(t.leaseId, t.periodStart),
+    // A lease has at most one avi in force per period. Voided and fully credited avier no longer
+    // count, so a corrected one can replace them. Invoice runs skip any period already invoiced,
+    // which keeps them safe to repeat.
+    uniqueIndex('invoice_lease_period_uq')
+      .on(t.leaseId, t.periodStart)
+      .where(sql`${t.voidedAt} is null and ${t.creditedOre} < ${t.totalOre}`),
     index('invoice_org_due_idx').on(t.organizationId, t.dueDate),
   ],
 )
@@ -247,6 +255,12 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   lines: many(invoiceLine),
   payments: many(payment),
   creditNotes: many(creditNote),
+  replaces: one(invoice, {
+    fields: [invoice.replacesInvoiceId],
+    references: [invoice.id],
+    relationName: 'replacement',
+  }),
+  replacedBy: many(invoice, { relationName: 'replacement' }),
 }))
 
 export const invoiceLineRelations = relations(invoiceLine, ({ one }) => ({
@@ -276,6 +290,10 @@ export const creditNote = sqliteTable(
     netOre: integer('net_ore').notNull(),
     vatOre: integer('vat_ore').notNull(),
     totalOre: integer('total_ore').notNull(),
+    // True when the invoice was already paid when it was credited: the amount is paid back to the
+    // tenant instead of lowering what is owed. `refundedOn` records when that was done.
+    refund: integer('refund', { mode: 'boolean' }).notNull().default(false),
+    refundedOn: text('refunded_on'),
     sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
   },

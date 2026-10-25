@@ -18,6 +18,12 @@ export interface CreditableInvoice {
 export const remainingOre = (invoice: { totalOre: number; creditedOre: number }) =>
   Math.max(0, invoice.totalOre - invoice.creditedOre)
 
+/** For lists: what is still owed on an open invoice, otherwise its total. */
+export const owedOrTotal = (invoice: { status: string; totalOre: number; creditedOre: number }) =>
+  invoice.status === 'unpaid' || invoice.status === 'overdue'
+    ? remainingOre(invoice)
+    : invoice.totalOre
+
 /** The invoice's VAT rate; rent invoices have one rate for all lines. */
 export const vatRateOf = (invoice: Pick<CreditableInvoice, 'lines'>) =>
   Math.max(0, ...invoice.lines.map((l) => l.vatRatePercent))

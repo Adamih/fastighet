@@ -74,3 +74,23 @@ test('an invoice credited in full before its due date never fell due', () => {
   expect(credited('2026-09-20')).not.toContain('fellDue')
   expect(credited('2026-10-10')).toContain('fellDue')
 })
+
+test('refunds and corrected avier follow the credit note', () => {
+  expect(
+    kinds({
+      ...base,
+      status: 'paid',
+      paidOn: '2026-09-28',
+      creditNotes: [
+        { number: 4, issueDate: '2026-10-05', totalOre: 845000, refundedOn: '2026-10-12' },
+      ],
+      replacedBy: [{ number: 1050, issueDate: '2026-10-05' }],
+    }),
+  ).toEqual([
+    ['refunded', '2026-10-12'],
+    ['replaced', '2026-10-05'],
+    ['credited', '2026-10-05'],
+    ['paid', '2026-09-28'],
+    ['created', '2026-09-10'],
+  ])
+})

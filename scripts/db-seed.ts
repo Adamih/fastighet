@@ -560,6 +560,22 @@ async function seed() {
         oskarCredited = invoices.at(-1)
       }
     }
+    // Two months back Ahmed's avi went out with his old address. It was voided and a corrected
+    // avi issued for the same period ("Ny avi för perioden").
+    const ahmed = leases.find((l) => l.key === 'ahmed')
+    const wrong = invoices.find((i) => i.lease === ahmed && i.issueDate === issueDate)
+    if (offset === -2 && ahmed && wrong) {
+      const correctedOn = addDays(issueDate, 2)
+      wrong.voidedAt = new Date(`${correctedOn}T09:00:00Z`)
+      invoiceFor(
+        ahmed,
+        { start: wrong.periodStart, end: wrong.periodEnd },
+        correctedOn,
+        termsOf(ahmed),
+      )
+      const corrected = invoices.at(-1)
+      if (corrected) corrected.replacesInvoiceId = wrong.id
+    }
   }
   await insertAll(
     schema.invoice,
@@ -623,10 +639,22 @@ async function seed() {
       createdAt: new Date(`${issueDate}T10:00:00Z`),
       lines: result,
     })
+    return creditNotes.at(-1)
   }
   const latest = (key: string, monthsBack = 0) =>
     invoices.filter((i) => i.lease.key === key).at(-1 - monthsBack)
-  // 1. The office rent was raised too early; three months back is refunded (already paid).
+  // 1. Emma had no hot water for a week; credited after she had paid, and paid back a week later.
+  const emma = latest('emma', 4)
+  const emmaCredit =
+    emma &&
+    credit(
+      emma,
+      { kind: 'amount', netOre: 40_000 },
+      'Ersättning för avstängt varmvatten',
+      addDays(emma.dueDate as string, 18),
+    )
+  if (emmaCredit) emmaCredit.refundedOn = bankDay(addDays(emmaCredit.issueDate, 7))
+  // 2. The office rent was raised too early; three months back is refunded (already paid).
   const office = latest('redovisning', 3)
   if (office) {
     credit(
@@ -636,7 +664,7 @@ async function seed() {
       addDays(office.dueDate as string, 12),
     )
   }
-  // 2. Oskar's last avi, for the month after he moved out. Credited the day the earlier
+  // 3. Oskar's last avi, for the month after he moved out. Credited the day the earlier
   // move-out was agreed, before the avi fell due, so he never paid it.
   if (oskarCredited) {
     credit(
@@ -646,7 +674,7 @@ async function seed() {
       oskarTerms.noticeDate,
     )
   }
-  // 3. Anna's broken dishwasher took three weeks to replace.
+  // 4. Anna's broken dishwasher took three weeks to replace.
   const annaNow = invoices.find((i) => i.lease.key === 'anna' && i.periodStart === thisMonth)
   if (annaNow) {
     credit(
@@ -699,7 +727,7 @@ async function seed() {
     const due = invoice.dueDate as string
     const lease = invoice.lease
     const owed = invoice.totalOre - (invoice.creditedOre ?? 0)
-    if (owed <= 0) continue
+    if (owed <= 0 || invoice.voidedAt) continue
     // Anna's newest avi is left unpaid so it shows as overdue.
     if (lease.key === 'anna' && invoice === annaNow) continue
     switch (lease.payer) {
@@ -818,7 +846,10 @@ async function seed() {
       .where(eq(schema.invoice.id, invoice.id))
   }
   for (const { lines, ...note } of creditNotes) {
-    await db.insert(schema.creditNote).values(note)
+    // Credited after it was paid: the amount goes back to the tenant.
+    const paidOn = invoices.find((i) => i.id === note.invoiceId)?.paidOn
+    const refund = !!paidOn && paidOn <= note.issueDate
+    await db.insert(schema.creditNote).values({ ...note, refund })
     await insertAll(
       schema.creditNoteLine,
       lines.draft.lines.map((line, index) => ({
@@ -830,7 +861,7 @@ async function seed() {
     )
   }
 
-  const open = invoices.filter((i) => !i.paidOn && i.totalOre > (i.creditedOre ?? 0))
+  const open = invoices.filter((i) => !i.paidOn && !i.voidedAt && i.totalOre > (i.creditedOre ?? 0))
   console.log(`Seeded ${org.name}:
   logins     ${owner.email} (owner), ${member.email} (member). Password: SEED_PASSWORD in scripts/db-seed-constants.ts
   bankgiro   ${settings.bankgiro}, org.nr ${settings.organizationNumber}

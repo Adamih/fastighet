@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { type CreditableInvoice, draftCreditNote, remainingOre, vatRateOf } from './credit'
+import {
+  type CreditableInvoice,
+  draftCreditNote,
+  owedOrTotal,
+  remainingOre,
+  vatRateOf,
+} from './credit'
 
 const rent: CreditableInvoice = {
   number: 7,
@@ -108,4 +114,11 @@ describe('draftCreditNote', () => {
       ),
     ).toEqual({ ok: false, problem: 'too_much' })
   })
+})
+
+test('lists show what is still owed on open invoices and the total on the rest', () => {
+  const credited = { totalOre: 845000, creditedOre: 200000 }
+  expect(owedOrTotal({ ...credited, status: 'overdue' })).toBe(645000)
+  expect(owedOrTotal({ ...credited, status: 'unpaid' })).toBe(645000)
+  expect(owedOrTotal({ ...credited, status: 'paid' })).toBe(845000)
 })

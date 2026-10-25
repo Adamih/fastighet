@@ -2,14 +2,24 @@ import type { InvoiceStatus } from './rules'
 
 // Pure rules for the invoice page: what has happened to the invoice.
 
-export type InvoiceEventKind = 'created' | 'sent' | 'fellDue' | 'paid' | 'voided' | 'credited'
+export type InvoiceEventKind =
+  | 'created'
+  | 'sent'
+  | 'fellDue'
+  | 'paid'
+  | 'voided'
+  | 'credited'
+  | 'refunded'
+  | 'replaced'
 
 export interface InvoiceEvent {
   readonly kind: InvoiceEventKind
   /** ISO date. */
   readonly date: string
-  /** For `credited`: the credit note. */
+  /** For `credited` and `refunded`: the credit note. */
   readonly creditNote?: { readonly number: number; readonly totalOre: number }
+  /** For `replaced`: the corrected avi. */
+  readonly invoiceNumber?: number
 }
 
 /** What has happened so far, newest first. Built from the invoice's stored dates. */
@@ -22,7 +32,14 @@ export function invoiceEvents(
     dueDate: string
     paidOn: string | null
     voidedOn: string | null
-    creditNotes?: readonly { number: number; issueDate: string; totalOre: number }[]
+    creditNotes?: readonly {
+      number: number
+      issueDate: string
+      totalOre: number
+      refundedOn?: string | null
+    }[]
+    /** Corrected avier issued in its place. */
+    replacedBy?: readonly { number: number; issueDate: string }[]
   },
   today: string,
 ): InvoiceEvent[] {
@@ -51,6 +68,22 @@ export function invoiceEvents(
       date: note.issueDate,
       creditNote: { number: note.number, totalOre: note.totalOre },
     })),
+    ...(invoice.creditNotes ?? []).flatMap((note) =>
+      note.refundedOn
+        ? [
+            {
+              kind: 'refunded' as const,
+              date: note.refundedOn,
+              creditNote: { number: note.number, totalOre: note.totalOre },
+            },
+          ]
+        : [],
+    ),
+    ...(invoice.replacedBy ?? []).map((replacement) => ({
+      kind: 'replaced' as const,
+      date: replacement.issueDate,
+      invoiceNumber: replacement.number,
+    })),
   ]
   return events
     .filter((e) => e.date <= today)
@@ -59,10 +92,12 @@ export function invoiceEvents(
 
 /** On the same day, later steps come first (the list is newest first). */
 const order: Record<InvoiceEventKind, number> = {
-  voided: 0,
-  credited: 1,
-  paid: 2,
-  fellDue: 3,
-  sent: 4,
-  created: 5,
+  replaced: 0,
+  refunded: 1,
+  voided: 2,
+  credited: 3,
+  paid: 4,
+  fellDue: 5,
+  sent: 6,
+  created: 7,
 }

@@ -39,3 +39,9 @@ export const CreateCreditNoteInput = Schema.Struct({
 export type CreateCreditNoteInput = typeof CreateCreditNoteInput.Type
 
 export const CreditNoteIdInput = Schema.Struct({ creditNoteId: Schema.String })
+
+export const RefundCreditNoteInput = Schema.Struct({
+  creditNoteId: Schema.String,
+  refundedOn: IsoDate,
+})
+export type RefundCreditNoteInput = typeof RefundCreditNoteInput.Type

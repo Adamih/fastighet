@@ -30,6 +30,7 @@ import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { owedOrTotal } from '#/features/invoicing/credit'
 import { invoicesQuery, type listInvoicesFn } from '#/features/invoicing/functions'
 import { invoiceOverview } from '#/features/invoicing/overview'
 import { periodLabel } from '#/features/invoicing/rules'
@@ -501,7 +502,7 @@ function LeaseInvoices({ invoices }: { invoices: LeaseInvoiceRow[] }) {
                 </span>
               </Link>
               <span className="flex shrink-0 items-center gap-3">
-                <span className="font-semibold tabular-nums">{formatSekShort(i.totalOre)}</span>
+                <span className="font-semibold tabular-nums">{formatSekShort(owedOrTotal(i))}</span>
                 <InvoiceStatusBadge status={i.status} />
               </span>
             </PanelRow>

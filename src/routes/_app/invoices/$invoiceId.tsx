@@ -3,9 +3,11 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   AlertCircle,
   Ban,
+  Banknote,
   Check,
   CircleCheck,
   Copy,
+  FilePen,
   FilePlus,
   type LucideIcon,
   Mail,
@@ -31,6 +33,7 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { inForce } from '#/features/invoicing/correction'
 import { remainingOre } from '#/features/invoicing/credit'
 import { useCreditInvoiceDrawer } from '#/features/invoicing/credit-note-form'
 import {
@@ -46,6 +49,7 @@ import {
   voidInvoiceFn,
 } from '#/features/invoicing/functions'
 import type { InvoiceView } from '#/features/invoicing/program'
+import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
 import { PaymentStatusBadge } from '#/features/payments/components'
@@ -71,6 +75,10 @@ function InvoicePage() {
   const today = stockholmDate(Date.now())
   const credit = useCreditInvoiceDrawer(invoice)
   const canCredit = invoice.status !== 'void' && remainingOre(invoice) > 0
+  const reissue = useReissueInvoiceDrawer(invoice)
+  // A voided or fully credited avi can be replaced, once; a replacement is corrected from itself.
+  const canReissue =
+    can({ lease: ['read'] }) && !inForce(invoice) && invoice.replacedBy.length === 0
 
   const onDone = async () => {
     await queryClient.invalidateQueries({ queryKey: ['invoices'] })
@@ -141,8 +149,14 @@ function InvoicePage() {
                 {invoice.sentAt ? m.invoice_resend() : m.invoice_send_email()}
               </Button>
             )}
-            {canManage && (open || invoice.status === 'paid' || canCredit) && (
+            {canManage && (open || invoice.status === 'paid' || canCredit || canReissue) && (
               <MoreActions label={m.invoice_more_actions({ number: invoice.number })}>
+                {canReissue && (
+                  <DropdownMenuItem onSelect={reissue.open}>
+                    <FilePen aria-hidden="true" />
+                    {m.invoice_reissue()}
+                  </DropdownMenuItem>
+                )}
                 {canCredit && (
                   <DropdownMenuItem onSelect={credit.open}>
                     <ReceiptText aria-hidden="true" />
@@ -209,6 +223,23 @@ function InvoicePage() {
             )}
             {error && <p className="text-destructive text-sm">{error.message}</p>}
             <AmountPanel invoice={invoice} today={today} canManage={canManage} onDone={onDone} />
+            {(invoice.replaces || invoice.replacedBy.length > 0) && (
+              <nav aria-label={m.invoice_reissue()} className="grid gap-1.5 text-[13px]">
+                {invoice.replaces && (
+                  <ReplacementLink
+                    invoiceId={invoice.replaces.id}
+                    text={m.invoice_replaces({ number: invoice.replaces.number })}
+                  />
+                )}
+                {invoice.replacedBy.map((r) => (
+                  <ReplacementLink
+                    key={r.id}
+                    invoiceId={r.id}
+                    text={m.invoice_replaced_by({ number: r.number })}
+                  />
+                ))}
+              </nav>
+            )}
             <Panel title={m.detail_events()}>
               <EventList
                 events={invoiceEvents(
@@ -220,6 +251,7 @@ function InvoicePage() {
                     paidOn: invoice.paidOn,
                     voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
                     creditNotes: invoice.creditNotes,
+                    replacedBy: invoice.replacedBy,
                   },
                   today,
                 ).map((e) => eventView(e, invoice.recipientEmail))}
@@ -241,6 +273,20 @@ function InvoicePage() {
                         <span className="truncate text-muted-foreground">
                           {note.issueDate} · {note.reason}
                         </span>
+                        {note.refund && (
+                          <span
+                            className={cn(
+                              'text-xs',
+                              note.refundedOn
+                                ? 'text-emerald-700 dark:text-emerald-300'
+                                : 'font-medium text-amber-700 dark:text-amber-300',
+                            )}
+                          >
+                            {note.refundedOn
+                              ? m.credit_note_refunded_on({ date: note.refundedOn })
+                              : m.credit_note_refund_due()}
+                          </span>
+                        )}
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums">
                         {formatSekShort(-note.totalOre)}
@@ -298,6 +344,8 @@ const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
   paid: [CircleCheck, 'good'],
   voided: [Ban, 'neutral'],
   credited: [ReceiptText, 'neutral'],
+  refunded: [Banknote, 'neutral'],
+  replaced: [FilePen, 'neutral'],
 }
 
 function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
@@ -312,9 +360,28 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
       amount: formatSekShort(e.creditNote?.totalOre ?? 0),
       number: e.creditNote?.number ?? 0,
     }),
+    refunded: m.invoice_event_refunded({
+      amount: formatSekShort(e.creditNote?.totalOre ?? 0),
+      number: e.creditNote?.number ?? 0,
+    }),
+    replaced: m.invoice_event_replaced({ number: e.invoiceNumber ?? 0 }),
   }[e.kind]
-  const key = e.creditNote ? `${e.kind}-${e.creditNote.number}` : e.kind
+  const id = e.creditNote?.number ?? e.invoiceNumber
+  const key = id === undefined ? e.kind : `${e.kind}-${id}`
   return { key, icon, tone, text, date: e.date }
+}
+
+function ReplacementLink({ invoiceId, text }: { invoiceId: string; text: string }) {
+  return (
+    <Link
+      to="/invoices/$invoiceId"
+      params={{ invoiceId }}
+      className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 font-medium underline-offset-4 hover:underline"
+    >
+      <FilePen aria-hidden="true" className="size-4 text-muted-foreground" />
+      {text}
+    </Link>
+  )
 }
 
 /** What is owed and how to settle it. */
@@ -372,13 +439,20 @@ function AmountPanel({
           {formatSekShort(open ? remainingOre(invoice) : invoice.totalOre)}
         </span>
         {invoice.creditedOre > 0 && (
-          <span className="text-[13px] text-muted-foreground">
-            {invoice.status === 'paid'
-              ? m.invoice_refund_due({ amount: formatSekShort(invoice.creditedOre) })
-              : m.invoice_amount_after_credit({
-                  total: formatSekShort(invoice.totalOre),
-                  credited: formatSekShort(invoice.creditedOre),
-                })}
+          <span
+            className={cn(
+              'text-[13px] text-muted-foreground',
+              invoice.refundDueOre > 0 && 'font-medium text-amber-700 dark:text-amber-300',
+            )}
+          >
+            {invoice.refundDueOre > 0
+              ? m.invoice_refund_due({ amount: formatSekShort(invoice.refundDueOre) })
+              : invoice.refundedOre > 0
+                ? m.invoice_refunded({ amount: formatSekShort(invoice.refundedOre) })
+                : m.invoice_amount_after_credit({
+                    total: formatSekShort(invoice.totalOre),
+                    credited: formatSekShort(invoice.creditedOre),
+                  })}
           </span>
         )}
         <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
@@ -452,6 +526,12 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
             <dd className="tabular-nums">{invoice.issueDate}</dd>
             <dt className="text-muted-foreground">Avtal</dt>
             <dd className="tabular-nums">{invoice.lease.number}</dd>
+            {invoice.replaces && (
+              <>
+                <dt className="text-muted-foreground">Ersätter faktura</dt>
+                <dd className="tabular-nums">{invoice.replaces.number}</dd>
+              </>
+            )}
           </dl>
         </div>
       </header>

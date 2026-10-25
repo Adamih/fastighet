@@ -1,11 +1,18 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Check, Printer, Send } from 'lucide-react'
+import { Banknote, Check, Printer, Send, Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { DetailColumns, DetailHeader, FactList, Panel } from '#/components/detail'
 import { Button } from '#/components/ui/button'
+import { Input } from '#/components/ui/input'
+import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
-import { creditNoteQuery, emailCreditNoteFn } from '#/features/invoicing/functions'
+import {
+  creditNoteQuery,
+  emailCreditNoteFn,
+  refundCreditNoteFn,
+  undoCreditNoteRefundFn,
+} from '#/features/invoicing/functions'
 import type { CreditNoteView } from '#/features/invoicing/program'
 import { periodLabel } from '#/features/invoicing/rules'
 import { sellerDetails } from '#/features/settings/seller'
@@ -22,7 +29,9 @@ export const Route = createFileRoute('/_app/credit-notes/$creditNoteId')({
 function CreditNotePage() {
   const { creditNoteId } = Route.useParams()
   const { data: note } = useSuspenseQuery(creditNoteQuery(creditNoteId))
-  const canManage = useCan()({ invoice: ['manage'] })
+  const can = useCan()
+  const canManage = can({ invoice: ['manage'] })
+  const canRefund = can({ invoice: ['manage'], payment: ['manage'] })
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<string | null>(null)
   const email = useMutation({
@@ -33,7 +42,6 @@ function CreditNotePage() {
     },
   })
   const title = m.credit_note_number({ number: note.number })
-  const refund = note.invoice.paidOn !== null
 
   return (
     <div className="grid gap-6 md:gap-7">
@@ -99,9 +107,10 @@ function CreditNotePage() {
                 {formatSekShort(-note.totalOre)}
               </span>
               <span className="text-[13px] text-muted-foreground">
-                {refund ? m.credit_note_refund_hint() : m.credit_note_reduce_hint()}
+                {note.refund ? m.credit_note_refund_hint() : m.credit_note_reduce_hint()}
               </span>
             </section>
+            {note.refund && <RefundPanel note={note} canRefund={canRefund} />}
             <Panel title={m.credit_note_details()}>
               <FactList
                 facts={[
@@ -129,6 +138,71 @@ function CreditNotePage() {
         }
       />
     </div>
+  )
+}
+
+/** Whether the credited amount has been paid back to the tenant, and recording that it has. */
+function RefundPanel({ note, canRefund }: { note: CreditNoteView; canRefund: boolean }) {
+  const queryClient = useQueryClient()
+  const today = stockholmDate(Date.now())
+  const [refundedOn, setRefundedOn] = useState(today)
+  const onSuccess = () => queryClient.invalidateQueries({ queryKey: ['invoices'] })
+  const refund = useMutation({ mutationFn: refundCreditNoteFn, onSuccess })
+  const undo = useMutation({ mutationFn: undoCreditNoteRefundFn, onSuccess })
+  const error = refund.error ?? undo.error
+
+  return (
+    <Panel title={m.credit_note_refund()}>
+      <div className="grid gap-3 text-[13px]">
+        {note.refundedOn ? (
+          <div className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-2 font-medium text-emerald-700 dark:text-emerald-300">
+              <Banknote aria-hidden="true" className="size-4" />
+              {m.credit_note_refunded_on({ date: note.refundedOn })}
+            </span>
+            {canRefund && (
+              <Button
+                variant="ghost"
+                className="h-11 sm:h-8"
+                disabled={undo.isPending}
+                onClick={() => undo.mutate({ data: { creditNoteId: note.id } })}
+              >
+                <Undo2 aria-hidden="true" />
+                {m.credit_note_undo_refund()}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            <span className="font-medium text-amber-700 dark:text-amber-300">
+              {m.credit_note_refund_due()}
+            </span>
+            {canRefund && (
+              <div className="grid gap-2">
+                <Label htmlFor="refundedOn">{m.credit_note_refund_date()}</Label>
+                <Input
+                  id="refundedOn"
+                  type="date"
+                  value={refundedOn}
+                  min={note.issueDate}
+                  max={today}
+                  className="h-11 sm:h-9"
+                  onChange={(e) => setRefundedOn(e.target.value)}
+                />
+                <Button
+                  className="h-11 w-full sm:h-10"
+                  disabled={refund.isPending}
+                  onClick={() => refund.mutate({ data: { creditNoteId: note.id, refundedOn } })}
+                >
+                  {m.credit_note_register_refund()}
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+        {error && <p className="text-destructive text-sm">{error.message}</p>}
+      </div>
+    </Panel>
   )
 }
 
@@ -217,7 +291,7 @@ function PrintableCreditNote({ note }: { note: CreditNoteView }) {
       </table>
 
       <p className="text-sm">
-        {invoice.paidOn
+        {note.refund
           ? 'Fakturan är betald. Det krediterade beloppet betalas tillbaka.'
           : 'Det krediterade beloppet dras av från det som ska betalas på fakturan.'}
       </p>
