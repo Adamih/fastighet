@@ -6,6 +6,7 @@ const statusStyles: Record<InvoiceStatus, string> = {
   overdue: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
   paid: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
   void: 'bg-muted text-muted-foreground line-through',
+  credited: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200',
 }
 
 const dotStyles: Record<InvoiceStatus, string> = {
@@ -13,6 +14,7 @@ const dotStyles: Record<InvoiceStatus, string> = {
   overdue: 'bg-red-600 dark:bg-red-400',
   paid: 'bg-emerald-600 dark:bg-emerald-400',
   void: 'bg-muted-foreground',
+  credited: 'bg-violet-600 dark:bg-violet-400',
 }
 
 export function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {

@@ -1,5 +1,6 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
+import { formatSek } from '#/lib/money'
 import type { ParsedPayment } from './camt054'
 import { type InvoiceForMatching, matchPayments } from './matching'
 
@@ -13,6 +14,7 @@ const invoice = (
   number,
   ocr,
   totalOre,
+  creditedOre: 0,
   paidOn: null,
   voided: false,
   ...extra,
@@ -72,5 +74,22 @@ describe('matchPayments', () => {
     expect(results[0].note).toContain('redan betald')
     expect(results[1].note).toContain('makulerad')
     expect(results[3].note).toContain('två gånger')
+  })
+
+  test('a partly credited invoice expects what is still owed', () => {
+    const credited = invoice(1, '18', 845000, { creditedOre: 200000 })
+    expect(matchPayments([payment(645000, '18')], byOcr(credited))[0].status).toBe('matched')
+    expect(matchPayments([payment(845000, '18')], byOcr(credited))[0]).toMatchObject({
+      status: 'review',
+      note: `Överbetalning: ${formatSek(845000)} av ${formatSek(645000)} på avi 1`,
+    })
+  })
+
+  test('a fully credited invoice is not paid automatically', () => {
+    const credited = invoice(1, '18', 845000, { creditedOre: 845000 })
+    expect(matchPayments([payment(845000, '18')], byOcr(credited))[0]).toMatchObject({
+      status: 'review',
+      note: 'Avi 1 är krediterad',
+    })
   })
 })

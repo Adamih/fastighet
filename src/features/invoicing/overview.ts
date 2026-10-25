@@ -9,6 +9,8 @@ import type { InvoiceFilter } from './schemas'
 interface OverviewInvoice {
   readonly status: InvoiceStatus
   readonly totalOre: number
+  /** Credit notes against the invoice; what is still owed is totalOre - creditedOre. */
+  readonly creditedOre?: number
   readonly dueDate: string
 }
 
@@ -17,6 +19,12 @@ const isOpen = (status: InvoiceStatus) => status === 'unpaid' || status === 'ove
 const sum = (invoices: readonly OverviewInvoice[]) => ({
   count: invoices.length,
   totalOre: invoices.reduce((total, i) => total + i.totalOre, 0),
+})
+
+/** Like `sum`, but counts only what is still owed after credit notes. */
+const sumDue = (invoices: readonly OverviewInvoice[]) => ({
+  count: invoices.length,
+  totalOre: invoices.reduce((total, i) => total + i.totalOre - (i.creditedOre ?? 0), 0),
 })
 
 /** "Obetalda" includes overdue invoices: both are still waiting for payment. */
@@ -54,9 +62,9 @@ export function invoiceOverview(invoices: readonly OverviewInvoice[], today: str
   }
   return {
     counts,
-    outstanding: sum(open),
+    outstanding: sumDue(open),
     overdue: {
-      ...sum(overdue),
+      ...sumDue(overdue),
       /** Days since the oldest overdue invoice fell due. */
       oldestDays: oldestDue ? -daysUntil(today, oldestDue) : null,
     },

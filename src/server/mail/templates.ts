@@ -1,3 +1,4 @@
+import CreditNote, * as creditNote from '#/emails/CreditNote'
 import OrganizationInvitation, * as organizationInvitation from '#/emails/OrganizationInvitation'
 import RentInvoice, * as rentInvoice from '#/emails/RentInvoice'
 import ResetPassword, * as resetPassword from '#/emails/ResetPassword'
@@ -14,6 +15,7 @@ export const templates = {
     subject: organizationInvitation.subject,
   },
   rentInvoice: { Component: RentInvoice, subject: rentInvoice.subject },
+  creditNote: { Component: CreditNote, subject: creditNote.subject },
 } as const
 
 export type TemplateName = keyof typeof templates

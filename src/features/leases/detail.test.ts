@@ -15,7 +15,7 @@ const invoice = (
   periodStart: string,
   periodEnd: string,
   extra: Partial<{
-    status: 'void' | 'paid' | 'overdue' | 'unpaid'
+    status: 'void' | 'paid' | 'credited' | 'overdue' | 'unpaid'
     sentOn: string
     paidOn: string
   }> = {},

@@ -82,6 +82,7 @@ export const getTenant = (tenantId: string) =>
               periodEnd: true,
               dueDate: true,
               totalOre: true,
+              creditedOre: true,
               paidOn: true,
               voidedAt: true,
             },

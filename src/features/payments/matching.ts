@@ -18,6 +18,8 @@ export interface InvoiceForMatching {
   readonly number: number
   readonly ocr: string
   readonly totalOre: number
+  /** Credit notes against the invoice; a payment should cover totalOre - creditedOre. */
+  readonly creditedOre: number
   readonly paidOn: string | null
   readonly voided: boolean
 }
@@ -55,11 +57,13 @@ export function matchPayments(
     })
     if (inv.voided) return review(`Avi ${inv.number} är makulerad`)
     if (inv.paidOn) return review(`Avi ${inv.number} är redan betald (${inv.paidOn})`)
+    const dueOre = inv.totalOre - inv.creditedOre
+    if (dueOre <= 0) return review(`Avi ${inv.number} är krediterad`)
     if (paidInThisFile.has(inv.id)) return review(`Avi ${inv.number} betalas två gånger i filen`)
-    if (p.amountOre !== inv.totalOre) {
-      const kind = p.amountOre < inv.totalOre ? 'Delbetalning' : 'Överbetalning'
+    if (p.amountOre !== dueOre) {
+      const kind = p.amountOre < dueOre ? 'Delbetalning' : 'Överbetalning'
       return review(
-        `${kind}: ${formatSek(p.amountOre)} av ${formatSek(inv.totalOre)} på avi ${inv.number}`,
+        `${kind}: ${formatSek(p.amountOre)} av ${formatSek(dueOre)} på avi ${inv.number}`,
       )
     }
 

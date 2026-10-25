@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
-import { invoice, invoiceLine, lease, payment } from '#/db/schema'
+import { creditNote, creditNoteLine, invoice, invoiceLine, lease, payment } from '#/db/schema'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
@@ -10,6 +10,7 @@ import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
+import { type CreditProblem, draftCreditNote } from './credit'
 import { matchesFilter } from './overview'
 import {
   dueDate,
@@ -22,7 +23,12 @@ import {
   VAT_RATE_PERCENT,
   vatFor,
 } from './rules'
-import type { CreateInvoiceRunInput, ListInvoicesInput, MarkPaidInput } from './schemas'
+import type {
+  CreateCreditNoteInput,
+  CreateInvoiceRunInput,
+  ListInvoicesInput,
+  MarkPaidInput,
+} from './schemas'
 
 const read: Permissions = { invoice: ['read'] }
 const manage: Permissions = { invoice: ['manage'] }
@@ -249,6 +255,10 @@ export const getInvoice = (invoiceId: string) =>
         with: {
           lines: { orderBy: invoiceLine.position },
           lease: { columns: { id: true, number: true } },
+          creditNotes: {
+            columns: { id: true, number: true, issueDate: true, totalOre: true, reason: true },
+            orderBy: creditNote.number,
+          },
           payments: {
             columns: {
               id: true,
@@ -284,6 +294,9 @@ export const emailInvoice = (invoiceId: string, options: { skipWithoutEmail?: bo
     const inv = yield* getInvoice(invoiceId)
     if (inv.status === 'void') {
       return yield* new Conflict({ message: 'En makulerad avi kan inte skickas' })
+    }
+    if (inv.status === 'credited') {
+      return yield* new Conflict({ message: 'En krediterad avi kan inte skickas' })
     }
     if (!inv.recipientEmail) {
       if (options.skipWithoutEmail) return false
@@ -336,6 +349,7 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
     const inv = yield* getInvoice(input.invoiceId)
     if (inv.status === 'void') return yield* new Conflict({ message: 'Avin är makulerad' })
     if (inv.status === 'paid') return yield* new Conflict({ message: 'Avin är redan betald' })
+    if (inv.status === 'credited') return yield* new Conflict({ message: 'Avin är krediterad' })
     if (input.paidOn > (yield* today)) {
       return yield* new Conflict({ message: 'Betaldatum kan inte vara i framtiden' })
     }
@@ -370,7 +384,7 @@ export const unmarkInvoicePaid = (invoiceId: string) =>
     return yield* getInvoice(inv.id)
   })
 
-/** Voids an unpaid invoice. It keeps its number; credit notes are not supported yet. */
+/** Voids an unpaid invoice that has no credit notes. It keeps its number. */
 export const voidInvoice = (invoiceId: string) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
@@ -379,6 +393,146 @@ export const voidInvoice = (invoiceId: string) =>
     if (inv.status === 'paid') {
       return yield* new Conflict({ message: 'En betald avi kan inte makuleras' })
     }
+    if (inv.creditedOre > 0) {
+      return yield* new Conflict({
+        message: 'En krediterad avi kan inte makuleras. Kreditera resten i stället.',
+      })
+    }
     yield* updateInvoice(inv.id, { voidedAt: new Date(yield* Clock.currentTimeMillis) })
     return yield* getInvoice(inv.id)
+  })
+
+// ---------------------------------------------------------------------------------------------
+// Credit notes
+
+const creditProblemMessages: Record<CreditProblem, string> = {
+  void: 'En makulerad avi kan inte krediteras',
+  nothing_left: 'Avin är redan krediterad i sin helhet',
+  not_positive: 'Ange ett belopp större än noll',
+  too_much: 'Beloppet är större än det som återstår att kreditera',
+}
+
+/**
+ * Issues a credit note against an invoice: the next number in the company's credit note series,
+ * the invoice's recipient details, and the credited amount added to the invoice, all in one
+ * batch. Two credit notes created at once get the same number and the second batch fails on the
+ * unique index, so a credit is always computed from the invoice as it is.
+ */
+export const createCreditNote = (input: CreateCreditNoteInput) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manage)
+    const inv = yield* getInvoice(input.invoiceId)
+    const result = draftCreditNote(
+      inv,
+      input.kind === 'rest' ? { kind: 'rest' } : { kind: 'amount', netOre: input.netOre ?? 0 },
+    )
+    if (!result.ok) return yield* new Conflict({ message: creditProblemMessages[result.problem] })
+    const { draft } = result
+
+    const issueDate = yield* today
+    const [{ maxNumber }] = yield* orgQuery((db, organizationId) =>
+      db
+        .select({ maxNumber: sql<number>`coalesce(max(${creditNote.number}), 0)` })
+        .from(creditNote)
+        .where(eq(creditNote.organizationId, organizationId)),
+    )
+    const id = crypto.randomUUID()
+    yield* orgQuery((db, organizationId) =>
+      db.batch([
+        db.insert(creditNote).values({
+          id,
+          organizationId,
+          number: maxNumber + 1,
+          invoiceId: inv.id,
+          reason: input.reason.trim(),
+          recipientName: inv.recipientName,
+          recipientStreetAddress: inv.recipientStreetAddress,
+          recipientPostalCode: inv.recipientPostalCode,
+          recipientCity: inv.recipientCity,
+          recipientEmail: inv.recipientEmail,
+          issueDate,
+          netOre: draft.netOre,
+          vatOre: draft.vatOre,
+          totalOre: draft.totalOre,
+        }),
+        db.insert(creditNoteLine).values(
+          draft.lines.map((line, index) => ({
+            creditNoteId: id,
+            organizationId,
+            position: index + 1,
+            ...line,
+          })),
+        ),
+        db
+          .update(invoice)
+          .set({ creditedOre: sql`${invoice.creditedOre} + ${draft.totalOre}` })
+          .where(and(eq(invoice.id, inv.id), eq(invoice.organizationId, organizationId))),
+      ]),
+    )
+    return { id }
+  })
+
+export const getCreditNote = (creditNoteId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const row = yield* orgQuery((db, organizationId) =>
+      db.query.creditNote.findFirst({
+        where: and(eq(creditNote.id, creditNoteId), eq(creditNote.organizationId, organizationId)),
+        with: {
+          lines: { orderBy: creditNoteLine.position },
+          invoice: {
+            columns: {
+              id: true,
+              number: true,
+              issueDate: true,
+              periodStart: true,
+              periodEnd: true,
+              paidOn: true,
+            },
+          },
+        },
+      }),
+    )
+    if (!row) return yield* new NotFound({ entity: 'creditNote', id: creditNoteId })
+    return { ...row, seller: yield* loadSettings }
+  })
+
+export type CreditNoteView = Effect.Success<ReturnType<typeof getCreditNote>>
+
+/** Emails a credit note to the recipient of the invoice it credits and records when. */
+export const emailCreditNote = (creditNoteId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manage)
+    const note = yield* getCreditNote(creditNoteId)
+    if (!note.recipientEmail) {
+      return yield* new Conflict({ message: 'Hyresgästen har ingen e-postadress' })
+    }
+    const negative = (ore: number) => formatSek(-ore)
+    yield* sendEmail({
+      to: note.recipientEmail,
+      template: 'creditNote',
+      props: {
+        recipientName: note.recipientName,
+        organizationName: note.seller.organizationName,
+        creditNoteNumber: note.number,
+        invoiceNumber: note.invoice.number,
+        invoiceIssueDate: note.invoice.issueDate,
+        issueDate: note.issueDate,
+        reason: note.reason,
+        lines: note.lines.map((l) => ({ description: l.description, amount: negative(l.netOre) })),
+        net: negative(note.netOre),
+        vat: note.vatOre > 0 ? negative(note.vatOre) : null,
+        total: negative(note.totalOre),
+        refund: note.invoice.paidOn !== null,
+        sellerDetails: sellerDetails(note.seller, note.vatOre > 0),
+      },
+    })
+    const sentAt = new Date(yield* Clock.currentTimeMillis)
+    yield* orgQuery((db, organizationId) =>
+      db
+        .update(creditNote)
+        .set({ sentAt })
+        .where(and(eq(creditNote.id, note.id), eq(creditNote.organizationId, organizationId))),
+    )
+    return true
   })

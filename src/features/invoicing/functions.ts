@@ -5,8 +5,11 @@ import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
 import {
+  createCreditNote,
   createInvoiceRun,
+  emailCreditNote,
   emailInvoice,
+  getCreditNote,
   getInvoice,
   listInvoices,
   markInvoicePaid,
@@ -15,7 +18,9 @@ import {
   voidInvoice,
 } from './program'
 import {
+  CreateCreditNoteInput,
   CreateInvoiceRunInput,
+  CreditNoteIdInput,
   InvoiceIdInput,
   InvoiceRunInput,
   type ListInvoicesInput,
@@ -72,6 +77,33 @@ export const unmarkInvoicePaidFn = createServerFn({ method: 'POST' })
 export const voidInvoiceFn = createServerFn({ method: 'POST' })
   .validator(std(InvoiceIdInput))
   .handler(({ data }) => runApp(voidInvoice(data.invoiceId)))
+
+export const createCreditNoteFn = createServerFn({ method: 'POST' })
+  .validator(
+    validate(
+      Schema.Struct({
+        ...CreateCreditNoteInput.fields,
+        requestId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(once('createCreditNote', data, { invoice: ['manage'] }, createCreditNote(data))),
+  )
+
+export const getCreditNoteFn = createServerFn({ method: 'GET' })
+  .validator(std(CreditNoteIdInput))
+  .handler(({ data }) => runApp(getCreditNote(data.creditNoteId)))
+
+export const emailCreditNoteFn = createServerFn({ method: 'POST' })
+  .validator(std(CreditNoteIdInput))
+  .handler(({ data }) => runApp(emailCreditNote(data.creditNoteId)))
+
+export const creditNoteQuery = (creditNoteId: string) =>
+  queryOptions({
+    queryKey: ['invoices', 'credit-notes', creditNoteId],
+    queryFn: () => getCreditNoteFn({ data: { creditNoteId } }),
+  })
 
 export const invoicesQuery = (input: ListInvoicesInput) =>
   queryOptions({

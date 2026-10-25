@@ -19,6 +19,7 @@ import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as InvitationsInvitationIdRouteImport } from './routes/invitations/$invitationId'
+import { Route as AppCreditNotesCreditNoteIdRouteImport } from './routes/_app/credit-notes/$creditNoteId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
 import { Route as AppInvoicesInvoiceIdRouteImport } from './routes/_app/invoices/$invoiceId'
 import { Route as AppLeasesIndexRouteImport } from './routes/_app/leases/index'
@@ -78,6 +79,12 @@ const InvitationsInvitationIdRoute = InvitationsInvitationIdRouteImport.update({
   path: '/invitations/$invitationId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppCreditNotesCreditNoteIdRoute =
+  AppCreditNotesCreditNoteIdRouteImport.update({
+    id: '/credit-notes/$creditNoteId',
+    path: '/credit-notes/$creditNoteId',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppInvoicesIndexRoute = AppInvoicesIndexRouteImport.update({
   id: '/invoices/',
   path: '/invoices/',
@@ -134,6 +141,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
+  '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
@@ -154,6 +162,7 @@ export interface FileRoutesByTo {
   '/team': typeof AppTeamRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/': typeof AppIndexRoute
+  '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
@@ -176,6 +185,7 @@ export interface FileRoutesById {
   '/_app/team': typeof AppTeamRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/_app/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/team'
     | '/invitations/$invitationId'
+    | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
     | '/properties/$propertyId'
@@ -218,6 +229,7 @@ export interface FileRouteTypes {
     | '/team'
     | '/invitations/$invitationId'
     | '/'
+    | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
     | '/properties/$propertyId'
@@ -239,6 +251,7 @@ export interface FileRouteTypes {
     | '/_app/team'
     | '/invitations/$invitationId'
     | '/_app/'
+    | '/_app/credit-notes/$creditNoteId'
     | '/_app/invoices/$invoiceId'
     | '/_app/leases/$leaseId'
     | '/_app/properties/$propertyId'
@@ -332,6 +345,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvitationsInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/credit-notes/$creditNoteId': {
+      id: '/_app/credit-notes/$creditNoteId'
+      path: '/credit-notes/$creditNoteId'
+      fullPath: '/credit-notes/$creditNoteId'
+      preLoaderRoute: typeof AppCreditNotesCreditNoteIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/invoices/': {
       id: '/_app/invoices/'
       path: '/invoices'
@@ -403,6 +423,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppCreditNotesCreditNoteIdRoute: typeof AppCreditNotesCreditNoteIdRoute
   AppInvoicesInvoiceIdRoute: typeof AppInvoicesInvoiceIdRoute
   AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
   AppPropertiesPropertyIdRoute: typeof AppPropertiesPropertyIdRoute
@@ -418,6 +439,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,
   AppIndexRoute: AppIndexRoute,
+  AppCreditNotesCreditNoteIdRoute: AppCreditNotesCreditNoteIdRoute,
   AppInvoicesInvoiceIdRoute: AppInvoicesInvoiceIdRoute,
   AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
   AppPropertiesPropertyIdRoute: AppPropertiesPropertyIdRoute,

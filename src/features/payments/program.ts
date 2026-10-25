@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull, lt } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, payment, paymentImport } from '#/db/schema'
 import type { Permissions } from '#/lib/permissions'
@@ -77,6 +77,7 @@ export const importPayments = (input: ImportPaymentsInput) =>
             number: invoice.number,
             ocr: invoice.ocr,
             totalOre: invoice.totalOre,
+            creditedOre: invoice.creditedOre,
             paidOn: invoice.paidOn,
             voidedAt: invoice.voidedAt,
           })
@@ -207,6 +208,7 @@ export const listOpenInvoices = requirePermission({ ...book, invoice: ['read', '
           ocr: invoice.ocr,
           recipientName: invoice.recipientName,
           totalOre: invoice.totalOre,
+          creditedOre: invoice.creditedOre,
           dueDate: invoice.dueDate,
         })
         .from(invoice)
@@ -215,6 +217,8 @@ export const listOpenInvoices = requirePermission({ ...book, invoice: ['read', '
             eq(invoice.organizationId, organizationId),
             isNull(invoice.paidOn),
             isNull(invoice.voidedAt),
+            // Fully credited invoices are settled; nothing can be paid on them.
+            lt(invoice.creditedOre, invoice.totalOre),
           ),
         )
         .orderBy(desc(invoice.number)),
@@ -260,6 +264,8 @@ export const assignPayment = (input: AssignPaymentInput) =>
     if (!inv) return yield* new NotFound({ entity: 'invoice', id: input.invoiceId })
     if (inv.voidedAt) return yield* new Conflict({ message: `Avi ${inv.number} är makulerad` })
     if (inv.paidOn) return yield* new Conflict({ message: `Avi ${inv.number} är redan betald` })
+    const dueOre = inv.totalOre - inv.creditedOre
+    if (dueOre <= 0) return yield* new Conflict({ message: `Avi ${inv.number} är krediterad` })
 
     yield* orgQuery((db, organizationId) =>
       db.batch([
@@ -270,7 +276,7 @@ export const assignPayment = (input: AssignPaymentInput) =>
             invoiceId: inv.id,
             marksInvoicePaid: true,
             note:
-              p.amountOre === inv.totalOre
+              p.amountOre === dueOre
                 ? 'Kopplad manuellt'
                 : `Kopplad manuellt (${p.note ?? 'avvikande belopp'})`,
           })

@@ -103,14 +103,22 @@ export function formatBankgiro(input: string): string {
 export const vatNumberFor = (organizationNumber: string) =>
   `SE${organizationNumber.replace(/\D/g, '')}01`
 
-export type InvoiceStatus = 'void' | 'paid' | 'overdue' | 'unpaid'
+export type InvoiceStatus = 'void' | 'paid' | 'credited' | 'overdue' | 'unpaid'
 
 export function invoiceStatus(
-  invoice: { voidedAt: Date | null; paidOn: string | null; dueDate: string },
+  invoice: {
+    voidedAt: Date | null
+    paidOn: string | null
+    dueDate: string
+    totalOre: number
+    creditedOre: number
+  },
   today: string,
 ): InvoiceStatus {
   if (invoice.voidedAt) return 'void'
   if (invoice.paidOn) return 'paid'
+  // Fully credited before it was paid: nothing is owed any more.
+  if (invoice.creditedOre >= invoice.totalOre) return 'credited'
   return invoice.dueDate < today ? 'overdue' : 'unpaid'
 }
 
@@ -126,6 +134,9 @@ export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   },
   get void() {
     return m.invoice_status_void()
+  },
+  get credited() {
+    return m.invoice_status_credited()
   },
 }
 

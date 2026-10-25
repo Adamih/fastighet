@@ -6,10 +6,11 @@
 // Every name, address and number is made up; numbers only pass their checksums.
 
 import { hashPassword } from 'better-auth/crypto'
-import { count } from 'drizzle-orm'
+import { count, eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
+import { draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
   formatBankgiro,
@@ -295,9 +296,55 @@ async function seed() {
     vatOre,
   })
 
+  // --- A credit note on that invoice: a 1 000 kr rent reduction, issued five days ago. Built
+  // with the same rule as "Kreditera", so Anna still owes the rest.
+  const credit = draftCreditNote(
+    {
+      number: 1,
+      totalOre: netOre + vatOre,
+      creditedOre: 0,
+      voidedAt: null,
+      lines: [
+        { description: '', netOre, vatRatePercent: vatOre > 0 ? VAT_RATE_PERCENT : 0, vatOre },
+      ],
+    },
+    { kind: 'amount', netOre: 100_000 },
+  )
+  if (!credit.ok) throw new Error(`seed credit note: ${credit.problem}`)
+  const creditNoteId = id()
+  await db.insert(schema.creditNote).values({
+    id: creditNoteId,
+    organizationId: orgId,
+    number: 1,
+    invoiceId,
+    reason: 'Hyresreduktion för trasig diskmaskin',
+    recipientName: anna.name,
+    recipientStreetAddress: anna.streetAddress,
+    recipientPostalCode: anna.postalCode,
+    recipientCity: anna.city,
+    recipientEmail: anna.email,
+    issueDate: addDays(today, -5),
+    netOre: credit.draft.netOre,
+    vatOre: credit.draft.vatOre,
+    totalOre: credit.draft.totalOre,
+  })
+  await db.insert(schema.creditNoteLine).values(
+    credit.draft.lines.map((line, index) => ({
+      creditNoteId,
+      organizationId: orgId,
+      position: index + 1,
+      ...line,
+    })),
+  )
+  await db
+    .update(schema.invoice)
+    .set({ creditedOre: credit.draft.totalOre })
+    .where(eq(schema.invoice.id, invoiceId))
+
   console.log(`Seeded ${org.name}:
   logins     ${owner.email} (owner), ${member.email} (member). Password: SEED_PASSWORD in scripts/db-seed-constants.ts
   bankgiro   ${settings.bankgiro}, org.nr ${settings.organizationNumber}
   data       2 properties, ${Object.keys(units).length} units, 4 tenants, ${leases.length} leases
-  invoice    #1 to ${anna.name} for ${period.start.slice(0, 7)}, due ${dueDate(period, issueDate)}`)
+  invoice    #1 to ${anna.name} for ${period.start.slice(0, 7)}, due ${dueDate(period, issueDate)}
+  credit     kreditfaktura 1 on invoice #1, ${credit.draft.totalOre / 100} kr`)
 }

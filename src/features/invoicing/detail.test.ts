@@ -46,3 +46,31 @@ test('a voided invoice does not fall due', () => {
 test('a due date still ahead is not an event', () => {
   expect(kinds({ ...base, dueDate: '2026-10-31' }).map(([k]) => k)).toEqual(['created'])
 })
+
+test('credit notes are events with their number and amount', () => {
+  const events = invoiceEvents(
+    {
+      ...base,
+      status: 'credited',
+      creditNotes: [
+        { number: 2, issueDate: '2026-10-01', totalOre: 200_000 },
+        { number: 3, issueDate: '2026-10-20', totalOre: 645_000 },
+      ],
+    },
+    today,
+  )
+  expect(events.filter((e) => e.kind === 'credited')).toEqual([
+    { kind: 'credited', date: '2026-10-20', creditNote: { number: 3, totalOre: 645_000 } },
+    { kind: 'credited', date: '2026-10-01', creditNote: { number: 2, totalOre: 200_000 } },
+  ])
+})
+
+test('an invoice credited in full before its due date never fell due', () => {
+  const credited = (issueDate: string) =>
+    invoiceEvents(
+      { ...base, status: 'credited', creditNotes: [{ number: 1, issueDate, totalOre: 845_000 }] },
+      today,
+    ).map((e) => e.kind)
+  expect(credited('2026-09-20')).not.toContain('fellDue')
+  expect(credited('2026-10-10')).toContain('fellDue')
+})

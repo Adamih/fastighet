@@ -211,6 +211,9 @@ export const invoice = sqliteTable(
     sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
     paidOn: text('paid_on'),
     voidedAt: integer('voided_at', { mode: 'timestamp_ms' }),
+    // Sum of the credit notes issued against this invoice (incl. VAT). Updated in the same batch
+    // that creates a credit note; what is still owed is totalOre - creditedOre.
+    creditedOre: integer('credited_ore').notNull().default(0),
     createdAt: createdAt(),
   },
   (t) => [
@@ -243,10 +246,72 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   tenant: one(tenant, { fields: [invoice.tenantId], references: [tenant.id] }),
   lines: many(invoiceLine),
   payments: many(payment),
+  creditNotes: many(creditNote),
 }))
 
 export const invoiceLineRelations = relations(invoiceLine, ({ one }) => ({
   invoice: one(invoice, { fields: [invoiceLine.invoiceId], references: [invoice.id] }),
+}))
+
+// A credit note (kreditfaktura) corrects an issued invoice. Like invoices it is an accounting
+// record: never deleted, numbered without gaps per organization in its own series. Amounts are
+// positive and mean "credited"; the document prints them as negative. Recipient details are
+// copied from the invoice it credits.
+export const creditNote = sqliteTable(
+  'credit_note',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    number: integer('number').notNull(),
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => invoice.id),
+    reason: text('reason').notNull(),
+    recipientName: text('recipient_name').notNull(),
+    recipientStreetAddress: text('recipient_street_address'),
+    recipientPostalCode: text('recipient_postal_code'),
+    recipientCity: text('recipient_city'),
+    recipientEmail: text('recipient_email'),
+    issueDate: text('issue_date').notNull(),
+    netOre: integer('net_ore').notNull(),
+    vatOre: integer('vat_ore').notNull(),
+    totalOre: integer('total_ore').notNull(),
+    sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('credit_note_org_number_uq').on(t.organizationId, t.number),
+    index('credit_note_invoice_idx').on(t.invoiceId),
+  ],
+)
+
+export const creditNoteLine = sqliteTable(
+  'credit_note_line',
+  {
+    id: id(),
+    creditNoteId: text('credit_note_id')
+      .notNull()
+      .references(() => creditNote.id, { onDelete: 'cascade' }),
+    organizationId: organizationId(),
+    position: integer('position').notNull(),
+    description: text('description').notNull(),
+    netOre: integer('net_ore').notNull(),
+    vatRatePercent: integer('vat_rate_percent').notNull(),
+    vatOre: integer('vat_ore').notNull(),
+  },
+  (t) => [index('credit_note_line_note_idx').on(t.creditNoteId)],
+)
+
+export const creditNoteRelations = relations(creditNote, ({ one, many }) => ({
+  invoice: one(invoice, { fields: [creditNote.invoiceId], references: [invoice.id] }),
+  lines: many(creditNoteLine),
+}))
+
+export const creditNoteLineRelations = relations(creditNoteLine, ({ one }) => ({
+  creditNote: one(creditNote, {
+    fields: [creditNoteLine.creditNoteId],
+    references: [creditNote.id],
+  }),
 }))
 
 /** One uploaded bank file (camt.054). */

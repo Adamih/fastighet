@@ -8,7 +8,7 @@ interface LeaseInvoice {
   readonly number: number
   readonly periodStart: string
   readonly periodEnd: string
-  readonly status: 'void' | 'paid' | 'overdue' | 'unpaid'
+  readonly status: 'void' | 'paid' | 'credited' | 'overdue' | 'unpaid'
   /** ISO date the invoice was emailed, if it was. */
   readonly sentOn: string | null
   readonly paidOn: string | null

@@ -64,3 +64,14 @@ test('invoiceOverview sums open, overdue and paid invoices', () => {
 test('invoiceOverview without overdue invoices', () => {
   expect(invoiceOverview([], today).overdue).toEqual({ count: 0, totalOre: 0, oldestDays: null })
 })
+
+test('invoiceOverview counts only what is still owed after credit notes', () => {
+  const invoices = [
+    { status: 'overdue' as const, totalOre: 845_000, creditedOre: 200_000, dueDate: '2026-09-30' },
+    { status: 'credited' as const, totalOre: 100_000, creditedOre: 100_000, dueDate: '2026-09-30' },
+  ]
+  const overview = invoiceOverview(invoices, today)
+  expect(overview.outstanding).toEqual({ count: 1, totalOre: 645_000 })
+  expect(overview.overdue).toMatchObject({ count: 1, totalOre: 645_000 })
+  expect(overview.counts.all).toBe(2)
+})

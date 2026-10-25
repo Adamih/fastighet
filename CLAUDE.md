@@ -26,7 +26,8 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - A page's "Lägg till …" button uses `<Button size="fab">`: floating on phones, ordinary from `md` up. Such pages leave room at the bottom on phones (`pb-20 md:pb-0`).
 - **Errors.** Expected failures are tagged errors from `src/server/errors.ts`. `runApp` maps them: `Unauthenticated` redirects to /login, `NoActiveOrganization` to /onboarding, `NotFound` becomes a 404, `Forbidden` shows a generic "no permission" message, and a `Conflict` message is shown to the user. Anything else is logged and replaced with a generic message.
 - **Invoices are accounting records.** Never delete or renumber them:
-  - Correct a mistake by voiding the invoice (it keeps its number) or, later, with a credit note.
+  - Correct a mistake by voiding an unpaid invoice that has no credit notes (it keeps its number), or with a credit note (kreditfaktura).
+  - Credit notes (`credit_note`) are accounting records too: never deleted, numbered without gaps per company in their own series, recipient details copied from the invoice. They credit all or part of an invoice (`features/invoicing/credit.ts`, unit-tested). Creating one adds its total to `invoice.creditedOre` in the same batch; what is still owed is `totalOre - creditedOre`, which payment matching and the outstanding totals use. A fully credited unpaid invoice has status `credited`.
   - Numbers run without gaps per company, and the OCR is the number plus a Luhn digit.
   - Recipient details are copied onto the invoice when it is issued.
   - Period, rent, VAT and due-date rules live in `src/features/invoicing/rules.ts` and are unit-tested. Change them there.

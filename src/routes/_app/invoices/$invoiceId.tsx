@@ -10,6 +10,7 @@ import {
   type LucideIcon,
   Mail,
   Printer,
+  ReceiptText,
   Send,
   Undo2,
 } from 'lucide-react'
@@ -30,6 +31,8 @@ import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
+import { remainingOre } from '#/features/invoicing/credit'
+import { useCreditInvoiceDrawer } from '#/features/invoicing/credit-note-form'
 import {
   type InvoiceEvent,
   type InvoiceEventKind,
@@ -66,6 +69,8 @@ function InvoicePage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmVoid, setConfirmVoid] = useState(false)
   const today = stockholmDate(Date.now())
+  const credit = useCreditInvoiceDrawer(invoice)
+  const canCredit = invoice.status !== 'void' && remainingOre(invoice) > 0
 
   const onDone = async () => {
     await queryClient.invalidateQueries({ queryKey: ['invoices'] })
@@ -136,8 +141,14 @@ function InvoicePage() {
                 {invoice.sentAt ? m.invoice_resend() : m.invoice_send_email()}
               </Button>
             )}
-            {canManage && (open || invoice.status === 'paid') && (
+            {canManage && (open || invoice.status === 'paid' || canCredit) && (
               <MoreActions label={m.invoice_more_actions({ number: invoice.number })}>
+                {canCredit && (
+                  <DropdownMenuItem onSelect={credit.open}>
+                    <ReceiptText aria-hidden="true" />
+                    {m.invoice_credit()}
+                  </DropdownMenuItem>
+                )}
                 {invoice.status === 'paid' && (
                   <DropdownMenuItem
                     disabled={unpay.isPending}
@@ -147,7 +158,7 @@ function InvoicePage() {
                     {m.invoice_undo_payment()}
                   </DropdownMenuItem>
                 )}
-                {open && (
+                {open && invoice.creditedOre === 0 && (
                   <DropdownMenuItem variant="destructive" onSelect={() => setConfirmVoid(true)}>
                     <Ban aria-hidden="true" />
                     {m.invoice_void()}
@@ -208,11 +219,37 @@ function InvoicePage() {
                     dueDate: invoice.dueDate,
                     paidOn: invoice.paidOn,
                     voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
+                    creditNotes: invoice.creditNotes,
                   },
                   today,
                 ).map((e) => eventView(e, invoice.recipientEmail))}
               />
             </Panel>
+            {invoice.creditNotes.length > 0 && (
+              <Panel title={m.invoice_credit_notes()}>
+                <div>
+                  {invoice.creditNotes.map((note) => (
+                    <PanelRow key={note.id}>
+                      <span className="grid min-w-0 gap-0.5">
+                        <Link
+                          to="/credit-notes/$creditNoteId"
+                          params={{ creditNoteId: note.id }}
+                          className="font-semibold underline-offset-4 hover:underline"
+                        >
+                          {m.credit_note_number({ number: note.number })}
+                        </Link>
+                        <span className="truncate text-muted-foreground">
+                          {note.issueDate} · {note.reason}
+                        </span>
+                      </span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {formatSekShort(-note.totalOre)}
+                      </span>
+                    </PanelRow>
+                  ))}
+                </div>
+              </Panel>
+            )}
             {can({ payment: ['read'] }) && (
               <Panel
                 title={m.invoice_payments()}
@@ -260,6 +297,7 @@ const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
   fellDue: [AlertCircle, 'bad'],
   paid: [CircleCheck, 'good'],
   voided: [Ban, 'neutral'],
+  credited: [ReceiptText, 'neutral'],
 }
 
 function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
@@ -270,8 +308,13 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
     fellDue: m.invoice_event_fell_due(),
     paid: m.invoice_status_paid(),
     voided: m.invoice_status_void(),
+    credited: m.invoice_event_credited({
+      amount: formatSekShort(e.creditNote?.totalOre ?? 0),
+      number: e.creditNote?.number ?? 0,
+    }),
   }[e.kind]
-  return { key: e.kind, icon, tone, text, date: e.date }
+  const key = e.creditNote ? `${e.kind}-${e.creditNote.number}` : e.kind
+  return { key, icon, tone, text, date: e.date }
 }
 
 /** What is owed and how to settle it. */
@@ -296,6 +339,7 @@ function AmountPanel({
     unpaid: days === 0 ? m.invoice_due_today() : m.invoice_due_relative({ when: inDays(days) }),
     paid: m.invoice_paid_on({ date: invoice.paidOn ?? '' }),
     void: m.invoice_void_no_payment(),
+    credited: m.invoice_fully_credited(),
   }[invoice.status]
 
   return (
@@ -325,8 +369,18 @@ function AmountPanel({
             invoice.status === 'void' && 'text-muted-foreground line-through',
           )}
         >
-          {formatSekShort(invoice.totalOre)}
+          {formatSekShort(open ? remainingOre(invoice) : invoice.totalOre)}
         </span>
+        {invoice.creditedOre > 0 && (
+          <span className="text-[13px] text-muted-foreground">
+            {invoice.status === 'paid'
+              ? m.invoice_refund_due({ amount: formatSekShort(invoice.creditedOre) })
+              : m.invoice_amount_after_credit({
+                  total: formatSekShort(invoice.totalOre),
+                  credited: formatSekShort(invoice.creditedOre),
+                })}
+          </span>
+        )}
         <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
           {open ? m.invoice_amount_ocr_to_pay() : m.invoice_amount_ocr()}{' '}
           <span className="font-medium text-foreground tabular-nums">{invoice.ocr}</span>
@@ -389,6 +443,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
         <div className="sm:text-right print:text-right">
           <h1 className="font-semibold text-2xl">
             Hyresavi{invoice.status === 'void' && ' (makulerad)'}
+            {invoice.status === 'credited' && ' (krediterad)'}
           </h1>
           <dl className="mt-2 grid grid-cols-[auto_auto] justify-start gap-x-4 text-sm sm:justify-end print:justify-end">
             <dt className="text-muted-foreground">Fakturanummer</dt>

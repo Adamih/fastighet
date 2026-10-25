@@ -408,7 +408,7 @@ function AssignToInvoice({
               {m.payment_invoice_option({
                 number: i.number,
                 recipient: i.recipientName,
-                amount: formatSek(i.totalOre),
+                amount: formatSek(i.totalOre - i.creditedOre),
                 ocr: i.ocr,
               })}
             </SelectItem>
