@@ -1,11 +1,12 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useRouteContext } from '@tanstack/react-router'
 import { ChevronRight, Plus, Search } from 'lucide-react'
 import { useState } from 'react'
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { tenantKindLabels } from '#/features/leases/options'
+import { companyTerms } from '#/features/settings/terminology'
 import { tenantsQuery } from '#/features/tenants/functions'
 import { leaseLine, matchesTenant, tenantCountLine } from '#/features/tenants/overview'
 import { useAddTenantDrawer } from '#/features/tenants/tenant-form'
@@ -21,6 +22,7 @@ type Tenant = (typeof Route.types.loaderData)[number]
 
 function TenantsPage() {
   const canManage = useCan()({ tenant: ['manage'] })
+  const { app } = useRouteContext({ from: '/_app' })
   const { data: tenants } = useSuspenseQuery(tenantsQuery())
   const [query, setQuery] = useState('')
   const addTenant = useAddTenantDrawer()
@@ -30,7 +32,9 @@ function TenantsPage() {
     <div className={cn('grid gap-5 md:gap-7', canManage && 'pb-20 md:pb-0')}>
       <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="grid min-w-0 gap-1">
-          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">{m.nav_tenants()}</h1>
+          <h1 className="font-bold text-2xl tracking-tight md:text-3xl">
+            {companyTerms(app.companyKind).parties}
+          </h1>
           {tenants.length > 0 && (
             <p className="text-muted-foreground text-sm">{tenantCountLine(tenants)}</p>
           )}

@@ -4,6 +4,322 @@
   "version": "6",
   "dialect": "sqlite",
   "tables": {
+    "agreement": {
+      "name": "agreement",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "number": {
+          "name": "number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rent_ore": {
+          "name": "rent_ore",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rent_interval": {
+          "name": "rent_interval",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "invoice_interval": {
+          "name": "invoice_interval",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "vat": {
+          "name": "vat",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
+        }
+      },
+      "indexes": {
+        "agreement_org_number_uq": {
+          "name": "agreement_org_number_uq",
+          "columns": [
+            "organization_id",
+            "number"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "agreement_organization_id_organization_id_fk": {
+          "name": "agreement_organization_id_organization_id_fk",
+          "tableFrom": "agreement",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agreement_party": {
+      "name": "agreement_party",
+      "columns": {
+        "agreement_id": {
+          "name": "agreement_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tenant_id": {
+          "name": "tenant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "share_percent": {
+          "name": "share_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "receives_invoices": {
+          "name": "receives_invoices",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agreement_party_org_tenant_idx": {
+          "name": "agreement_party_org_tenant_idx",
+          "columns": [
+            "organization_id",
+            "tenant_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agreement_party_agreement_id_agreement_id_fk": {
+          "name": "agreement_party_agreement_id_agreement_id_fk",
+          "tableFrom": "agreement_party",
+          "tableTo": "agreement",
+          "columnsFrom": [
+            "agreement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agreement_party_tenant_id_tenant_id_fk": {
+          "name": "agreement_party_tenant_id_tenant_id_fk",
+          "tableFrom": "agreement_party",
+          "tableTo": "tenant",
+          "columnsFrom": [
+            "tenant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "agreement_party_organization_id_organization_id_fk": {
+          "name": "agreement_party_organization_id_organization_id_fk",
+          "tableFrom": "agreement_party",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agreement_party_agreement_id_tenant_id_pk": {
+          "columns": [
+            "agreement_id",
+            "tenant_id"
+          ],
+          "name": "agreement_party_agreement_id_tenant_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "agreement_unit": {
+      "name": "agreement_unit",
+      "columns": {
+        "agreement_id": {
+          "name": "agreement_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unit_id": {
+          "name": "unit_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agreement_unit_unit_idx": {
+          "name": "agreement_unit_unit_idx",
+          "columns": [
+            "unit_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agreement_unit_agreement_id_agreement_id_fk": {
+          "name": "agreement_unit_agreement_id_agreement_id_fk",
+          "tableFrom": "agreement_unit",
+          "tableTo": "agreement",
+          "columnsFrom": [
+            "agreement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agreement_unit_unit_id_unit_id_fk": {
+          "name": "agreement_unit_unit_id_unit_id_fk",
+          "tableFrom": "agreement_unit",
+          "tableTo": "unit",
+          "columnsFrom": [
+            "unit_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "agreement_unit_organization_id_organization_id_fk": {
+          "name": "agreement_unit_organization_id_organization_id_fk",
+          "tableFrom": "agreement_unit",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "agreement_unit_agreement_id_unit_id_pk": {
+          "columns": [
+            "agreement_id",
+            "unit_id"
+          ],
+          "name": "agreement_unit_agreement_id_unit_id_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "credit_note": {
       "name": "credit_note",
       "columns": {
@@ -157,28 +473,28 @@
         "credit_note_organization_id_organization_id_fk": {
           "name": "credit_note_organization_id_organization_id_fk",
           "tableFrom": "credit_note",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "credit_note_invoice_id_invoice_id_fk": {
           "name": "credit_note_invoice_id_invoice_id_fk",
           "tableFrom": "credit_note",
+          "tableTo": "invoice",
           "columnsFrom": [
             "invoice_id"
           ],
-          "tableTo": "invoice",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -258,28 +574,28 @@
         "credit_note_line_credit_note_id_credit_note_id_fk": {
           "name": "credit_note_line_credit_note_id_credit_note_id_fk",
           "tableFrom": "credit_note_line",
+          "tableTo": "credit_note",
           "columnsFrom": [
             "credit_note_id"
           ],
-          "tableTo": "credit_note",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "credit_note_line_organization_id_organization_id_fk": {
           "name": "credit_note_line_organization_id_organization_id_fk",
           "tableFrom": "credit_note_line",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -317,8 +633,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "lease_id": {
-          "name": "lease_id",
+        "agreement_id": {
+          "name": "agreement_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -469,14 +785,14 @@
           ],
           "isUnique": true
         },
-        "invoice_lease_period_uq": {
-          "name": "invoice_lease_period_uq",
+        "invoice_agreement_period_uq": {
+          "name": "invoice_agreement_period_uq",
           "columns": [
-            "lease_id",
+            "agreement_id",
             "period_start"
           ],
-          "where": "\"invoice\".\"voided_at\" is null and \"invoice\".\"credited_ore\" < \"invoice\".\"total_ore\"",
-          "isUnique": true
+          "isUnique": true,
+          "where": "\"invoice\".\"voided_at\" is null and \"invoice\".\"credited_ore\" < \"invoice\".\"total_ore\""
         },
         "invoice_org_due_idx": {
           "name": "invoice_org_due_idx",
@@ -491,54 +807,54 @@
         "invoice_organization_id_organization_id_fk": {
           "name": "invoice_organization_id_organization_id_fk",
           "tableFrom": "invoice",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
-        "invoice_lease_id_lease_id_fk": {
-          "name": "invoice_lease_id_lease_id_fk",
+        "invoice_agreement_id_agreement_id_fk": {
+          "name": "invoice_agreement_id_agreement_id_fk",
           "tableFrom": "invoice",
+          "tableTo": "agreement",
           "columnsFrom": [
-            "lease_id"
+            "agreement_id"
           ],
-          "tableTo": "lease",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_tenant_id_tenant_id_fk": {
           "name": "invoice_tenant_id_tenant_id_fk",
           "tableFrom": "invoice",
+          "tableTo": "tenant",
           "columnsFrom": [
             "tenant_id"
           ],
-          "tableTo": "tenant",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "invoice_replaces_invoice_id_invoice_id_fk": {
           "name": "invoice_replaces_invoice_id_invoice_id_fk",
           "tableFrom": "invoice",
+          "tableTo": "invoice",
           "columnsFrom": [
             "replaces_invoice_id"
           ],
-          "tableTo": "invoice",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -618,39 +934,39 @@
         "invoice_line_invoice_id_invoice_id_fk": {
           "name": "invoice_line_invoice_id_invoice_id_fk",
           "tableFrom": "invoice_line",
+          "tableTo": "invoice",
           "columnsFrom": [
             "invoice_id"
           ],
-          "tableTo": "invoice",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "invoice_line_organization_id_organization_id_fk": {
           "name": "invoice_line_organization_id_organization_id_fk",
           "tableFrom": "invoice_line",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
-    "lease": {
-      "name": "lease",
+    "lease_terms": {
+      "name": "lease_terms",
       "columns": {
-        "id": {
-          "name": "id",
+        "agreement_id": {
+          "name": "agreement_id",
           "type": "text",
           "primaryKey": true,
           "notNull": true,
@@ -663,29 +979,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "tenant_id": {
-          "name": "tenant_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "start_date": {
-          "name": "start_date",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "end_date": {
-          "name": "end_date",
+        "term_end_date": {
+          "name": "term_end_date",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -705,35 +1000,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "rent_ore": {
-          "name": "rent_ore",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "rent_interval": {
-          "name": "rent_interval",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "invoice_interval": {
-          "name": "invoice_interval",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "vat": {
-          "name": "vat",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": false
-        },
         "notice_date": {
           "name": "notice_date",
           "type": "text",
@@ -747,150 +1013,38 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(cast(unixepoch('subsecond') * 1000 as integer))"
         }
       },
-      "indexes": {
-        "lease_org_number_uq": {
-          "name": "lease_org_number_uq",
-          "columns": [
-            "organization_id",
-            "number"
-          ],
-          "isUnique": true
-        },
-        "lease_org_tenant_idx": {
-          "name": "lease_org_tenant_idx",
-          "columns": [
-            "organization_id",
-            "tenant_id"
-          ],
-          "isUnique": false
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
-        "lease_organization_id_organization_id_fk": {
-          "name": "lease_organization_id_organization_id_fk",
-          "tableFrom": "lease",
+        "lease_terms_agreement_id_agreement_id_fk": {
+          "name": "lease_terms_agreement_id_agreement_id_fk",
+          "tableFrom": "lease_terms",
+          "tableTo": "agreement",
+          "columnsFrom": [
+            "agreement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "lease_terms_organization_id_organization_id_fk": {
+          "name": "lease_terms_organization_id_organization_id_fk",
+          "tableFrom": "lease_terms",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        },
-        "lease_tenant_id_tenant_id_fk": {
-          "name": "lease_tenant_id_tenant_id_fk",
-          "tableFrom": "lease",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "tableTo": "tenant",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "lease_unit": {
-      "name": "lease_unit",
-      "columns": {
-        "lease_id": {
-          "name": "lease_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "unit_id": {
-          "name": "unit_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "lease_unit_unit_idx": {
-          "name": "lease_unit_unit_idx",
-          "columns": [
-            "unit_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "lease_unit_lease_id_lease_id_fk": {
-          "name": "lease_unit_lease_id_lease_id_fk",
-          "tableFrom": "lease_unit",
-          "columnsFrom": [
-            "lease_id"
-          ],
-          "tableTo": "lease",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        },
-        "lease_unit_unit_id_unit_id_fk": {
-          "name": "lease_unit_unit_id_unit_id_fk",
-          "tableFrom": "lease_unit",
-          "columnsFrom": [
-            "unit_id"
-          ],
-          "tableTo": "unit",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        },
-        "lease_unit_organization_id_organization_id_fk": {
-          "name": "lease_unit_organization_id_organization_id_fk",
-          "tableFrom": "lease_unit",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "tableTo": "organization",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {
-        "lease_unit_lease_id_unit_id_pk": {
-          "columns": [
-            "lease_id",
-            "unit_id"
-          ],
-          "name": "lease_unit_lease_id_unit_id_pk"
-        }
-      },
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
@@ -967,15 +1121,87 @@
         "organization_settings_organization_id_organization_id_fk": {
           "name": "organization_settings_organization_id_organization_id_fk",
           "tableFrom": "organization_settings",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "ownership_terms": {
+      "name": "ownership_terms",
+      "columns": {
+        "agreement_id": {
+          "name": "agreement_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "organization_id": {
+          "name": "organization_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "share_ratio": {
+          "name": "share_ratio",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deposit_ore": {
+          "name": "deposit_ore",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "granted_on": {
+          "name": "granted_on",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ownership_terms_agreement_id_agreement_id_fk": {
+          "name": "ownership_terms_agreement_id_agreement_id_fk",
+          "tableFrom": "ownership_terms",
+          "tableTo": "agreement",
+          "columnsFrom": [
+            "agreement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ownership_terms_organization_id_organization_id_fk": {
+          "name": "ownership_terms_organization_id_organization_id_fk",
+          "tableFrom": "ownership_terms",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "organization_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1108,41 +1334,41 @@
         "payment_organization_id_organization_id_fk": {
           "name": "payment_organization_id_organization_id_fk",
           "tableFrom": "payment",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "payment_import_id_payment_import_id_fk": {
           "name": "payment_import_id_payment_import_id_fk",
           "tableFrom": "payment",
+          "tableTo": "payment_import",
           "columnsFrom": [
             "import_id"
           ],
-          "tableTo": "payment_import",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         },
         "payment_invoice_id_invoice_id_fk": {
           "name": "payment_invoice_id_invoice_id_fk",
           "tableFrom": "payment",
+          "tableTo": "invoice",
           "columnsFrom": [
             "invoice_id"
           ],
-          "tableTo": "invoice",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "no action"
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1231,28 +1457,28 @@
         "payment_import_organization_id_organization_id_fk": {
           "name": "payment_import_organization_id_organization_id_fk",
           "tableFrom": "payment_import",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "payment_import_imported_by_user_id_user_id_fk": {
           "name": "payment_import_imported_by_user_id_user_id_fk",
           "tableFrom": "payment_import",
+          "tableTo": "user",
           "columnsFrom": [
             "imported_by_user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "set null"
+          "onDelete": "set null",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1334,15 +1560,15 @@
         "property_organization_id_organization_id_fk": {
           "name": "property_organization_id_organization_id_fk",
           "tableFrom": "property",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1408,28 +1634,28 @@
         "submission_organization_id_organization_id_fk": {
           "name": "submission_organization_id_organization_id_fk",
           "tableFrom": "submission",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "submission_user_id_user_id_fk": {
           "name": "submission_user_id_user_id_fk",
           "tableFrom": "submission",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -1542,15 +1768,15 @@
         "tenant_organization_id_organization_id_fk": {
           "name": "tenant_organization_id_organization_id_fk",
           "tableFrom": "tenant",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1647,28 +1873,28 @@
         "unit_organization_id_organization_id_fk": {
           "name": "unit_organization_id_organization_id_fk",
           "tableFrom": "unit",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "unit_property_id_property_id_fk": {
           "name": "unit_property_id_property_id_fk",
           "tableFrom": "unit",
+          "tableTo": "property",
           "columnsFrom": [
             "property_id"
           ],
-          "tableTo": "property",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1784,15 +2010,15 @@
         "account_user_id_user_id_fk": {
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1881,28 +2107,28 @@
         "invitation_organization_id_organization_id_fk": {
           "name": "invitation_organization_id_organization_id_fk",
           "tableFrom": "invitation",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "invitation_inviter_id_user_id_fk": {
           "name": "invitation_inviter_id_user_id_fk",
           "tableFrom": "invitation",
+          "tableTo": "user",
           "columnsFrom": [
             "inviter_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1969,28 +2195,28 @@
         "member_organization_id_organization_id_fk": {
           "name": "member_organization_id_organization_id_fk",
           "tableFrom": "member",
+          "tableTo": "organization",
           "columnsFrom": [
             "organization_id"
           ],
-          "tableTo": "organization",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         },
         "member_user_id_user_id_fk": {
           "name": "member_user_id_user_id_fk",
           "tableFrom": "member",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2145,15 +2371,15 @@
         "session_user_id_user_id_fk": {
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
+          "tableTo": "user",
           "columnsFrom": [
             "user_id"
           ],
-          "tableTo": "user",
           "columnsTo": [
             "id"
           ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2296,9 +2522,9 @@
   "views": {},
   "enums": {},
   "_meta": {
-    "columns": {},
     "schemas": {},
-    "tables": {}
+    "tables": {},
+    "columns": {}
   },
   "internal": {
     "indexes": {}

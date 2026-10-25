@@ -1,5 +1,5 @@
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
 import { Schema } from 'effect'
 import { AlertTriangle, Check, CircleCheck, FileText, Lock } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
@@ -9,6 +9,11 @@ import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { vatNumberFor } from '#/features/invoicing/rules'
+import {
+  type CompanyKind,
+  companyKindLabels,
+  companyKinds,
+} from '#/features/settings/company-kinds'
 import { settingsQuery, updateSettingsFn } from '#/features/settings/functions'
 import { UpdateSettingsInput } from '#/features/settings/schemas'
 import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
@@ -35,6 +40,7 @@ const toValues = (s: Settings) => ({
   email: s.email ?? '',
   phone: s.phone ?? '',
   fSkatt: s.fSkatt,
+  kind: s.kind as CompanyKind,
 })
 type Values = ReturnType<typeof toValues>
 
@@ -45,6 +51,7 @@ function SettingsPage() {
   const canEdit = useCan()({ settings: ['manage'] })
   const { data: settings } = useSuspenseQuery(settingsQuery())
   const queryClient = useQueryClient()
+  const router = useRouter()
   const [baseline, setBaseline] = useState(() => toValues(settings))
   const [saved, setSaved] = useState(false)
 
@@ -53,6 +60,8 @@ function SettingsPage() {
     onSuccess: async (updated) => {
       queryClient.setQueryData(settingsQuery().queryKey, updated)
       await queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true })
+      // The company type sets the navigation's wording, which comes from the route context.
+      await router.invalidate()
     },
   })
 
@@ -95,6 +104,22 @@ function SettingsPage() {
             <div className="grid gap-1.5">
               <span className="font-medium text-sm">{m.tenant_form_company_name()}</span>
               <span className="text-sm">{settings.organizationName}</span>
+            </div>
+            <div className="grid gap-1.5">
+              <form.AppField name="kind">
+                {(field) => (
+                  <field.SegmentedField
+                    label={m.settings_company_kind()}
+                    showLabel
+                    disabled={!canEdit}
+                    options={companyKinds.map((kind) => ({
+                      value: kind,
+                      label: companyKindLabels[kind],
+                    }))}
+                  />
+                )}
+              </form.AppField>
+              <p className="text-muted-foreground text-xs">{m.settings_company_kind_hint()}</p>
             </div>
             <form.AppField name="organizationNumber">
               {(field) => (

@@ -7,6 +7,8 @@ export type Props = {
   recipientName: string
   organizationName: string
   creditNoteNumber: number
+  /** What the credited invoice is called: "Hyresavi" or "Avgiftsavi". */
+  invoiceName: string
   invoiceNumber: number
   invoiceIssueDate: string
   issueDate: string
@@ -49,8 +51,8 @@ export default function CreditNote(props: Props) {
       <EmailHeading>Kreditfaktura {props.creditNoteNumber}</EmailHeading>
       <Paragraph>Hej {props.recipientName}!</Paragraph>
       <Paragraph>
-        {props.organizationName} har krediterat din hyresavi {props.invoiceNumber} (
-        {props.invoiceIssueDate}).{' '}
+        {props.organizationName} har krediterat din {props.invoiceName.toLowerCase()}{' '}
+        {props.invoiceNumber} ({props.invoiceIssueDate}).{' '}
         {props.refund
           ? 'Avin var redan betald, så beloppet betalas tillbaka till dig.'
           : 'Beloppet dras av från det du ska betala på avin.'}
@@ -98,6 +100,7 @@ CreditNote.PreviewProps = {
   recipientName: 'Anna Svensson',
   organizationName: 'Exempel Fastigheter AB',
   creditNoteNumber: 3,
+  invoiceName: 'Hyresavi',
   invoiceNumber: 1042,
   invoiceIssueDate: '2026-09-11',
   issueDate: '2026-10-25',

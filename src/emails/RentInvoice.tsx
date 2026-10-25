@@ -3,6 +3,8 @@ import { EmailHeading, EmailLayout, Paragraph } from './_components/EmailLayout'
 
 // Amounts and dates arrive formatted, so the template has no money or date logic.
 export type Props = {
+  /** "Hyresavi", or "Avgiftsavi" for a bostadsrätt. */
+  documentName: string
   recipientName: string
   organizationName: string
   invoiceNumber: number
@@ -20,7 +22,7 @@ export type Props = {
 }
 
 export const subject = (props: Props) =>
-  `Hyresavi ${props.periodLabel} från ${props.organizationName}`
+  `${props.documentName} ${props.periodLabel} från ${props.organizationName}`
 
 const cell = { fontSize: '14px', lineHeight: '22px', margin: 0 }
 const muted = { ...cell, color: '#71717a' }
@@ -41,11 +43,13 @@ function AmountRow({ label, value, strong }: { label: string; value: string; str
 export default function RentInvoice(props: Props) {
   return (
     <EmailLayout preview={`Att betala ${props.total} senast ${props.dueDate}. OCR ${props.ocr}.`}>
-      <EmailHeading>Hyresavi {props.periodLabel}</EmailHeading>
+      <EmailHeading>
+        {props.documentName} {props.periodLabel}
+      </EmailHeading>
       <Paragraph>Hej {props.recipientName}!</Paragraph>
       <Paragraph>
-        Här är din hyresavi från {props.organizationName}. Betala till bankgiro och ange OCR-numret,
-        så registreras betalningen automatiskt.
+        Här är din {props.documentName.toLowerCase()} från {props.organizationName}. Betala till
+        bankgiro och ange OCR-numret, så registreras betalningen automatiskt.
       </Paragraph>
 
       <Section
@@ -86,6 +90,7 @@ export default function RentInvoice(props: Props) {
 }
 
 RentInvoice.PreviewProps = {
+  documentName: 'Hyresavi',
   recipientName: 'Kaffe AB',
   organizationName: 'Exempel Fastigheter AB',
   invoiceNumber: 1042,

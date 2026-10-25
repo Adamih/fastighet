@@ -16,6 +16,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - `agreement.endDate` is the last billed day. The lease program derives it with `effectiveEndDate` and writes it in the same batch as the lease terms. A lease's fixed-term end is `termEndDate`.
   - Avier copy their recipient from `invoiceRecipient` (`features/agreements/parties.ts`): every party's name, and the address and email of the party that receives the invoices.
   - Occupancy and status rules take any agreement through `agreementTerms` (`features/agreements/terms.ts`).
+- **Company type and wording.** `organization_settings.kind` is `landlord` or `brf`, chosen during onboarding and changeable in settings. The app context carries it as `companyKind`.
+  - UI wording that follows it comes from `companyTerms` (`features/settings/terminology.ts`), e.g. Hyresgäster or Medlemmar.
+  - Documents are named by agreement kind through `documentTerms` (Hyresavi/Hyra or Avgiftsavi/Avgift), so a BRF's rental flats still get hyresavier.
 - **Deleting keeps history.**
   - Delete a record only when nothing depends on it, and check first so the user gets a `Conflict` explaining why. Foreign keys are only the backstop.
   - Units that have ever been on a lease, tenants with leases, and leases with invoices can't be deleted. Terminate the lease instead.

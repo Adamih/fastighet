@@ -24,6 +24,8 @@ import {
   useSidebar,
 } from '#/components/ui/sidebar'
 import { useCan } from '#/features/auth/use-can'
+import type { CompanyKind } from '#/features/settings/company-kinds'
+import { companyTerms } from '#/features/settings/terminology'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import type { Permissions } from '#/lib/permissions'
@@ -31,14 +33,20 @@ import { m } from '#/paraglide/messages'
 
 const navigation = [
   { title: m.nav_properties, to: '/', icon: Building2, permission: { property: ['read'] } },
-  { title: m.nav_tenants, to: '/tenants', icon: Users, permission: { tenant: ['read'] } },
+  {
+    title: (kind: CompanyKind) => companyTerms(kind).parties,
+    to: '/tenants',
+    icon: Users,
+    permission: { tenant: ['read'] },
+  },
   { title: m.nav_leases, to: '/leases', icon: FileText, permission: { lease: ['read'] } },
   { title: m.nav_invoices, to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
   { title: m.nav_payments, to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
   { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined },
   { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
 ] as const satisfies readonly {
-  title: () => string
+  /** Some labels follow the company type (Hyresgäster or Medlemmar). */
+  title: (kind: CompanyKind) => string
   to: string
   icon: typeof Building2
   permission: Permissions | undefined
@@ -84,7 +92,7 @@ export function AppSidebar() {
                           onClick={() => setOpenMobile(false)}
                         >
                           <item.icon aria-hidden="true" />
-                          <span>{item.title()}</span>
+                          <span>{item.title(app.companyKind)}</span>
                         </Link>
                       </SidebarMenuButton>
                     </SidebarMenuItem>

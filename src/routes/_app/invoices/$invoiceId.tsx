@@ -53,6 +53,7 @@ import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
 import { PaymentStatusBadge } from '#/features/payments/components'
+import { documentTerms } from '#/features/settings/terminology'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek, formatSekShort } from '#/lib/money'
 import { cn } from '#/lib/utils'
@@ -527,7 +528,8 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
         </div>
         <div className="sm:text-right print:text-right">
           <h1 className="font-semibold text-2xl">
-            Hyresavi{invoice.status === 'void' && ' (makulerad)'}
+            {documentTerms(invoice.agreement.kind).invoiceTitle}
+            {invoice.status === 'void' && ' (makulerad)'}
             {invoice.status === 'credited' && ' (krediterad)'}
           </h1>
           <dl className="mt-2 grid grid-cols-[auto_auto] justify-start gap-x-4 text-sm sm:justify-end print:justify-end">
@@ -602,7 +604,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
       </section>
 
       <footer className="text-muted-foreground text-xs">
-        Hyra för {period}. Ange OCR-numret vid betalning.
+        {documentTerms(invoice.agreement.kind).charge} för {period}. Ange OCR-numret vid betalning.
         <br />
         {[
           seller.organizationNumber && `Org.nr ${seller.organizationNumber}`,

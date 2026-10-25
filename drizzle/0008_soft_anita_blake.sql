@@ -1,0 +1,1 @@
+ALTER TABLE `organization_settings` ADD `kind` text DEFAULT 'landlord' NOT NULL;

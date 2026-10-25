@@ -57,6 +57,13 @@
       "when": 1792929746109,
       "tag": "0007_agreements",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792946990772,
+      "tag": "0008_soft_anita_blake",
+      "breakpoints": true
     }
   ]
 }

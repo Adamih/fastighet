@@ -4,6 +4,7 @@ import { agreement, creditNote, creditNoteLine, invoice, invoiceLine, payment } 
 import { invoiceRecipient } from '#/features/agreements/parties'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
+import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -108,7 +109,7 @@ export const previewInvoiceRun = (month: string) =>
           agreementNumber: a.number,
           recipient: invoiceRecipient(a.parties),
           period,
-          description: rentLineDescription(unitsOf(a), period),
+          description: rentLineDescription(unitsOf(a), period, a.kind),
           netOre,
           vatOre,
           totalOre: netOre + vatOre,
@@ -343,6 +344,7 @@ export const emailInvoice = (invoiceId: string, options: { skipWithoutEmail?: bo
       to: inv.recipientEmail,
       template: 'rentInvoice',
       props: {
+        documentName: documentTerms(inv.agreement.kind).invoiceTitle,
         recipientName: inv.recipientName,
         organizationName: inv.seller.organizationName,
         invoiceNumber: inv.number,
@@ -536,6 +538,7 @@ export const getCreditNote = (creditNoteId: string) =>
               periodEnd: true,
               paidOn: true,
             },
+            with: { agreement: { columns: { kind: true } } },
           },
         },
       }),
@@ -562,6 +565,7 @@ export const emailCreditNote = (creditNoteId: string) =>
         recipientName: note.recipientName,
         organizationName: note.seller.organizationName,
         creditNoteNumber: note.number,
+        invoiceName: documentTerms(note.invoice.agreement.kind).invoiceTitle,
         invoiceNumber: note.invoice.number,
         invoiceIssueDate: note.invoice.issueDate,
         issueDate: note.issueDate,
@@ -676,7 +680,7 @@ export const previewReissue = (invoiceId: string) =>
       agreementId: billed.id,
       recipient: invoiceRecipient(billed.parties),
       period,
-      description: rentLineDescription(unitsOf(billed), period),
+      description: rentLineDescription(unitsOf(billed), period, billed.kind),
       netOre,
       vatOre,
       totalOre: netOre + vatOre,

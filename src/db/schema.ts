@@ -13,6 +13,7 @@ import { agreementKinds, partyRoles } from '#/features/agreements/kinds'
 import { invoiceIntervals, rentIntervals, tenantKinds } from '#/features/leases/options'
 import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
+import { companyKinds } from '#/features/settings/company-kinds'
 import { organization, user } from './auth-schema'
 
 export * from './auth-schema'
@@ -229,7 +230,7 @@ export const ownershipTermsRelations = relations(ownershipTerms, ({ one }) => ({
   agreement: one(agreement, { fields: [ownershipTerms.agreementId], references: [agreement.id] }),
 }))
 
-/** Seller details printed on invoices. One row per organization, created on first save. */
+/** Seller details printed on invoices, and the company type. One row per organization, created on first save. */
 export const organizationSettings = sqliteTable('organization_settings', {
   organizationId: text('organization_id')
     .primaryKey()
@@ -244,6 +245,8 @@ export const organizationSettings = sqliteTable('organization_settings', {
   phone: text('phone'),
   // Godkänd för F-skatt, printed on invoices.
   fSkatt: integer('f_skatt', { mode: 'boolean' }).notNull().default(true),
+  // A landlord or a BRF; decides the app's wording and defaults.
+  kind: text('kind', { enum: companyKinds }).notNull().default('landlord'),
 })
 
 // Issued invoices are accounting records: they are never deleted, only voided, and their

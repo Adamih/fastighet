@@ -2,6 +2,7 @@ import { Schema } from 'effect'
 import { isValidBankgiro } from '#/features/invoicing/rules'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { Email, OptionalText, PostalCode } from '#/lib/schemas'
+import { companyKinds } from './company-kinds'
 
 export const UpdateSettingsInput = Schema.Struct({
   organizationNumber: Schema.String.check(
@@ -20,5 +21,8 @@ export const UpdateSettingsInput = Schema.Struct({
   email: Email,
   phone: OptionalText,
   fSkatt: Schema.Boolean,
+  kind: Schema.Literals(companyKinds),
 })
 export type UpdateSettingsInput = typeof UpdateSettingsInput.Type
+
+export const SetCompanyKindInput = Schema.Struct({ kind: Schema.Literals(companyKinds) })

@@ -7,6 +7,7 @@ import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
 import { orgQuery } from '#/server/scoped'
 import { CurrentOrganization } from '#/server/services'
+import type { CompanyKind } from './company-kinds'
 import type { UpdateSettingsInput } from './schemas'
 
 /**
@@ -30,6 +31,7 @@ export const loadSettings = Effect.gen(function* () {
     email: row?.email ?? null,
     phone: row?.phone ?? null,
     fSkatt: row?.fSkatt ?? true,
+    kind: row?.kind ?? 'landlord',
   }
 })
 
@@ -53,12 +55,26 @@ export const updateSettings = (input: UpdateSettingsInput) =>
       email: blankToNull(input.email),
       phone: blankToNull(input.phone),
       fSkatt: input.fSkatt,
+      kind: input.kind,
     }
     yield* orgQuery((db, organizationId) =>
       db
         .insert(organizationSettings)
         .values({ organizationId, ...values })
         .onConflictDoUpdate({ target: organizationSettings.organizationId, set: values }),
+    )
+    return yield* loadSettings
+  })
+
+/** Sets the company type on its own, as onboarding does right after creating the company. */
+export const setCompanyKind = (kind: CompanyKind) =>
+  Effect.gen(function* () {
+    yield* requirePermission({ settings: ['manage'] })
+    yield* orgQuery((db, organizationId) =>
+      db
+        .insert(organizationSettings)
+        .values({ organizationId, kind })
+        .onConflictDoUpdate({ target: organizationSettings.organizationId, set: { kind } }),
     )
     return yield* loadSettings
   })

@@ -1,6 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { Effect, Schema } from 'effect'
+import { loadSettings } from '#/features/settings/program'
 import { auth } from '#/lib/auth'
 import { getSessionOrNull, hasAnyMembership, runApp } from '#/server/run'
 import { CurrentOrganization, CurrentUser } from '#/server/services'
@@ -16,9 +17,18 @@ export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () =
   }
 })
 
-/** Signed-in user plus their active company; redirects to /login or /onboarding otherwise. */
+/**
+ * Signed-in user plus their active company and its type (which sets the app's wording);
+ * redirects to /login or /onboarding otherwise.
+ */
 export const getAppContextFn = createServerFn({ method: 'GET' }).handler(() =>
-  runApp(Effect.all({ user: CurrentUser, organization: CurrentOrganization })),
+  runApp(
+    Effect.all({
+      user: CurrentUser,
+      organization: CurrentOrganization,
+      companyKind: Effect.map(loadSettings, (s) => s.kind),
+    }),
+  ),
 )
 
 /**

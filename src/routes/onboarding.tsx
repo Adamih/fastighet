@@ -3,6 +3,12 @@ import { useRef } from 'react'
 import { useAppForm } from '#/components/form'
 import { SubmissionForm } from '#/components/submission-form'
 import { getSessionFn } from '#/features/auth/functions'
+import {
+  type CompanyKind,
+  companyKindLabels,
+  companyKinds,
+} from '#/features/settings/company-kinds'
+import { setCompanyKindFn } from '#/features/settings/functions'
 import { appError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
@@ -30,7 +36,7 @@ function OnboardingPage() {
   const organizationId = useRef<string | null>(null)
 
   const form = useAppForm({
-    defaultValues: { name: '' },
+    defaultValues: { name: '', kind: 'landlord' as CompanyKind },
     onSubmit: async ({ value }) => {
       if (!organizationId.current) {
         const created = await authClient.organization.create({
@@ -45,6 +51,8 @@ function OnboardingPage() {
         organizationId: organizationId.current,
       })
       if (active.error) throw appError('validation', authErrorMessage(active.error))
+      // Retrying after a failure here is safe: setting the type again changes nothing.
+      await setCompanyKindFn({ data: { kind: value.kind } })
       await router.navigate({ to: '/' })
     },
   })
@@ -66,6 +74,19 @@ function OnboardingPage() {
             <field.TextField
               label={m.tenant_form_company_name()}
               placeholder="Exempel Fastigheter AB"
+            />
+          )}
+        </form.AppField>
+
+        <form.AppField name="kind">
+          {(field) => (
+            <field.SegmentedField
+              label={m.onboarding_company_kind()}
+              showLabel
+              options={companyKinds.map((kind) => ({
+                value: kind,
+                label: companyKindLabels[kind],
+              }))}
             />
           )}
         </form.AppField>

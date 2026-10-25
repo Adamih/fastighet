@@ -1,3 +1,5 @@
+import type { AgreementKind } from '#/features/agreements/kinds'
+import { documentTerms } from '#/features/settings/terminology'
 import {
   addDays,
   addMonths,
@@ -153,14 +155,15 @@ export function periodLabel(period: Period): string {
   return `${monthOf(period.start)}–${monthOf(period.end)} ${year}`
 }
 
-/** "Hyra Uppsala Kungsängen 12:3 · 1001, december 2026" */
+/** "Hyra Uppsala Kungsängen 12:3 · 1001, december 2026", or "Avgift …" for a bostadsrätt. */
 export function rentLineDescription(
   units: readonly { designation: string; label: string }[],
   period: Period,
+  kind: AgreementKind = 'lease',
 ): string {
   const objects = units
     .map((u) => `${u.designation} · ${u.label}`)
     .sort()
     .join(', ')
-  return `Hyra ${objects}, ${periodLabel(period)}`
+  return `${documentTerms(kind).charge} ${objects}, ${periodLabel(period)}`
 }
