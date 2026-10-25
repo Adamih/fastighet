@@ -1,10 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { X } from 'lucide-react'
 import { DeleteButton } from '#/components/delete-button'
 import { FieldError, Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { QueryError } from '#/components/query-error'
 import { SubmissionForm } from '#/components/submission-form'
+import { Button } from '#/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select'
+import { MAX_PARTIES } from '#/features/agreements/parties'
 import { useCan } from '#/features/auth/use-can'
 import { unitsQuery } from '#/features/properties/functions'
 import { type UnitKind, unitKindLabels } from '#/features/properties/unit-kinds'
@@ -26,6 +36,9 @@ import type { LeaseView } from './program'
 /** What the form produces; `tenantId` is only set when the form shows the tenant picker. */
 export interface LeaseFormValues {
   tenantId: string
+  coTenantIds: string[]
+  /** Null means the tenant receives the avier. */
+  invoiceRecipientId: string | null
   unitIds: string[]
   startDate: string
   termEndDate: string | null
@@ -39,6 +52,8 @@ export interface LeaseFormValues {
 
 export const emptyLease: LeaseFormValues = {
   tenantId: '',
+  coTenantIds: [],
+  invoiceRecipientId: null,
   unitIds: [],
   startDate: '',
   termEndDate: null,
@@ -65,13 +80,16 @@ const wholeMonths = {
 /** Shared by the create (with tenant picker) and edit (tenant fixed) lease drawers. */
 export function LeaseForm({
   tenants,
+  tenantPicker,
   units,
   defaultValues,
   submitLabel,
   onSubmit,
 }: {
-  /** Omit to hide the tenant picker. */
-  tenants?: readonly { id: string; name: string }[]
+  /** Every tenant, for the pickers. */
+  tenants: readonly { id: string; name: string }[]
+  /** False when editing: the tenant is fixed, co-tenants can still change. */
+  tenantPicker: boolean
   units: readonly { id: string; label: string; kind: UnitKind; designation: string }[]
   defaultValues: LeaseFormValues
   submitLabel: string
@@ -81,6 +99,8 @@ export function LeaseForm({
   const form = useAppForm({
     defaultValues: {
       tenantId: defaultValues.tenantId,
+      coTenantIds: defaultValues.coTenantIds,
+      invoiceRecipientId: defaultValues.invoiceRecipientId ?? '',
       unitIds: defaultValues.unitIds,
       startDate: defaultValues.startDate,
       fixedTerm: defaultValues.termEndDate !== null,
@@ -96,6 +116,12 @@ export function LeaseForm({
     onSubmit: ({ value }) =>
       onSubmit({
         tenantId: value.tenantId,
+        // A co-tenant picked as the tenant isn't also a co-tenant.
+        coTenantIds: value.coTenantIds.filter((id) => id !== value.tenantId),
+        invoiceRecipientId:
+          value.invoiceRecipientId && value.invoiceRecipientId !== value.tenantId
+            ? value.invoiceRecipientId
+            : null,
         unitIds: value.unitIds,
         startDate: value.startDate,
         termEndDate: value.fixedTerm ? value.termEndDate : null,
@@ -112,7 +138,7 @@ export function LeaseForm({
   return (
     <SubmissionForm form={form} id={drawer?.formId} className="grid gap-6">
       <fieldset className="grid gap-6">
-        {tenants && (
+        {tenantPicker && (
           <form.AppField name="tenantId" validators={required(m.lease_form_tenant_required())}>
             {(field) => (
               <field.SelectField
@@ -123,6 +149,104 @@ export function LeaseForm({
             )}
           </form.AppField>
         )}
+
+        <form.Subscribe selector={(s) => s.values.tenantId}>
+          {(tenantId) => (
+            <form.AppField name="coTenantIds">
+              {(field) => {
+                const nameOf = (id: string) => tenants.find((t) => t.id === id)?.name ?? ''
+                const chosen = field.state.value.filter((id) => id !== tenantId)
+                const available = tenants.filter((t) => t.id !== tenantId && !chosen.includes(t.id))
+                const remove = (id: string) => {
+                  field.handleChange(field.state.value.filter((other) => other !== id))
+                  if (form.getFieldValue('invoiceRecipientId') === id) {
+                    form.setFieldValue('invoiceRecipientId', '')
+                  }
+                }
+                return (
+                  <fieldset className="grid gap-2">
+                    <legend className="mb-1 font-medium text-sm">
+                      <Optional>{m.lease_form_co_tenants()}</Optional>
+                    </legend>
+                    {chosen.length > 0 && (
+                      <ul className="grid gap-1.5">
+                        {chosen.map((id) => (
+                          <li
+                            key={id}
+                            className="flex items-center justify-between gap-2 rounded-md border py-1 pr-1 pl-3 text-sm"
+                          >
+                            <span className="truncate">{nameOf(id)}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-11 sm:size-8"
+                              aria-label={m.lease_form_remove_co_tenant({ name: nameOf(id) })}
+                              onClick={() => remove(id)}
+                            >
+                              <X aria-hidden="true" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {available.length > 0 && chosen.length < MAX_PARTIES - 1 && (
+                      // Picking a name adds it; the picker then resets to its placeholder.
+                      <Select value="" onValueChange={(id) => field.handleChange([...chosen, id])}>
+                        <SelectTrigger
+                          aria-label={m.lease_form_add_co_tenant()}
+                          className="w-full data-[size=default]:h-11 sm:data-[size=default]:h-9"
+                        >
+                          <SelectValue placeholder={m.lease_form_add_co_tenant()} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {available.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <p className="text-muted-foreground text-sm">
+                      {m.lease_form_co_tenants_hint()}
+                    </p>
+                  </fieldset>
+                )
+              }}
+            </form.AppField>
+          )}
+        </form.Subscribe>
+
+        <form.Subscribe
+          selector={(s) => [s.values.tenantId, s.values.coTenantIds.join(',')] as const}
+        >
+          {([tenantId, coTenants]) => {
+            const ids = [tenantId, ...coTenants.split(',')].filter(Boolean)
+            if (!tenantId || ids.length < 2) return null
+            const options = [...new Set(ids)].map((id) => ({
+              value: id,
+              label: tenants.find((t) => t.id === id)?.name ?? '',
+            }))
+            return (
+              <form.AppField name="invoiceRecipientId">
+                {(field) => (
+                  <div className="grid gap-1.5">
+                    <field.SelectField
+                      label={m.lease_form_invoice_recipient()}
+                      // Blank means the tenant, so the tenant's name stands in until another is chosen.
+                      placeholder={options[0].label}
+                      options={options}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      {m.lease_form_invoice_recipient_hint()}
+                    </p>
+                  </div>
+                )}
+              </form.AppField>
+            )
+          }}
+        </form.Subscribe>
 
         <form.AppField
           name="unitIds"
@@ -320,6 +444,7 @@ export function useAddLeaseDrawer(unitId?: string) {
       return (
         <LeaseForm
           tenants={tenants.data}
+          tenantPicker
           units={units.data}
           defaultValues={{
             ...emptyLease,
@@ -336,7 +461,7 @@ export function useAddLeaseDrawer(unitId?: string) {
   })
 }
 
-/** Fetch the unit choices only when an edit drawer is opened. */
+/** Fetch the unit and tenant choices only when an edit drawer is opened. */
 function EditLeaseForm({
   lease,
   onSubmit,
@@ -345,16 +470,25 @@ function EditLeaseForm({
   onSubmit: (value: LeaseFormValues) => Promise<unknown>
 }) {
   const units = useQuery(unitsQuery())
-  if (units.error)
+  const tenants = useQuery(tenantsQuery())
+  const failed = units.error ? units : tenants.error ? tenants : null
+  if (failed)
     return (
-      <QueryError error={units.error} pending={units.isFetching} retry={() => units.refetch()} />
+      <QueryError error={failed.error} pending={failed.isFetching} retry={() => failed.refetch()} />
     )
-  if (!units.data) return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
+  if (!units.data || !tenants.data) {
+    return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
+  }
+  const receiver = lease.parties.find((p) => p.receivesInvoices)
   return (
     <LeaseForm
+      tenants={tenants.data}
+      tenantPicker={false}
       units={units.data}
       defaultValues={{
         tenantId: lease.tenant.id,
+        coTenantIds: lease.parties.filter((p) => p.id !== lease.tenant.id).map((p) => p.id),
+        invoiceRecipientId: receiver && receiver.id !== lease.tenant.id ? receiver.id : null,
         unitIds: lease.units.map((u) => u.id),
         startDate: lease.startDate,
         termEndDate: lease.termEndDate,
@@ -399,7 +533,7 @@ export function useEditLeaseDrawer(lease: LeaseView) {
   return useFormDrawer({
     size: 'wide',
     title: m.lease_edit_title({ number: lease.number }),
-    description: m.lease_edit_intro({ tenant: lease.tenant.name }),
+    description: m.lease_edit_intro({ tenant: lease.partyNames }),
     onClose: () => {
       update.reset()
       remove.reset()

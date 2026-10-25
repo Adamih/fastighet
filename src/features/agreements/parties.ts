@@ -48,3 +48,43 @@ export const primaryParty = <P extends { position: number }>(parties: readonly P
   if (!first) throw new Error('An agreement has at least one party')
   return first
 }
+
+export type PartiesProblem = 'duplicate' | 'too_many' | 'receiver'
+
+/** A lease has at most this many tenants. */
+export const MAX_PARTIES = 6
+
+/**
+ * The party rows for a lease: the tenant first, then co-tenants in the order given, with exactly
+ * one receiving the invoices (`receiverId`, or the tenant when null).
+ */
+export function leaseParties(
+  tenantId: string,
+  coTenantIds: readonly string[],
+  receiverId: string | null,
+):
+  | {
+      ok: true
+      parties: {
+        tenantId: string
+        role: 'tenant' | 'co_tenant'
+        receivesInvoices: boolean
+        position: number
+      }[]
+    }
+  | { ok: false; problem: PartiesProblem } {
+  const ids = [tenantId, ...coTenantIds]
+  if (new Set(ids).size !== ids.length) return { ok: false, problem: 'duplicate' }
+  if (ids.length > MAX_PARTIES) return { ok: false, problem: 'too_many' }
+  const receiver = receiverId ?? tenantId
+  if (!ids.includes(receiver)) return { ok: false, problem: 'receiver' }
+  return {
+    ok: true,
+    parties: ids.map((id, index) => ({
+      tenantId: id,
+      role: index === 0 ? 'tenant' : 'co_tenant',
+      receivesInvoices: id === receiver,
+      position: index + 1,
+    })),
+  }
+}

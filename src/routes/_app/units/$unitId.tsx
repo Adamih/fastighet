@@ -199,7 +199,7 @@ function UnitPage() {
                               params={{ leaseId: l.id }}
                               className="truncate font-semibold underline-offset-4 hover:underline"
                             >
-                              {l.tenant.name}
+                              {l.tenantName}
                             </Link>
                             <span className="truncate text-muted-foreground tabular-nums">
                               {l.startDate.slice(0, 4)}–{(effectiveEndDate(l) ?? '').slice(0, 4)} ·
@@ -257,7 +257,7 @@ function LeaseRow({ lease }: { lease: UnitLease }) {
           params={{ leaseId: lease.id }}
           className="truncate font-semibold underline-offset-4 hover:underline"
         >
-          {lease.tenant.name}
+          {lease.tenantName}
         </Link>
         <span className="truncate text-muted-foreground tabular-nums">
           {m.unit_lease_period({ number: lease.number, period: formatPeriod(lease) })}

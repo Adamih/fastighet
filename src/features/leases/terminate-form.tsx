@@ -79,7 +79,7 @@ export function useTerminateLeaseDrawer(lease: LeaseView) {
     title: m.terminate_title(),
     description: m.terminate_description({
       number: lease.number,
-      tenant: lease.tenant.name,
+      tenant: lease.partyNames,
       months: lease.noticePeriodMonths,
     }),
     onClose: terminate.reset,

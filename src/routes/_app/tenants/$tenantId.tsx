@@ -203,6 +203,7 @@ function TenantPage() {
                           </Link>
                           <span className="truncate text-muted-foreground tabular-nums">
                             {formatPeriod(l)}
+                            {l.role === 'co_tenant' && <> · {m.lease_co_tenant()}</>}
                           </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-3">

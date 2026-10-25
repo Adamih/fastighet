@@ -111,7 +111,7 @@ function LeasePage() {
       <DetailHeader
         back={{ label: m.nav_leases(), to: '/leases' }}
         crumb={m.lease_number({ number: lease.number })}
-        title={lease.tenant.name}
+        title={lease.partyNames}
         badge={<LeaseStatusBadge status={lease.status} />}
         meta={[
           m.lease_number({ number: lease.number }),
@@ -174,44 +174,59 @@ function LeasePage() {
         }
         side={
           <>
-            <Panel title={m.lease_form_tenant()}>
-              <div className="flex items-center gap-3">
-                <InitialsAvatar name={lease.tenant.name} square={lease.tenant.kind === 'company'} />
-                <div className="grid min-w-0 gap-0.5 text-[13px]">
-                  <Link
-                    to="/tenants/$tenantId"
-                    params={{ tenantId: lease.tenant.id }}
-                    className="truncate font-semibold underline-offset-4 hover:underline"
-                  >
-                    {lease.tenant.name}
-                  </Link>
-                  <span className="text-muted-foreground">
-                    {tenantKindLabels[lease.tenant.kind]}
-                  </span>
-                </div>
-              </div>
-              {lease.contact && (lease.contact.email || lease.contact.phone) && (
-                <div className="grid gap-1.5 text-[13px]">
-                  {lease.contact.email && (
-                    <a
-                      href={`mailto:${lease.contact.email}`}
-                      className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground"
-                    >
-                      <Mail aria-hidden="true" className="size-3.5 shrink-0" />
-                      <span className="truncate">{lease.contact.email}</span>
-                    </a>
-                  )}
-                  {lease.contact.phone && (
-                    <a
-                      href={`tel:${lease.contact.phone.replace(/[^\d+]/g, '')}`}
-                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                    >
-                      <Phone aria-hidden="true" className="size-3.5 shrink-0" />
-                      {lease.contact.phone}
-                    </a>
-                  )}
-                </div>
-              )}
+            <Panel title={lease.parties.length > 1 ? m.lease_tenants() : m.lease_form_tenant()}>
+              <ul className="grid gap-4">
+                {lease.parties.map((party) => (
+                  <li key={party.id} className="grid gap-2.5">
+                    <div className="flex items-center gap-3">
+                      <InitialsAvatar name={party.name} square={party.kind === 'company'} />
+                      <div className="grid min-w-0 gap-0.5 text-[13px]">
+                        <Link
+                          to="/tenants/$tenantId"
+                          params={{ tenantId: party.id }}
+                          className="truncate font-semibold underline-offset-4 hover:underline"
+                        >
+                          {party.name}
+                        </Link>
+                        <span className="text-muted-foreground">
+                          {[
+                            party.role === 'co_tenant'
+                              ? m.lease_co_tenant()
+                              : tenantKindLabels[party.kind],
+                            lease.parties.length > 1 && party.receivesInvoices
+                              ? m.lease_receives_invoices()
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </div>
+                    </div>
+                    {party.contact && (party.contact.email || party.contact.phone) && (
+                      <div className="grid gap-1.5 text-[13px]">
+                        {party.contact.email && (
+                          <a
+                            href={`mailto:${party.contact.email}`}
+                            className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground"
+                          >
+                            <Mail aria-hidden="true" className="size-3.5 shrink-0" />
+                            <span className="truncate">{party.contact.email}</span>
+                          </a>
+                        )}
+                        {party.contact.phone && (
+                          <a
+                            href={`tel:${party.contact.phone.replace(/[^\d+]/g, '')}`}
+                            className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                          >
+                            <Phone aria-hidden="true" className="size-3.5 shrink-0" />
+                            {party.contact.phone}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </Panel>
             <Panel
               title={

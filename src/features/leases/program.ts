@@ -9,7 +9,12 @@ import {
   tenant,
   unit,
 } from '#/db/schema'
-import { primaryParty } from '#/features/agreements/parties'
+import {
+  joinNames,
+  leaseParties,
+  type PartiesProblem,
+  primaryParty,
+} from '#/features/agreements/parties'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -47,6 +52,8 @@ const toView = ({ leaseTerms: terms, parties, ...row }: LeaseRow, on: string) =>
     ...lease,
     /** The tenant named first; the one the lease pages show. */
     tenant: primaryParty(parties).tenant,
+    /** Every tenant's name, as the avier print them. */
+    partyNames: joinNames(parties.map((p) => p.tenant.name)),
     parties: parties.map((p) => ({
       ...p.tenant,
       role: p.role,
@@ -100,15 +107,28 @@ export const getLease = (leaseId: string) =>
     if (!row) return yield* new NotFound({ entity: 'lease', id: leaseId })
     const view = toView(row, yield* today)
     // Contact details are tenant data, shown only to those who may read tenants.
-    const contact = (yield* hasPermission({ tenant: ['read'] }))
+    const contacts = (yield* hasPermission({ tenant: ['read'] }))
       ? yield* orgQuery((db, organizationId) =>
-          db.query.tenant.findFirst({
-            columns: { email: true, phone: true },
-            where: and(eq(tenant.id, view.tenant.id), eq(tenant.organizationId, organizationId)),
+          db.query.tenant.findMany({
+            columns: { id: true, email: true, phone: true },
+            where: and(
+              eq(tenant.organizationId, organizationId),
+              inArray(
+                tenant.id,
+                view.parties.map((p) => p.id),
+              ),
+            ),
           }),
         )
-      : undefined
-    return { ...view, contact: contact ?? null }
+      : []
+    const contactOf = (tenantId: string) => {
+      const found = contacts.find((c) => c.id === tenantId)
+      return found ? { email: found.email, phone: found.phone } : null
+    }
+    return {
+      ...view,
+      parties: view.parties.map((p) => ({ ...p, contact: contactOf(p.id) })),
+    }
   })
 
 /**
@@ -165,6 +185,39 @@ const checkLeaseTerms = (
     return unitIds
   })
 
+const partiesProblemMessages: Record<PartiesProblem, string> = {
+  duplicate: 'Samma hyresgäst är vald flera gånger',
+  too_many: 'Ett avtal kan ha högst sex hyresgäster',
+  receiver: 'Välj vem som ska få avierna bland avtalets hyresgäster',
+}
+
+/** The lease's party rows, after checking that every co-tenant belongs to the company. */
+const checkParties = (
+  tenantId: string,
+  input: { coTenantIds: readonly string[]; invoiceRecipientId: string | null },
+) =>
+  Effect.gen(function* () {
+    const result = leaseParties(tenantId, input.coTenantIds, input.invoiceRecipientId)
+    if (!result.ok) return yield* new Conflict({ message: partiesProblemMessages[result.problem] })
+    if (input.coTenantIds.length > 0) {
+      const found = yield* orgQuery((db, organizationId) =>
+        db
+          .select({ id: tenant.id })
+          .from(tenant)
+          .where(
+            and(
+              eq(tenant.organizationId, organizationId),
+              inArray(tenant.id, [...input.coTenantIds]),
+            ),
+          ),
+      )
+      if (found.length !== input.coTenantIds.length) {
+        return yield* new NotFound({ entity: 'tenant', id: input.coTenantIds.join(',') })
+      }
+    }
+    return result.parties
+  })
+
 export const createLease = (input: CreateLeaseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
@@ -179,6 +232,7 @@ export const createLease = (input: CreateLeaseInput) =>
     if (!owner) return yield* new NotFound({ entity: 'tenant', id: input.tenantId })
 
     const unitIds = yield* checkLeaseTerms({ ...input, extensionMonths, moveOutDate: null })
+    const parties = yield* checkParties(owner.id, input)
 
     const leaseId = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
@@ -207,14 +261,9 @@ export const createLease = (input: CreateLeaseInput) =>
           extensionMonths,
           noticePeriodMonths: input.noticePeriodMonths,
         }),
-        db.insert(agreementParty).values({
-          agreementId: leaseId,
-          tenantId: owner.id,
-          organizationId,
-          role: 'tenant',
-          receivesInvoices: true,
-          position: 1,
-        }),
+        db
+          .insert(agreementParty)
+          .values(parties.map((p) => ({ ...p, agreementId: leaseId, organizationId }))),
         db
           .insert(agreementUnit)
           .values(unitIds.map((unitId) => ({ agreementId: leaseId, unitId, organizationId }))),
@@ -243,7 +292,8 @@ const invoiceHistory = (leaseId: string) =>
   )
 
 /**
- * Changes the lease's units, dates and rent. The tenant stays: a new tenant is a new lease.
+ * Changes the lease's units, co-tenants, dates and rent. The tenant stays: a new tenant is a new
+ * lease.
  * Issued invoices are not touched, so the new terms only affect future invoice runs.
  */
 export const updateLease = (input: UpdateLeaseInput) =>
@@ -263,6 +313,7 @@ export const updateLease = (input: UpdateLeaseInput) =>
       { ...input, extensionMonths, moveOutDate: current.moveOutDate },
       current.id,
     )
+    const parties = yield* checkParties(current.tenant.id, input)
 
     yield* orgQuery((db, organizationId) =>
       db.batch([
@@ -294,6 +345,17 @@ export const updateLease = (input: UpdateLeaseInput) =>
               eq(leaseTerms.organizationId, organizationId),
             ),
           ),
+        db
+          .delete(agreementParty)
+          .where(
+            and(
+              eq(agreementParty.agreementId, current.id),
+              eq(agreementParty.organizationId, organizationId),
+            ),
+          ),
+        db
+          .insert(agreementParty)
+          .values(parties.map((p) => ({ ...p, agreementId: current.id, organizationId }))),
         db
           .delete(agreementUnit)
           .where(

@@ -6,6 +6,10 @@ export const LeaseIdInput = Schema.Struct({ leaseId: Schema.String })
 
 export const CreateLeaseInput = Schema.Struct({
   tenantId: Schema.String.check(Schema.isMinLength(1, { message: 'Välj en hyresgäst' })),
+  /** Others on the lease besides the tenant (medhyresgäster). */
+  coTenantIds: Schema.Array(Schema.String),
+  /** Who receives the avier; null means the tenant. */
+  invoiceRecipientId: Schema.NullOr(Schema.String),
   unitIds: Schema.Array(Schema.String).check(
     Schema.isMinLength(1, { message: 'Välj minst ett objekt' }),
   ),
@@ -20,7 +24,7 @@ export const CreateLeaseInput = Schema.Struct({
 })
 export type CreateLeaseInput = typeof CreateLeaseInput.Type
 
-/** Everything but the tenant: a different tenant is a different lease. */
+/** Everything but the tenant: a different tenant is a different lease. Co-tenants may change. */
 const { tenantId: _tenantId, ...editableLeaseFields } = CreateLeaseInput.fields
 export const UpdateLeaseInput = Schema.Struct({ leaseId: Schema.String, ...editableLeaseFields })
 export type UpdateLeaseInput = typeof UpdateLeaseInput.Type

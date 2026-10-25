@@ -91,7 +91,7 @@ function LeasesPage() {
     (l) =>
       (filter === 'all' || l.status === filter) &&
       (!needle ||
-        [l.tenant.name, ...l.units.flatMap((u) => [u.designation, u.label])]
+        [...l.parties.map((p) => p.name), ...l.units.flatMap((u) => [u.designation, u.label])]
           .join(' ')
           .toLowerCase()
           .includes(needle)),
@@ -372,7 +372,7 @@ function LeaseRow({
             params={{ leaseId: lease.id }}
             className="font-semibold underline-offset-4 hover:underline"
           >
-            {lease.tenant.name}
+            {lease.partyNames}
           </Link>
           <span className="whitespace-nowrap text-muted-foreground text-xs">
             Avtal #{lease.number} · {tenantKindLabels[lease.tenant.kind]}
@@ -452,7 +452,7 @@ function LeaseCard({ lease, timeline }: { lease: LeaseView; timeline: Timeline }
       >
         <span className="flex items-start justify-between gap-2">
           <span className="grid min-w-0 gap-1">
-            <span className="truncate font-semibold text-base">{lease.tenant.name}</span>
+            <span className="truncate font-semibold text-base">{lease.partyNames}</span>
             <span className="truncate text-muted-foreground text-sm">
               {units.designations}
               {units.labels.length === 1 && ` · ${units.labels[0]}`}

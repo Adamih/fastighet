@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, tenant } from '#/db/schema'
+import type { PartyRole } from '#/features/agreements/kinds'
 import { agreementTerms } from '#/features/agreements/terms'
 import { invoiceStatus } from '#/features/invoicing/rules'
 import { leaseStatus } from '#/features/leases/terms'
@@ -18,13 +19,14 @@ const manage: Permissions = { tenant: ['manage'] }
 
 /** A party's agreements (leases, or a bostadsrätt), newest first, with lease-shaped terms. */
 const partyAgreements = <A extends Parameters<typeof agreementTerms>[0] & { number: number }>(
-  parties: readonly { agreement: A }[],
+  parties: readonly { role: PartyRole; agreement: A }[],
   on: string,
 ) =>
   parties
-    .map(({ agreement }) => {
+    .map(({ role, agreement }) => {
       const terms = agreementTerms(agreement)
-      return { ...agreement, ...terms, status: leaseStatus(terms, on) }
+      /** The tenant's own place on it: `co_tenant` when someone else's lease. */
+      return { ...agreement, ...terms, role, status: leaseStatus(terms, on) }
     })
     .sort((a, b) => b.number - a.number)
 
