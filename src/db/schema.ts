@@ -284,6 +284,41 @@ export const brfApartment = sqliteTable(
   (t) => [sameCompany(t, t.unitId, unit).onDelete('cascade')],
 )
 
+// A pledge (pantsättning) of a bostadsrätt, as notified by the lender, for the apartment register
+// (bostadsrättslagen 9 kap.). Kept for good: a release closes it, and a mistake is corrected by
+// releasing with a note. Priority among a right's pledges follows `notifiedOn`; rules in
+// `features/pledges/rules.ts`. A pledge stays on the right it was given on; a sale never moves it.
+export const pledge = sqliteTable(
+  'pledge',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    /** The bostadsrätt (`agreement` of kind `tenant_ownership`). */
+    agreementId: text('agreement_id').notNull(),
+    /** The lender (panthavare), usually a bank. */
+    creditorName: text('creditor_name').notNull(),
+    creditorOrganizationNumber: text('creditor_organization_number'),
+    /** The lender's own reference, e.g. a loan or case number. */
+    reference: text('reference'),
+    /** The day the lender's notice reached the förening; sets the priority. */
+    notifiedOn: text('notified_on').notNull(),
+    note: text('note'),
+    registeredBy: text('registered_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    /** The day the release was registered; from then on the pledge is no longer in force. */
+    releasedOn: text('released_on'),
+    /** At whose request, or why (e.g. "På begäran av Banken AB", "Registrerad av misstag"). */
+    releaseNote: text('release_note'),
+    releasedBy: text('released_by').references(() => user.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    companyKey('pledge', t),
+    // No cascade: a bostadsrätt with pledges can't be deleted (`deleteOwnership` explains why).
+    sameCompany(t, t.agreementId, agreement),
+    index('pledge_org_agreement_idx').on(t.organizationId, t.agreementId),
+  ],
+)
+
 // A lease's index clause (indexklausul): part of the base rent follows KPI, adjusted each year
 // by an `index` charge. Commercial leases of at least three years only (12 kap. 19 § JB); rules
 // in `features/indexation/rules.ts`.
@@ -374,6 +409,11 @@ export const agreementRelations = relations(agreement, ({ one, many }) => ({
   ownershipTerms: one(ownershipTerms),
   indexClause: one(indexClause),
   invoices: many(invoice),
+  pledges: many(pledge),
+}))
+
+export const pledgeRelations = relations(pledge, ({ one }) => ({
+  agreement: one(agreement, { fields: [pledge.agreementId], references: [agreement.id] }),
 }))
 
 export const agreementUnitRelations = relations(agreementUnit, ({ one }) => ({

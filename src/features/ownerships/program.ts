@@ -30,10 +30,17 @@ import {
 } from '#/features/agreements/program'
 import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus } from '#/features/leases/terms'
+import {
+  activePledgeCounts,
+  activePledgesOf,
+  pledgesFor,
+  releaseStatements,
+} from '#/features/pledges/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
+import { CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import { sellersLastDay, type TransferProblem, transferProblem } from './rules'
 import type { CreateOwnershipInput, TransferOwnershipInput, UpdateOwnershipInput } from './schemas'
@@ -138,7 +145,8 @@ export const listOwnerships = Effect.gen(function* () {
     }),
   )
   const on = yield* today
-  return rows.map((row) => toView(row, on))
+  const pledges = yield* activePledgeCounts(rows.map((r) => r.id))
+  return rows.map((row) => ({ ...toView(row, on), activePledges: pledges.get(row.id) ?? 0 }))
 })
 
 /** The bostadsrätt with its owners' contact details, and the ones before and after a sale. */
@@ -191,6 +199,8 @@ export const getOwnership = (ownershipId: string) =>
       : []
     return {
       ...view,
+      /** In priority order: active ones numbered, then released ones. */
+      pledges: (yield* pledgesFor([view.id])).get(view.id) ?? [],
       /** One-off charges an avi in force has billed; the rest are still to come. */
       billedChargeIds: [...(yield* billedOnceChargeIds([view.id]))],
       owners: view.owners.map((o) => {
@@ -386,6 +396,17 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
     const problem = transferProblem(seller, input.transferDate)
     if (problem) return yield* new Conflict({ message: transferProblemMessages[problem] })
     const parties = yield* checkOwners(input)
+    // Pledges stay on the sellers' right. Those the lenders have asked to release can be released
+    // in the same step; any left in force are the board's to follow up.
+    const on = yield* today
+    const active = yield* activePledgesOf(seller.id, on)
+    const releaseIds = [...new Set(input.releasePledgeIds ?? [])]
+    if (releaseIds.some((id) => !active.some((p) => p.id === id))) {
+      return yield* new Conflict({
+        message: 'En av pantsättningarna är inte längre registrerad på bostadsrätten',
+      })
+    }
+    const me = yield* CurrentUser
     const unitIds = yield* checkUnitsFree(
       seller.units.map((u) => u.id),
       { start: input.transferDate, end: null },
@@ -446,6 +467,11 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
             fromDate: input.transferDate,
           })),
         ),
+        ...releaseStatements(db, organizationId, releaseIds, {
+          releasedOn: on,
+          note: 'Avregistrerad vid överlåtelsen',
+          userId: me.id,
+        }),
       ]),
     )
     return { id }
@@ -469,6 +495,12 @@ export const deleteOwnership = (ownershipId: string) =>
     if (current.next) {
       return yield* new Conflict({
         message: `Bostadsrätten är överlåten (bostadsrätt ${current.next.number}). Ta bort den först.`,
+      })
+    }
+    // The apartment register keeps every pledge, so a bostadsrätt that has had one stays.
+    if (current.pledges.length > 0) {
+      return yield* new Conflict({
+        message: 'Bostadsrätten har pantsättningar i lägenhetsförteckningen och kan inte tas bort.',
       })
     }
     const previous = current.previous

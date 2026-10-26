@@ -42,5 +42,7 @@ export const TransferOwnershipInput = Schema.Struct({
   transferDate: IsoDate,
   owners: Owners,
   invoiceRecipientId: Schema.NullOr(Schema.String),
+  /** The sellers' pledges to release in the same step (the lenders have asked for it). */
+  releasePledgeIds: Schema.optional(Schema.Array(Schema.String)),
 })
 export type TransferOwnershipInput = typeof TransferOwnershipInput.Type

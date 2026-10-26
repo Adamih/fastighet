@@ -116,6 +116,7 @@ function OwnershipsPage() {
                     <th className={th}>{m.ownership_units()}</th>
                     <th className={cn(th, 'text-right')}>{m.ownership_share_ratio_label()}</th>
                     <th className={cn(th, 'text-right')}>{m.ownership_fee_label()}</th>
+                    <th className={cn(th, 'text-right')}>{m.pledge_active_count()}</th>
                     <th className={th}>{m.common_status()}</th>
                   </tr>
                 </thead>
@@ -144,6 +145,9 @@ function OwnershipsPage() {
                       >
                         {formatSekShort(o.rentOre)}
                       </td>
+                      <td className={cn(td, 'text-right tabular-nums')}>
+                        {o.activePledges > 0 ? o.activePledges : '–'}
+                      </td>
                       <td className={td}>
                         <LeaseStatusBadge
                           status={o.status}
@@ -169,7 +173,15 @@ function OwnershipsPage() {
                           {o.ownerNames}
                         </RowTitle>
                         <RowMeta>
-                          {m.ownership_number({ number: o.number })} · {unitsOf(o)}
+                          {[
+                            m.ownership_number({ number: o.number }),
+                            unitsOf(o),
+                            o.activePledges > 0
+                              ? `${m.pledge_active_count()} ${o.activePledges}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
                         </RowMeta>
                         <span>
                           <LeaseStatusBadge

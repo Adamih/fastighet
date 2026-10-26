@@ -12,6 +12,7 @@ export type AuditEntity =
   | 'invoice'
   | 'creditNote'
   | 'payment'
+  | 'pledge'
   /** A user: the one invited, joining, changed or removed. */
   | 'user'
   | 'invitation'
@@ -56,6 +57,8 @@ export const auditActions = {
   'ownership.update': action(m.audit_ownership_update, 'agreement'),
   'ownership.transfer': action(m.audit_ownership_transfer, 'agreement'),
   'ownership.delete': action(m.audit_ownership_delete),
+  'pledge.register': action(m.audit_pledge_register, 'pledge'),
+  'pledge.release': action(m.audit_pledge_release, 'pledge'),
   'payment.import': action(m.audit_payment_import),
   'payment.assign': action(m.audit_payment_assign, 'payment'),
   'payment.ignore': action(m.audit_payment_ignore, 'payment'),

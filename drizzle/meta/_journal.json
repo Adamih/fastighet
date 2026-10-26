@@ -43,6 +43,13 @@
       "when": 1793029394093,
       "tag": "0005_audit_details",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793031622669,
+      "tag": "0006_pledges",
+      "breakpoints": true
     }
   ]
 }

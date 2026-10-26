@@ -28,6 +28,7 @@ import { ownershipStatusLabels } from '#/features/ownerships/labels'
 import { useEditOwnershipDrawer } from '#/features/ownerships/ownership-form'
 import { formatShareRatio } from '#/features/ownerships/rules'
 import { useTransferOwnershipDrawer } from '#/features/ownerships/transfer-form'
+import { PledgesPanel } from '#/features/pledges/pledges-panel'
 import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { m } from '#/paraglide/messages'
@@ -231,6 +232,7 @@ function OwnershipPage() {
                 ))}
               </ul>
             </Panel>
+            <PledgesPanel ownership={ownership} canManage={can({ lease: ['manage'] })} />
             <ChargesPanel
               agreement={ownership}
               units={ownership.unitRows}

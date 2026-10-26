@@ -1652,10 +1652,10 @@ async function seedBrf() {
     [b, half[1]],
   ]
   const [f1001, f1002, f1003, f1101, f1102, f1103, f1201, f1202, f1203, f1301] = flats
-  owned(f1001, couple('Karin Lund', 'Per Lund'), '2015-09-01')
+  const lunds = owned(f1001, couple('Karin Lund', 'Per Lund'), '2015-09-01')
   owned(f1002, [['Hanna Berg', 100]], '2019-03-01')
   owned(f1003, [['Jonas Ek', 100]], '2022-06-01')
-  owned(
+  const holm = owned(
     f1101,
     [
       ['Lina Holm', 60],
@@ -1671,7 +1671,7 @@ async function seedBrf() {
   owned(f1202, couple('Rut Åberg', 'Nils Åberg'), '2010-04-01')
   owned(f1203, [['Tove Lindgren', 100]], '2023-01-01')
   owned(f1301, couple('Elsa Strand', 'Viktor Strand'), '2017-10-01')
-  owned(f1103, [['Mats Wik', 100]], soldOn, { previousAgreementId: sold.id })
+  const wik = owned(f1103, [['Mats Wik', 100]], soldOn, { previousAgreementId: sold.id })
 
   // The board raised every fee by 4 % two months ago, decided well before the run went out.
   const feeRaise = addMonths(thisMonth, -2)
@@ -1774,6 +1774,39 @@ async function seedBrf() {
   })
   await insertAll(schema.agreementParty, parties)
   await insertAll(schema.agreementUnit, links)
+
+  // Pledges in the apartment register: the Lunds have two loans (the second bank ranks after
+  // the first), Lina and Omar one, and 1103 shows a sale: Ida's bank released its pledge when she
+  // sold, and Mats's bank registered a new one on his bostadsrätt before he moved in.
+  const pledge = (
+    agreementId: string,
+    creditorName: string,
+    notifiedOn: string,
+    extra: Partial<typeof schema.pledge.$inferInsert> = {},
+  ) => ({
+    organizationId: orgId,
+    agreementId,
+    creditorName,
+    notifiedOn,
+    registeredBy: board.id,
+    createdAt: new Date(`${notifiedOn}T10:00:00Z`),
+    ...extra,
+  })
+  await insertAll(schema.pledge, [
+    pledge(lunds.id, 'Exempelbanken AB', '2015-08-20', {
+      creditorOrganizationNumber: formatOrganizationNumber(withCheckDigit('502000000')),
+      reference: 'BL-449120',
+    }),
+    pledge(lunds.id, 'Sparbanken Exempel', '2021-04-12', { reference: '7731-22' }),
+    pledge(holm.id, 'Bolånebanken AB', '2020-10-15', { reference: 'H-20-0193' }),
+    pledge(sold.id, 'Exempelbanken AB', '2018-01-18', {
+      reference: 'BL-300877',
+      releasedOn: addDays(soldOn, -1),
+      releaseNote: 'På begäran av Exempelbanken AB vid försäljningen',
+      releasedBy: board.id,
+    }),
+    pledge(wik.id, 'Bolånebanken AB', addDays(soldOn, -12), { reference: 'H-25-1102' }),
+  ])
 
   // Monthly runs for the last four months and the coming one, issued 20 days ahead.
   const invoices: (typeof schema.invoice.$inferInsert & {

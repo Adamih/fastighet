@@ -4,8 +4,10 @@ import { useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { QueryError } from '#/components/query-error'
 import { SubmissionForm } from '#/components/submission-form'
+import { Switch } from '#/components/ui/switch'
 import { useCan } from '#/features/auth/use-can'
 import { invoicesQuery } from '#/features/invoicing/functions'
+import type { PledgeView } from '#/features/pledges/program'
 import { tenantsQuery } from '#/features/tenants/functions'
 import { isIsoDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
@@ -16,14 +18,19 @@ import { receiverOf, receiverOptions } from './ownership-form'
 import type { OwnershipView } from './program'
 import { invoicedPastTransfer, sellersLastDay, transferProblem } from './rules'
 
-/** A sale: the buyers and their first day. Shows the sellers' last day and avier to credit. */
+type Seller = OwnershipView & { pledges: readonly PledgeView[] }
+
+/**
+ * A sale: the buyers and their first day. Shows the sellers' last day, avier to credit and the
+ * sellers' pledges, which can be released in the same step.
+ */
 export function TransferForm({
   ownership,
   tenants,
   invoices,
   onSubmit,
 }: {
-  ownership: OwnershipView
+  ownership: Seller
   tenants: readonly { id: string; name: string }[]
   invoices: readonly {
     number: number
@@ -34,16 +41,25 @@ export function TransferForm({
     transferDate: string
     owners: { partyId: string; sharePercent: number }[]
     invoiceRecipientId: string | null
+    releasePledgeIds: string[]
   }) => Promise<unknown>
 }) {
   const drawer = useFormDrawerContext()
+  const pledges = ownership.pledges.filter((p) => p.active)
   const form = useAppForm({
-    defaultValues: { transferDate: '', owners: [] as OwnerValue[], invoiceRecipientId: '' },
+    defaultValues: {
+      transferDate: '',
+      owners: [] as OwnerValue[],
+      invoiceRecipientId: '',
+      // Nothing is released unless the board ticks it: lenders ask for releases themselves.
+      releasePledgeIds: [] as string[],
+    },
     onSubmit: ({ value }) =>
       onSubmit({
         transferDate: value.transferDate,
         owners: toOwners(value.owners),
         invoiceRecipientId: receiverOf(value.owners, value.invoiceRecipientId),
+        releasePledgeIds: value.releasePledgeIds,
       }),
   })
 
@@ -84,6 +100,54 @@ export function TransferForm({
         }}
       </form.Subscribe>
 
+      {pledges.length > 0 && (
+        <fieldset className="grid gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3.5 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          <legend className="sr-only">{m.pledge_transfer_title()}</legend>
+          <p className="font-semibold">{m.pledge_transfer_title()}</p>
+          <p>{m.pledge_transfer_warning()}</p>
+          <form.Field name="releasePledgeIds">
+            {(field) => (
+              <ul className="grid gap-2">
+                {pledges.map((p) => {
+                  const id = `release-${p.id}`
+                  const checked = field.state.value.includes(p.id)
+                  return (
+                    <li key={p.id} className="flex items-start gap-2.5">
+                      <Switch
+                        id={id}
+                        className="mt-0.5 shrink-0"
+                        checked={checked}
+                        onCheckedChange={(next) =>
+                          field.handleChange(
+                            next === true
+                              ? [...field.state.value, p.id]
+                              : field.state.value.filter((x) => x !== p.id),
+                          )
+                        }
+                      />
+                      <label htmlFor={id} className="grid gap-0.5">
+                        <span className="font-medium">
+                          {p.priority}. {p.creditorName}
+                        </span>
+                        <span>
+                          {[
+                            m.pledge_notified({ date: p.notifiedOn }),
+                            p.reference && m.pledge_ref({ reference: p.reference }),
+                            m.pledge_transfer_release(),
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      </label>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </form.Field>
+        </fieldset>
+      )}
+
       <form.AppField name="owners" validators={ownersValidator}>
         {() => (
           <OwnersField
@@ -121,7 +185,7 @@ export function TransferForm({
 }
 
 /** "Registrera överlåtelse" on the bostadsrätt page. Opens the buyers' bostadsrätt afterwards. */
-export function useTransferOwnershipDrawer(ownership: OwnershipView) {
+export function useTransferOwnershipDrawer(ownership: Seller) {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const can = useCan()
