@@ -784,3 +784,111 @@ export const submission = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.organizationId, t.userId, t.operation, t.requestId] })],
 )
+
+// --- Management between companies. These tables belong to two companies at once (the managing
+// and the managed one), so they reference `organization` directly and are read with `query` and
+// explicit filters on both columns, never through `orgQuery`.
+
+/**
+ * The managed company lets the managing company work in its data, with raw permissions
+ * (`Grant` in `src/lib/managed-access.ts`). Never deleted: revoking sets `revokedAt`, and a later
+ * grant between the same companies is a new row.
+ */
+export const managementGrant = sqliteTable(
+  'management_grant',
+  {
+    id: id(),
+    managedOrganizationId: text('managed_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    managingOrganizationId: text('managing_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** JSON, e.g. {"lease":["read","manage"]}. Read through `cleanGrant`. */
+    permissions: text('permissions').notNull(),
+    requestId: text('request_id').references(() => managementRequest.id),
+    grantedBy: text('granted_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    revokedBy: text('revoked_by').references(() => user.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    uniqueIndex('management_grant_active_uq')
+      .on(t.managedOrganizationId, t.managingOrganizationId)
+      .where(sql`${t.revokedAt} is null`),
+    index('management_grant_managing_idx').on(t.managingOrganizationId),
+  ],
+)
+
+/**
+ * The managing company assigns its staff to a company it manages, optionally with a role there.
+ * Keyed by the two companies, not by a grant, so assignments come back if access is granted again.
+ */
+export const managementAssignment = sqliteTable(
+  'management_assignment',
+  {
+    id: id(),
+    managingOrganizationId: text('managing_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    managedOrganizationId: text('managed_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** `admin`, `member` or `viewer`; null uses the person's role in their own company. */
+    role: text('role'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('management_assignment_uq').on(
+      t.managingOrganizationId,
+      t.managedOrganizationId,
+      t.userId,
+    ),
+  ],
+)
+
+/**
+ * A managing company asks for access. Its code (shown once, sent by email or by hand) is stored
+ * only as a hash; the managed company's owner enters it and decides the permissions.
+ */
+export const managementRequest = sqliteTable(
+  'management_request',
+  {
+    id: id(),
+    managingOrganizationId: text('managing_organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    /** The manager's own name for the client, e.g. "Brf Eken". */
+    label: text('label').notNull(),
+    email: text('email'),
+    /** What the manager asks for (JSON); the managed company decides. */
+    permissions: text('permissions').notNull(),
+    codeHash: text('code_hash').notNull().unique(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    usedAt: integer('used_at', { mode: 'timestamp_ms' }),
+    usedByOrganizationId: text('used_by_organization_id').references(() => organization.id, {
+      onDelete: 'cascade',
+    }),
+    withdrawnAt: integer('withdrawn_at', { mode: 'timestamp_ms' }),
+  },
+  (t) => [index('management_request_managing_idx').on(t.managingOrganizationId, t.createdAt)],
+)
+
+/** Failed attempts to enter a request code, so codes can't be guessed. */
+export const managementCodeAttempt = sqliteTable(
+  'management_code_attempt',
+  {
+    id: id(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('management_code_attempt_user_idx').on(t.userId, t.createdAt)],
+)

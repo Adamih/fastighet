@@ -2,8 +2,10 @@ import { Link, useRouteContext, useRouter, useRouterState } from '@tanstack/reac
 import {
   Banknote,
   BookOpenCheck,
+  Briefcase,
   Building2,
   FileText,
+  Handshake,
   KeyRound,
   LogOut,
   Receipt,
@@ -12,6 +14,15 @@ import {
   Users,
 } from 'lucide-react'
 import { useState } from 'react'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '#/components/ui/select'
 import {
   Sidebar,
   SidebarContent,
@@ -57,7 +68,24 @@ const navigation = [
     icon: BookOpenCheck,
     permission: { bookkeeping: ['read'] },
   },
-  { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined },
+  { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined, own: true },
+  {
+    title: m.nav_clients,
+    to: '/clients',
+    icon: Briefcase,
+    permission: { client: ['read'] },
+    own: true,
+    // Members see it once their company manages someone; owners and admins can start there.
+    showIf: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) =>
+      app.companies.length > 1 || can({ client: ['manage'] }),
+  },
+  {
+    title: m.nav_managers,
+    to: '/management',
+    icon: Handshake,
+    permission: { grant: ['read'] },
+    own: true,
+  },
   { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
 ] as const satisfies readonly {
   /** Some labels follow the company type (Hyresgäster or Medlemmar). */
@@ -67,6 +95,9 @@ const navigation = [
   permission: Permissions | undefined
   /** Shown only for this company type. */
   only?: CompanyKind
+  /** Shown only in the user's own company, not in one their company manages. */
+  own?: boolean
+  showIf?: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) => boolean
 }[]
 
 export function AppSidebar() {
@@ -81,7 +112,11 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="border-b px-4 py-5 pr-10">
-        <span className="break-words font-semibold">{app.organization.name}</span>
+        {app.companies.length > 1 ? (
+          <CompanySwitcher onSwitch={() => setOpenMobile(false)} />
+        ) : (
+          <span className="break-words font-semibold">{app.organization.name}</span>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -91,6 +126,8 @@ export function AppSidebar() {
                 {navigation.map((item) => {
                   if (item.permission && !can(item.permission)) return null
                   if ('only' in item && item.only !== app.companyKind) return null
+                  if ('own' in item && item.own && app.organization.grant) return null
+                  if ('showIf' in item && !item.showIf(app, can)) return null
                   const active =
                     item.to === '/'
                       ? pathname === '/' || /^\/(properties|units)\//.test(pathname)
@@ -155,5 +192,53 @@ export function AppSidebar() {
         )}
       </SidebarFooter>
     </Sidebar>
+  )
+}
+
+/**
+ * Switches the company in focus: the user's own, or one their company manages. The choice lives
+ * in the URL (`?company=`), so each tab can show its own company.
+ */
+function CompanySwitcher({ onSwitch }: { onSwitch: () => void }) {
+  const { app } = useRouteContext({ from: '/_app' })
+  const router = useRouter()
+  const own = app.companies.filter((c) => !c.managed)
+  const managed = app.companies.filter((c) => c.managed)
+  return (
+    <Select
+      value={app.organization.id}
+      onValueChange={async (id) => {
+        onSwitch()
+        await router.navigate({
+          to: '/',
+          search: { company: id === app.home.id ? undefined : id },
+        })
+      }}
+    >
+      <SelectTrigger
+        className="h-11 w-full font-semibold sm:h-10"
+        aria-label={m.company_switch_label()}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectGroup>
+          <SelectLabel>{m.company_switch_own()}</SelectLabel>
+          {own.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        <SelectGroup>
+          <SelectLabel>{m.company_switch_managed()}</SelectLabel>
+          {managed.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
   )
 }

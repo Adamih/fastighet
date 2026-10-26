@@ -16,6 +16,8 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBookkeepingRouteImport } from './routes/_app/bookkeeping'
+import { Route as AppClientsRouteImport } from './routes/_app/clients'
+import { Route as AppManagementRouteImport } from './routes/_app/management'
 import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
@@ -65,6 +67,16 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppBookkeepingRoute = AppBookkeepingRouteImport.update({
   id: '/bookkeeping',
   path: '/bookkeeping',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppClientsRoute = AppClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppManagementRoute = AppManagementRouteImport.update({
+  id: '/management',
+  path: '/management',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPaymentsRoute = AppPaymentsRouteImport.update({
@@ -157,6 +169,8 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/bookkeeping': typeof AppBookkeepingRoute
+  '/clients': typeof AppClientsRoute
+  '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -180,6 +194,8 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/bookkeeping': typeof AppBookkeepingRoute
+  '/clients': typeof AppClientsRoute
+  '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -206,6 +222,8 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_app/bookkeeping': typeof AppBookkeepingRoute
+  '/_app/clients': typeof AppClientsRoute
+  '/_app/management': typeof AppManagementRoute
   '/_app/payments': typeof AppPaymentsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
@@ -233,6 +251,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reset-password'
     | '/bookkeeping'
+    | '/clients'
+    | '/management'
     | '/payments'
     | '/settings'
     | '/team'
@@ -256,6 +276,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reset-password'
     | '/bookkeeping'
+    | '/clients'
+    | '/management'
     | '/payments'
     | '/settings'
     | '/team'
@@ -281,6 +303,8 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/reset-password'
     | '/_app/bookkeeping'
+    | '/_app/clients'
+    | '/_app/management'
     | '/_app/payments'
     | '/_app/settings'
     | '/_app/team'
@@ -359,6 +383,20 @@ declare module '@tanstack/react-router' {
       path: '/bookkeeping'
       fullPath: '/bookkeeping'
       preLoaderRoute: typeof AppBookkeepingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/clients': {
+      id: '/_app/clients'
+      path: '/clients'
+      fullPath: '/clients'
+      preLoaderRoute: typeof AppClientsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/management': {
+      id: '/_app/management'
+      path: '/management'
+      fullPath: '/management'
+      preLoaderRoute: typeof AppManagementRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/payments': {
@@ -478,6 +516,8 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppBookkeepingRoute: typeof AppBookkeepingRoute
+  AppClientsRoute: typeof AppClientsRoute
+  AppManagementRoute: typeof AppManagementRoute
   AppPaymentsRoute: typeof AppPaymentsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -497,6 +537,8 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppBookkeepingRoute: AppBookkeepingRoute,
+  AppClientsRoute: AppClientsRoute,
+  AppManagementRoute: AppManagementRoute,
   AppPaymentsRoute: AppPaymentsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,
@@ -530,10 +572,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

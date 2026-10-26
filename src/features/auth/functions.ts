@@ -3,8 +3,9 @@ import { getRequest } from '@tanstack/react-start/server'
 import { Effect, Schema } from 'effect'
 import { loadSettings } from '#/features/settings/program'
 import { auth } from '#/lib/auth'
+import { managedCompanies } from '#/server/focus'
 import { getSessionOrNull, hasAnyMembership, runApp } from '#/server/run'
-import { CurrentOrganization, CurrentUser } from '#/server/services'
+import { CurrentOrganization, CurrentUser, HomeOrganization } from '#/server/services'
 
 /** Session summary for the login and onboarding routes, which run before a company exists. */
 export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () => {
@@ -18,15 +19,25 @@ export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () =
 })
 
 /**
- * Signed-in user plus their active company and its type (which sets the app's wording);
- * redirects to /login or /onboarding otherwise.
+ * Signed-in user, the company in focus and its type (which sets the app's wording), their own
+ * company and the companies they can switch to; redirects to /login or /onboarding otherwise.
  */
 export const getAppContextFn = createServerFn({ method: 'GET' }).handler(() =>
   runApp(
-    Effect.all({
-      user: CurrentUser,
-      organization: CurrentOrganization,
-      companyKind: Effect.map(loadSettings, (s) => s.kind),
+    Effect.gen(function* () {
+      const user = yield* CurrentUser
+      const home = yield* HomeOrganization
+      const managed = yield* managedCompanies(user.id, home)
+      return {
+        user,
+        organization: yield* CurrentOrganization,
+        home: { id: home.id, name: home.name },
+        companies: [
+          { id: home.id, name: home.name, managed: false },
+          ...managed.map((c) => ({ id: c.id, name: c.name, managed: true })),
+        ],
+        companyKind: (yield* loadSettings).kind,
+      }
     }),
   ),
 )

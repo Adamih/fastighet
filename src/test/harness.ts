@@ -5,12 +5,14 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
+import type { Grant } from '#/lib/managed-access'
 import { Mailer } from '#/server/mail/mailer'
 import { makeMockMailer } from '#/server/mail/mock'
 import {
   CurrentOrganization,
   CurrentUser,
   Database,
+  HomeOrganization,
   KpiSource,
   PermissionChecker,
 } from '#/server/services'
@@ -53,17 +55,34 @@ export function harness() {
   const { mailer, outbox } = makeMockMailer({ from: 'Test <no-reply@example.test>' })
   // New KPI months "from SCB": tests push to it before a program syncs.
   const kpiFeed: { month: string; valueHundredths: number }[] = []
-  const run = <A, E, R>(program: Effect.Effect<A, E, R>) =>
-    Effect.runPromise(
-      program.pipe(
-        Effect.provideService(Database, db as unknown as Db),
-        Effect.provideService(CurrentOrganization, { id: 'org', name: 'Test', role: 'owner' }),
-        Effect.provideService(CurrentUser, { id: 'user', name: 'u', email: 'u@example.test' }),
-        Effect.provideService(PermissionChecker, { check: async () => true }),
-        Effect.provideService(Mailer, mailer),
-        Effect.provideService(KpiSource, { fetch: async () => kpiFeed }),
-      ) as Effect.Effect<A, E, never>,
-    )
+  // `runAs` runs as someone else, e.g. a manager's staff in a company their company manages.
+  const runAs =
+    (as: {
+      user?: string
+      home?: { id: string; name: string; role: string }
+      organization?: { id: string; name: string; role: string; grant: Grant | null }
+    }) =>
+    <A, E, R>(program: Effect.Effect<A, E, R>) => {
+      const home = as.home ?? { id: 'org', name: 'Test', role: 'owner' }
+      const user = as.user ?? 'user'
+      return Effect.runPromise(
+        program.pipe(
+          Effect.provideService(Database, db as unknown as Db),
+          Effect.provideService(CurrentOrganization, as.organization ?? { ...home, grant: null }),
+          Effect.provideService(HomeOrganization, home),
+          Effect.provideService(
+            CurrentUser,
+            as.user
+              ? { id: user, name: user, email: `${user}@example.test` }
+              : { id: 'user', name: 'u', email: 'u@example.test' },
+          ),
+          Effect.provideService(PermissionChecker, { check: async () => true }),
+          Effect.provideService(Mailer, mailer),
+          Effect.provideService(KpiSource, { fetch: async () => kpiFeed }),
+        ) as Effect.Effect<A, E, never>,
+      )
+    }
+  const run = runAs({})
   const now = Date.now()
   sqlite.exec(`
     INSERT INTO organization (id, name, slug, created_at) VALUES ('org', 'Test', 'test', ${now});
@@ -78,7 +97,7 @@ export function harness() {
       ('anna', 'org', 'person', 'Anna'), ('erik', 'org', 'person', 'Erik'),
       ('maja', 'org', 'person', 'Maja');
   `)
-  return { run, sqlite, outbox, kpiFeed }
+  return { run, runAs, sqlite, outbox, kpiFeed }
 }
 
 /** The failure message of a program that should fail. */

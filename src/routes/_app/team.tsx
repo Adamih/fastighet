@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useAppForm } from '#/components/form'
@@ -32,6 +32,12 @@ import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/team')({
+  // A company's team is its own; staff managing it see their own team instead.
+  beforeLoad: ({ context }) => {
+    if (context.app.organization.grant) {
+      throw redirect({ to: '/team', search: { company: undefined } })
+    }
+  },
   loader: ({ context }) => context.queryClient.ensureQueryData(teamQuery()),
   component: TeamPage,
 })

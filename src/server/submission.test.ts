@@ -31,7 +31,12 @@ function harness() {
   ) =>
     program.pipe(
       Effect.provideService(Database, db),
-      Effect.provideService(CurrentOrganization, { id: org, name: org, role: 'owner' }),
+      Effect.provideService(CurrentOrganization, {
+        id: org,
+        name: org,
+        role: 'owner',
+        grant: null,
+      }),
       Effect.provideService(CurrentUser, { id: user, name: user, email: 'test@example.test' }),
       Effect.provideService(PermissionChecker, { check: async () => allowed }),
       // Test programs do not require a mailer or other runtime services.

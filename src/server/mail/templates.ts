@@ -1,4 +1,5 @@
 import CreditNote, * as creditNote from '#/emails/CreditNote'
+import ManagementRequest, * as managementRequest from '#/emails/ManagementRequest'
 import OrganizationInvitation, * as organizationInvitation from '#/emails/OrganizationInvitation'
 import PaymentReminder, * as paymentReminder from '#/emails/PaymentReminder'
 import RentAdjustment, * as rentAdjustment from '#/emails/RentAdjustment'
@@ -20,6 +21,7 @@ export const templates = {
   creditNote: { Component: CreditNote, subject: creditNote.subject },
   paymentReminder: { Component: PaymentReminder, subject: paymentReminder.subject },
   rentAdjustment: { Component: RentAdjustment, subject: rentAdjustment.subject },
+  managementRequest: { Component: ManagementRequest, subject: managementRequest.subject },
 } as const
 
 export type TemplateName = keyof typeof templates

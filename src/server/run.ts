@@ -7,8 +7,10 @@ import { member, organization, session as sessionTable } from '#/db/schema'
 import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
+import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
 import { m } from '#/paraglide/messages'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
+import { resolveFocus } from './focus'
 import { Mailer } from './mail/mailer'
 import { mailer } from './mail/provider'
 import { query } from './scoped'
@@ -17,6 +19,7 @@ import {
   CurrentOrganization,
   CurrentUser,
   Database,
+  HomeOrganization,
   KpiSource,
   PermissionChecker,
 } from './services'
@@ -61,11 +64,19 @@ const loadRequestContext = Effect.gen(function* () {
     )
   }
 
+  const home = { id: membership.organizationId, name: membership.name, role: membership.role }
   return {
     user: { id: session.user.id, email: session.user.email, name: session.user.name },
-    organization: { id: membership.organizationId, name: membership.name, role: membership.role },
+    home,
+    organization: yield* resolveFocus(session.user.id, home, requestedCompany()),
   }
 })
+
+/** The company the browser is looking at: the header from `src/start.ts`, or during SSR the URL. */
+function requestedCompany(): string | null {
+  const request = getRequest()
+  return request.headers.get(COMPANY_HEADER) || companyFromSearch(new URL(request.url).search)
+}
 
 /** Turns a failed program into what TanStack Start expects a server function to throw. */
 function toThrowable(cause: Cause.Cause<unknown>): unknown {
@@ -77,6 +88,9 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
         return redirect({ to: '/login' })
       case 'NoActiveOrganization':
         return redirect({ to: '/onboarding' })
+      case 'CompanyNotInScope':
+        // Back to the user's own company; the explicit undefined stops the router keeping it.
+        return redirect({ to: '/', search: { company: undefined } })
       case 'NotFound':
         return notFound()
       case 'UncertainSubmission':
@@ -92,8 +106,8 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
 }
 
 /**
- * Runs an Effect program inside a server function handler with the signed-in user, their active
- * company, the database and the mailer provided. Expected failures become redirects or
+ * Runs an Effect program inside a server function handler with the signed-in user, the company
+ * in focus (their own, or one their company manages), the database and the mailer provided. Expected failures become redirects or
  * user-facing errors.
  */
 export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): Promise<A> {
@@ -102,6 +116,7 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
     return yield* program.pipe(
       Effect.provideService(CurrentUser, context.user),
       Effect.provideService(CurrentOrganization, context.organization),
+      Effect.provideService(HomeOrganization, context.home),
       Effect.provideService(PermissionChecker, {
         check: async (organizationId, permissions) => {
           const result = await auth.api.hasPermission({

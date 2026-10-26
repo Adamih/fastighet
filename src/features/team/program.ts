@@ -1,10 +1,13 @@
 import { and, asc, eq, gt } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
 import { invitation, member, user } from '#/db/schema'
+import { requireOwnCompany } from '#/server/authorize'
 import { orgQuery } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
 
 export const getTeam = Effect.gen(function* () {
+  // Open to every member, but never to another company's staff managing this one.
+  yield* requireOwnCompany
   const me = yield* CurrentUser
   const rows = yield* orgQuery((db, organizationId) =>
     db

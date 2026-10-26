@@ -7,4 +7,10 @@ export const SEED_USERS = {
   member: { email: 'medlem@fastighet.test', name: 'Maja Medlem' },
   /** The board of the seeded BRF, a separate company. */
   brf: { email: 'styrelse@brflinden.test', name: 'Siv Styrelse' },
+  /** A property manager that manages both companies above through grants. */
+  manager: { email: 'forvaltare@forvaltning.test', name: 'Frida Förvaltare' },
+  /** Staff at the property manager, assigned to Brf Linden only. */
+  managerStaff: { email: 'handlaggare@forvaltning.test', name: 'Hugo Handläggare' },
+  /** Staff at the property manager: Brf Linden in full, Exempel Fastigheter read only. */
+  managerViewer: { email: 'ekonom@forvaltning.test', name: 'Elin Ekonom' },
 } as const

@@ -46,6 +46,7 @@ import {
   reminderFeeEntries,
   reversal,
 } from '#/features/ledger/postings'
+import { generateCode, hashCode } from '#/features/management/codes'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import {
   nextReminderOn,
@@ -63,6 +64,7 @@ import {
   weekdayOnOrAfter,
 } from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
+import { grantPresets } from '#/lib/managed-access'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
 
 /** Seed records are built up step by step, so their fields stay writable. */
@@ -205,8 +207,9 @@ try {
     console.error('The local database already has data. Run `bun run db:reset` to start over.')
     process.exitCode = 1
   } else {
-    await seed()
-    await seedBrf()
+    const landlord = await seed()
+    const brf = await seedBrf()
+    await seedManager(landlord, brf)
   }
 } finally {
   await dispose()
@@ -1408,6 +1411,7 @@ async function seed() {
   data       ${Object.keys(properties).length} properties, ${Object.keys(units).length} units, ${Object.keys(tenants).length} tenants, ${leases.length} leases
   invoices   ${invoices.length} (${open.length} open), ${creditNotes.length} credit notes
   payments   ${payments.length} in ${imports.size} bank files (${payments.filter((p) => p.status !== 'matched').length} need attention or ignored)`)
+  return { id: org.id, ownerId: owner.id }
 }
 
 /**
@@ -1933,4 +1937,113 @@ async function seedBrf() {
   login      ${board.email} (owner)
   data       ${agreements.length - 1} bostadsrätter for ${flats.length} flats (one sold), 1 lease, ${names.length} members
   invoices   ${invoices.length}, payments ${payments.length}`)
+  return { id: orgId, ownerId: board.id }
+}
+
+/**
+ * A property manager (Exempel Förvaltning AB) that manages both companies above through grants:
+ * Brf Linden in full, Exempel Fastigheter for its finances only. Frida (owner) sees both; Hugo is
+ * assigned to Brf Linden; Elin to Brf Linden as admin and to Exempel Fastigheter read only. One
+ * request for a third client waits, with its code printed below.
+ */
+async function seedManager(
+  landlord: { id: string; ownerId: string },
+  brf: { id: string; ownerId: string },
+) {
+  const now = new Date()
+  const password = await hashPassword(SEED_PASSWORD)
+  const [frida, hugo, elin] = [
+    SEED_USERS.manager,
+    SEED_USERS.managerStaff,
+    SEED_USERS.managerViewer,
+  ].map((u) => ({ id: id(), ...u }))
+  for (const u of [frida, hugo, elin]) {
+    await db
+      .insert(schema.user)
+      .values({ ...u, emailVerified: true, createdAt: now, updatedAt: now })
+    await db.insert(schema.account).values({
+      id: id(),
+      accountId: u.id,
+      providerId: 'credential',
+      userId: u.id,
+      password,
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
+  const org = { id: id(), name: 'Exempel Förvaltning AB', slug: 'exempel-forvaltning' }
+  await db.insert(schema.organization).values({ ...org, createdAt: now })
+  await db.insert(schema.member).values([
+    { id: id(), organizationId: org.id, userId: frida.id, role: 'owner', createdAt: now },
+    { id: id(), organizationId: org.id, userId: hugo.id, role: 'member', createdAt: now },
+    { id: id(), organizationId: org.id, userId: elin.id, role: 'member', createdAt: now },
+  ])
+  await db.insert(schema.organizationSettings).values({
+    organizationId: org.id,
+    organizationNumber: formatOrganizationNumber(withCheckDigit('559900111')),
+    streetAddress: 'Förvaltargatan 3',
+    postalCode: '75321',
+    city: 'Uppsala',
+    email: 'kund@forvaltning.test',
+  })
+
+  // Approved requests, as if each owner had entered the manager's code.
+  const grants = [
+    { client: brf, grant: grantPresets.full, label: 'Brf Linden' },
+    { client: landlord, grant: grantPresets.finance, label: 'Exempel Fastigheter' },
+  ]
+  for (const g of grants) {
+    const requestId = id()
+    await db.insert(schema.managementRequest).values({
+      id: requestId,
+      managingOrganizationId: org.id,
+      label: g.label,
+      permissions: JSON.stringify(g.grant),
+      codeHash: await hashCode(generateCode()),
+      expiresAt: new Date(now.getTime() + 14 * 86_400_000),
+      createdBy: frida.id,
+      usedAt: now,
+      usedByOrganizationId: g.client.id,
+    })
+    await db.insert(schema.managementGrant).values({
+      managedOrganizationId: g.client.id,
+      managingOrganizationId: org.id,
+      permissions: JSON.stringify(g.grant),
+      requestId,
+      grantedBy: g.client.ownerId,
+    })
+  }
+  await db.insert(schema.managementAssignment).values([
+    { managingOrganizationId: org.id, managedOrganizationId: brf.id, userId: hugo.id, role: null },
+    {
+      managingOrganizationId: org.id,
+      managedOrganizationId: brf.id,
+      userId: elin.id,
+      role: 'admin',
+    },
+    {
+      managingOrganizationId: org.id,
+      managedOrganizationId: landlord.id,
+      userId: elin.id,
+      role: 'viewer',
+    },
+  ])
+
+  // A request still waiting, for trying the approval flow from another company.
+  const code = generateCode()
+  await db.insert(schema.managementRequest).values({
+    managingOrganizationId: org.id,
+    label: 'Brf Eken',
+    email: 'styrelse@brfeken.test',
+    permissions: JSON.stringify(grantPresets.finance),
+    codeHash: await hashCode(code),
+    expiresAt: new Date(now.getTime() + 14 * 86_400_000),
+    createdBy: frida.id,
+  })
+
+  console.log(`Seeded ${org.name} (property manager):
+  logins     ${frida.email} (owner, sees both clients), ${hugo.email} (Brf Linden),
+             ${elin.email} (Brf Linden as admin, Exempel Fastigheter read only)
+  grants     Brf Linden: full; Exempel Fastigheter: finances
+  request    waiting, code ${code} (sign up a new company and enter it under Förvaltare)`)
 }

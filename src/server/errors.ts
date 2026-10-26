@@ -10,6 +10,12 @@ export class NotFound extends Data.TaggedError('NotFound')<{
   readonly id: string
 }> {}
 
+/**
+ * The company asked for (`?company=`) is neither the user's own nor one their company manages
+ * with them assigned, e.g. after a grant was revoked. `runApp` sends them back to their own company.
+ */
+export class CompanyNotInScope extends Data.TaggedError('CompanyNotInScope') {}
+
 /** The user's role in the company does not allow this action. */
 export class Forbidden extends Data.TaggedError('Forbidden') {}
 

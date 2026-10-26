@@ -106,6 +106,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
           name: organizationId,
           // Deliberately different: the adapter must ask Better Auth, not trust this role snapshot.
           role: 'owner',
+          grant: null,
         }),
       ),
     )

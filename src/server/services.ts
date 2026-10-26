@@ -1,5 +1,6 @@
 import { Context } from 'effect'
 import type { Db } from '#/db'
+import type { Grant } from '#/lib/managed-access'
 import type { Permissions } from '#/lib/permissions'
 import type { Mailer } from './mail/mailer'
 
@@ -10,11 +11,26 @@ export class CurrentUser extends Context.Service<
   { readonly id: string; readonly email: string; readonly name: string }
 >()('app/CurrentUser') {}
 
-/** The customer company the request acts on. Only `runApp` provides it, after checking membership. */
+/**
+ * The company the request acts on (the one in focus). Only `runApp` provides it, after checking
+ * membership or a management grant. `grant` is null in the user's own company; in a company their
+ * company manages, it is that company's grant and `role` is the one that applies there.
+ */
 export class CurrentOrganization extends Context.Service<
   CurrentOrganization,
-  { readonly id: string; readonly name: string; readonly role: string }
+  {
+    readonly id: string
+    readonly name: string
+    readonly role: string
+    readonly grant: Grant | null
+  }
 >()('app/CurrentOrganization') {}
+
+/** The user's own company (Better Auth membership), whichever company is in focus. */
+export class HomeOrganization extends Context.Service<
+  HomeOrganization,
+  { readonly id: string; readonly name: string; readonly role: string }
+>()('app/HomeOrganization') {}
 
 /** Better Auth's server permission API, bound to the authenticated request by runApp. */
 export class PermissionChecker extends Context.Service<
@@ -32,6 +48,7 @@ export type AppServices =
   | Database
   | CurrentUser
   | CurrentOrganization
+  | HomeOrganization
   | Mailer
   | PermissionChecker
   | KpiSource
