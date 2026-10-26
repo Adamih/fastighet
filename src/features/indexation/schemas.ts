@@ -25,3 +25,9 @@ export const IndexationYearInput = Schema.Struct({
   year: Schema.Int.check(Schema.isGreaterThanOrEqualTo(2000), Schema.isLessThanOrEqualTo(2100)),
 })
 export type IndexationYearInput = typeof IndexationYearInput.Type
+
+export const RunIndexationInput = Schema.Struct({
+  ...IndexationYearInput.fields,
+  /** Email each lease's invoice recipient about the new rent. */
+  notify: Schema.Boolean,
+})

@@ -6,6 +6,7 @@ import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
 import type { UnitKind } from '#/features/properties/unit-kinds'
+import { stockholmDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
 import { formatSekShort } from '#/lib/money'
 import { m } from '#/paraglide/messages'
@@ -31,6 +32,7 @@ interface ClauseLease {
     kpiHundredths: number
     baseKpiHundredths: number
     supplementOre: number
+    notifiedAt: Date | null
   }[]
 }
 
@@ -205,6 +207,12 @@ export function IndexClausePanel({ lease, canManage }: { lease: ClauseLease; can
                   [
                     m.index_clause_latest_kpi(),
                     `${formatKpi(latest.kpiHundredths)} (${monthLabel(latest.kpiMonth)}) / ${formatKpi(latest.baseKpiHundredths)}`,
+                  ],
+                  [
+                    m.index_clause_notice(),
+                    latest.notifiedAt
+                      ? stockholmDate(latest.notifiedAt.getTime())
+                      : m.index_clause_notice_none(),
                   ],
                 ] as const)
               : []),

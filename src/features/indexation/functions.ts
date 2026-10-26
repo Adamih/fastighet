@@ -6,7 +6,7 @@ import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
 import { indexationPreview, removeIndexClause, runIndexation, setIndexClause } from './program'
-import { IndexationYearInput, IndexClauseInput } from './schemas'
+import { IndexationYearInput, IndexClauseInput, RunIndexationInput } from './schemas'
 
 const requestId = Schema.optional(Schema.String.check(Schema.isMaxLength(100)))
 
@@ -25,9 +25,16 @@ export const indexationPreviewFn = createServerFn({ method: 'GET' })
 // Changes charges on many leases, so a retried request must not repeat it (a repeat for the same
 // year changes nothing anyway).
 export const runIndexationFn = createServerFn({ method: 'POST' })
-  .validator(validate(Schema.Struct({ ...IndexationYearInput.fields, requestId })))
+  .validator(validate(Schema.Struct({ ...RunIndexationInput.fields, requestId })))
   .handler(({ data }) =>
-    runApp(once('runIndexation', data, { lease: ['manage'] }, runIndexation(data.year))),
+    runApp(
+      once(
+        'runIndexation',
+        data,
+        { lease: ['manage'] },
+        runIndexation(data.year, { notify: data.notify }),
+      ),
+    ),
   )
 
 export const indexationPreviewQuery = (year: number) =>

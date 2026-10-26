@@ -1,0 +1,1 @@
+ALTER TABLE `index_adjustment` ADD `notified_at` integer;

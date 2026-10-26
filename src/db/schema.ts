@@ -323,6 +323,8 @@ export const indexAdjustment = sqliteTable(
     baseRentOre: integer('base_rent_ore').notNull(),
     supplementOre: integer('supplement_ore').notNull(),
     chargeId: text('charge_id'),
+    // When the tenant was emailed about the new rent, if they were.
+    notifiedAt: integer('notified_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
   },
   (t) => [

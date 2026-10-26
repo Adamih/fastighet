@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
-import { Effect } from 'effect'
+import { Effect, Exit } from 'effect'
 import {
   agreement,
   agreementParty,
@@ -15,10 +15,15 @@ import {
   retroactiveDescription,
   retroactiveDifference,
 } from '#/features/agreements/charges'
+import { invoiceRecipient } from '#/features/agreements/parties'
 import { inForce, inForceOn } from '#/features/agreements/periods'
+import { loadSettings } from '#/features/settings/program'
+import { sellerDetails } from '#/features/settings/seller'
+import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
+import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery, query } from '#/server/scoped'
 import { KpiSource } from '#/server/services'
 import { today } from '#/server/today'
@@ -26,6 +31,7 @@ import {
   adjustmentDate,
   type ClauseProblem,
   clauseProblem,
+  formatKpi,
   indexSupplement,
   kpiMonthFor,
   monthLabel,
@@ -188,7 +194,18 @@ const plan = (year: number) =>
           units: { with: { unit: { columns: { kind: true } } } },
           parties: {
             orderBy: agreementParty.position,
-            with: { party: { columns: { name: true } } },
+            with: {
+              party: {
+                columns: {
+                  id: true,
+                  name: true,
+                  streetAddress: true,
+                  postalCode: true,
+                  city: true,
+                  email: true,
+                },
+              },
+            },
           },
         },
       }),
@@ -255,10 +272,13 @@ const plan = (year: number) =>
               floorAtBase: clause.floorAtBase,
             })
           : null
+      const parties = inForce(row.parties, date)
+      const recipient = invoiceRecipient(parties.length > 0 ? parties : row.parties)
       return {
         leaseId: row.id,
         number: row.number,
-        tenantName: inForce(row.parties, date)[0]?.party.name ?? row.parties[0]?.party.name ?? '',
+        tenantName: recipient.recipientName,
+        recipientEmail: recipient.recipientEmail,
         agreement: { startDate: row.startDate, endDate: row.endDate },
         effectiveDate: date,
         status,
@@ -280,7 +300,10 @@ const plan = (year: number) =>
 export const indexationPreview = (year: number) =>
   Effect.gen(function* () {
     yield* requirePermission(read)
-    return (yield* plan(year)).map(({ current: _, agreement: __, ...row }) => row)
+    return (yield* plan(year)).map(({ current: _, agreement: __, recipientEmail, ...row }) => ({
+      ...row,
+      hasEmail: recipientEmail !== null,
+    }))
   })
 
 export type IndexationRow = Effect.Success<ReturnType<typeof indexationPreview>>[number]
@@ -291,7 +314,7 @@ export type IndexationRow = Effect.Success<ReturnType<typeof indexationPreview>>
  * that date that avier have already billed are made up on the next avi. Leases already adjusted
  * for the date are skipped, so the run can be repeated. A missing KPI value blocks the run.
  */
-export const runIndexation = (year: number) =>
+export const runIndexation = (year: number, options: { notify: boolean } = { notify: false }) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const rows = yield* plan(year)
@@ -312,7 +335,9 @@ export const runIndexation = (year: number) =>
       })
     }
     const on = yield* today
+    const seller = options.notify ? yield* loadSettings : null
     let adjusted = 0
+    const notices = { sent: 0, noEmail: 0, failed: 0 }
     for (const r of rows) {
       if (r.status !== 'ready' || r.newSupplementOre === null) continue
       const supplement = r.newSupplementOre
@@ -346,6 +371,7 @@ export const runIndexation = (year: number) =>
         invoiced,
       )
       const chargeId = supplement === 0 ? null : crypto.randomUUID()
+      const adjustmentId = crypto.randomUUID()
       yield* orgQuery((db, organizationId): Promise<unknown> => {
         const statements = [
           ...(r.current
@@ -374,6 +400,7 @@ export const runIndexation = (year: number) =>
             : []),
           // After the charge it points at.
           db.insert(indexAdjustment).values({
+            id: adjustmentId,
             organizationId,
             agreementId: r.leaseId,
             effectiveDate: r.effectiveDate,
@@ -404,8 +431,55 @@ export const runIndexation = (year: number) =>
         return db.batch([first, ...rest])
       })
       adjusted += 1
+
+      // The rent has changed whether or not the notice gets through; a failed email is counted,
+      // and the adjustment shows that no notice was sent.
+      if (!seller) continue
+      if (!r.recipientEmail) {
+        notices.noEmail += 1
+        continue
+      }
+      const sent = yield* Effect.exit(
+        sendEmail({
+          to: r.recipientEmail,
+          template: 'rentAdjustment',
+          props: {
+            recipientName: r.tenantName,
+            organizationName: seller.organizationName,
+            leaseLabel: `avtal ${r.number}`,
+            effectiveDate: r.effectiveDate,
+            baseRent: formatSek(r.baseRentPerYearOre),
+            previousSupplement: formatSek(r.currentSupplementOre),
+            newSupplement: formatSek(supplement),
+            newRent: formatSek(r.baseRentPerYearOre + supplement),
+            vatNote: r.vat ? 'exkl. moms' : null,
+            share: `${r.sharePercent} %`,
+            kpi: `${formatKpi(r.kpi as number)} (${monthLabel(r.kpiMonth)})`,
+            baseKpi: `${formatKpi(r.baseKpi as number)} (${monthLabel(r.baseMonth)})`,
+            retroactive: difference !== 0 && invoiced[0] ? formatSek(difference) : null,
+            sellerDetails: sellerDetails(seller, r.vat),
+          },
+        }),
+      )
+      if (Exit.isFailure(sent)) {
+        notices.failed += 1
+        yield* Effect.logError(sent.cause)
+        continue
+      }
+      notices.sent += 1
+      yield* orgQuery((db, organizationId) =>
+        db
+          .update(indexAdjustment)
+          .set({ notifiedAt: new Date() })
+          .where(
+            and(
+              eq(indexAdjustment.id, adjustmentId),
+              eq(indexAdjustment.organizationId, organizationId),
+            ),
+          ),
+      )
     }
-    return { adjusted, skipped: rows.length - adjusted }
+    return { adjusted, skipped: rows.length - adjusted, notices }
   })
 
 /**

@@ -741,6 +741,8 @@ async function seed() {
         baseRentOre: baseRentPerYearOre,
         supplementOre,
         chargeId: previous?.id ?? null,
+        // The tenants were emailed about the new rent with the run.
+        notifiedAt: new Date(`${recordedOn}T09:00:00Z`),
         createdAt: new Date(`${recordedOn}T09:00:00Z`),
       })
     }

@@ -39,7 +39,7 @@ export function IndexationForm({
   onSubmit,
   onDone,
 }: {
-  onSubmit: (year: number) => Promise<RunResult>
+  onSubmit: (year: number, notify: boolean) => Promise<RunResult>
   onDone: () => void
 }) {
   const drawer = useFormDrawerContext()
@@ -49,11 +49,12 @@ export function IndexationForm({
   const rows = preview.data ?? []
   const ready = rows.filter((r) => r.status === 'ready')
   const blocked = rows.some((r) => r.status === 'missing_kpi')
+  const withoutEmail = ready.filter((r) => !r.hasEmail).length
   const form = useAppForm({
-    defaultValues: {},
-    onSubmit: async (): Promise<void> => {
+    defaultValues: { notify: true },
+    onSubmit: async ({ value }): Promise<void> => {
       if (result) onDone()
-      else if (ready.length > 0) setResult(await onSubmit(year))
+      else if (ready.length > 0) setResult(await onSubmit(year, value.notify))
     },
   })
   const thisYear = Number(stockholmDate(Date.now()).slice(0, 4))
@@ -61,7 +62,22 @@ export function IndexationForm({
   return (
     <SubmissionForm form={form} id={drawer?.formId} className="grid gap-5">
       {result ? (
-        <p className="text-sm">{m.indexation_done({ count: result.adjusted })}</p>
+        <section className="grid gap-2 text-sm">
+          <p>{m.indexation_done({ count: result.adjusted })}</p>
+          {result.notices.sent > 0 && (
+            <p>{m.indexation_notices_sent({ count: result.notices.sent })}</p>
+          )}
+          {result.notices.noEmail > 0 && (
+            <p className="text-muted-foreground">
+              {m.indexation_notices_no_email({ count: result.notices.noEmail })}
+            </p>
+          )}
+          {result.notices.failed > 0 && (
+            <p className="text-destructive">
+              {m.indexation_notices_failed({ count: result.notices.failed })}
+            </p>
+          )}
+        </section>
       ) : (
         <>
           <fieldset className="flex flex-wrap gap-2">
@@ -99,6 +115,20 @@ export function IndexationForm({
             </ul>
           )}
           {blocked && <p className="text-destructive text-sm">{m.indexation_blocked()}</p>}
+          {ready.length > 0 && (
+            <form.AppField name="notify">
+              {(field) => (
+                <field.SwitchField
+                  label={m.indexation_notify()}
+                  description={
+                    withoutEmail > 0
+                      ? m.indexation_notify_missing({ count: withoutEmail })
+                      : m.indexation_notify_hint()
+                  }
+                />
+              )}
+            </form.AppField>
+          )}
         </>
       )}
       <form.AppForm>
@@ -175,7 +205,10 @@ export function useIndexationDrawer() {
     description: m.indexation_description(),
     onClose: run.reset,
     form: ({ close }) => (
-      <IndexationForm onSubmit={(year) => run.mutateAsync({ data: { year } })} onDone={close} />
+      <IndexationForm
+        onSubmit={(year, notify) => run.mutateAsync({ data: { year, notify } })}
+        onDone={close}
+      />
     ),
   })
 }

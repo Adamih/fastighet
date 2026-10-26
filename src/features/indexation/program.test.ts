@@ -71,7 +71,7 @@ test('the yearly indexation adds an index supplement and leaves the base rent al
     currentSupplementOre: 0,
     newSupplementOre: 6_031_00,
   })
-  expect(await run(runIndexation(2026))).toEqual({ adjusted: 1, skipped: 0 })
+  expect(await run(runIndexation(2026))).toMatchObject({ adjusted: 1, skipped: 0 })
   expect(indexCharges(sqlite)).toEqual([
     { amount_ore: 6_031_00, interval: 'yearly', vat: 1, from_date: '2026-01-01', to_date: null },
   ])
@@ -80,7 +80,7 @@ test('the yearly indexation adds an index supplement and leaves the base rent al
 
   // Running it again changes nothing.
   expect((await run(indexationPreview(2026)))[0].status).toBe('done')
-  expect(await run(runIndexation(2026))).toEqual({ adjusted: 0, skipped: 1 })
+  expect(await run(runIndexation(2026))).toMatchObject({ adjusted: 0, skipped: 1 })
   expect(await run(indexAdjustments(shop.id))).toHaveLength(1)
   expect(await fail(run(removeIndexClause(shop.id)))).toContain('har använts')
 })
@@ -158,4 +158,25 @@ test("a lease edit can't leave its index clause invalid", async () => {
   expect(await fail(run(updateLease(edit)))).toContain('Avtalet har en indexklausul')
   const saved = await run(updateLease({ ...edit, termEndDate: '2029-12-31', extensionMonths: 36 }))
   expect(saved.indexClause).toMatchObject({ sharePercent: 100, baseMonth: '2023-10' })
+})
+
+test('the tenant can be emailed about the new rent', async () => {
+  const { run, sqlite, outbox, kpiFeed, shop } = await indexedShop()
+  // Without an email address there is no notice, but the rent still changes.
+  const first = await run(runIndexation(2026, { notify: true }))
+  expect(first).toMatchObject({ adjusted: 1, notices: { sent: 0, noEmail: 1, failed: 0 } })
+  expect(outbox).toHaveLength(0)
+
+  sqlite.exec("UPDATE party SET email = 'anna@example.test' WHERE id = 'anna'")
+  kpiFeed.push({ month: '2026-10', valueHundredths: 42400 })
+  expect((await run(indexationPreview(2027)))[0]).toMatchObject({ hasEmail: true })
+  const third = await run(runIndexation(2027, { notify: true }))
+  expect(third).toMatchObject({ adjusted: 1, notices: { sent: 1, noEmail: 0, failed: 0 } })
+  const [notice] = outbox
+  expect(notice.to).toBe('anna@example.test')
+  expect(notice.subject).toBe('Ny hyra från 2027-01-01: avtal 1 hos Test')
+  expect(notice.text).toMatch(/Ny hyra per år exkl. moms\s+248\s759,00\skr/)
+  const [latest] = await run(indexAdjustments(shop.id))
+  expect(latest.effectiveDate).toBe('2027-01-01')
+  expect(latest.notifiedAt).toBeInstanceOf(Date)
 })
