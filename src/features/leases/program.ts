@@ -5,6 +5,7 @@ import {
   agreementParty,
   agreementUnit,
   charge,
+  type indexClause,
   leaseTerms,
   party,
   type unit,
@@ -29,6 +30,7 @@ import {
   correctOpenTerms,
   invoiceHistory,
 } from '#/features/agreements/program'
+import { checkClauseAllows, indexAdjustments } from '#/features/indexation/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -52,10 +54,12 @@ const withLeaseDetails = {
   },
   units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
   charges: true,
+  indexClause: true,
 } as const
 
 type LeaseRow = typeof agreement.$inferSelect & {
   charges: (typeof charge.$inferSelect)[]
+  indexClause: typeof indexClause.$inferSelect | null
   leaseTerms: typeof leaseTerms.$inferSelect | null
   parties: (typeof agreementParty.$inferSelect & {
     party: { id: string; name: string; kind: 'person' | 'company' }
@@ -66,7 +70,14 @@ type LeaseRow = typeof agreement.$inferSelect & {
 }
 
 const toView = (
-  { leaseTerms: terms, parties: partyRows, units: unitRows, charges, ...row }: LeaseRow,
+  {
+    leaseTerms: terms,
+    parties: partyRows,
+    units: unitRows,
+    charges,
+    indexClause: clause,
+    ...row
+  }: LeaseRow,
   on: string,
 ) => {
   if (!terms) throw new Error(`Lease ${row.id} has no lease terms`)
@@ -82,6 +93,14 @@ const toView = (
     vat: now.vat,
     baseChargeId: now.baseCharge?.id ?? null,
     charges: [...charges].sort((a, b) => a.fromDate.localeCompare(b.fromDate)),
+    indexClause: clause
+      ? {
+          sharePercent: clause.sharePercent,
+          baseMonth: clause.baseMonth,
+          adjustmentMonth: clause.adjustmentMonth,
+          floorAtBase: clause.floorAtBase,
+        }
+      : null,
     /** Every party and unit row with its dates, for corrections and history. */
     partyRows: partyRows.map(({ party, ...p }) => ({ ...p, name: party.name })),
     unitRows: unitRows.map(({ unit, ...u }) => ({ ...u, label: unit.label })),
@@ -164,6 +183,7 @@ export const getLease = (leaseId: string) =>
       ...view,
       /** One-off charges an avi in force has billed; the rest are still to come. */
       billedChargeIds: [...(yield* billedOnceChargeIds([view.id]))],
+      indexAdjustments: yield* indexAdjustments(view.id),
       parties: view.parties.map((p) => ({ ...p, contact: contactOf(p.id) })),
     }
   })
@@ -313,6 +333,7 @@ export const updateLease = (input: UpdateLeaseInput) =>
       current.id,
     )
     const parties = yield* checkParties(current.tenant.id, input)
+    yield* checkClauseAllows(current.id, { ...input, unitIds })
     const base = yield* correctBaseCharge(
       current,
       {
@@ -509,6 +530,7 @@ export const changeLeaseFrom = (input: ChangeLeaseFromInput) =>
       add: [...partyPlan.add, ...unitPlan.add],
     })
     if (problem) return yield* new Conflict({ message: changeProblemMessages[problem] })
+    yield* checkClauseAllows(current.id, { ...current, unitIds })
     if (unitPlan.add.length > 0) {
       yield* checkUnitsFree(
         unitPlan.add,

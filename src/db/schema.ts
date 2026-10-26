@@ -284,6 +284,65 @@ export const brfApartment = sqliteTable(
   (t) => [sameCompany(t, t.unitId, unit).onDelete('cascade')],
 )
 
+// A lease's index clause (indexklausul): part of the base rent follows KPI, adjusted each year
+// by an `index` charge. Commercial leases of at least three years only (12 kap. 19 § JB); rules
+// in `features/indexation/rules.ts`.
+export const indexClause = sqliteTable(
+  'index_clause',
+  {
+    agreementId: text('agreement_id').primaryKey(),
+    organizationId: organizationId(),
+    // The share of the base rent that follows the index, in percent (usually 100).
+    sharePercent: integer('share_percent').notNull().default(100),
+    // The KPI month the clause starts from, "2025-10": usually October the year before the start.
+    baseMonth: text('base_month').notNull(),
+    // The month the rent is adjusted each year (1 = January), from KPI three months earlier.
+    adjustmentMonth: integer('adjustment_month').notNull().default(1),
+    // The rent never goes below the base rent (the supplement is never negative).
+    floorAtBase: integer('floor_at_base', { mode: 'boolean' }).notNull().default(true),
+    createdAt: createdAt(),
+  },
+  (t) => [sameCompany(t, t.agreementId, agreement).onDelete('cascade')],
+)
+
+// One yearly adjustment (indexuppräkning) of a lease: the KPI values and base rent it used, and
+// the `index` charge it started. At most one per lease and date, so a run can be repeated.
+export const indexAdjustment = sqliteTable(
+  'index_adjustment',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    agreementId: text('agreement_id').notNull(),
+    // The day the new supplement applies from.
+    effectiveDate: text('effective_date').notNull(),
+    baseMonth: text('base_month').notNull(),
+    baseKpiHundredths: integer('base_kpi_hundredths').notNull(),
+    kpiMonth: text('kpi_month').notNull(),
+    kpiHundredths: integer('kpi_hundredths').notNull(),
+    // The base rent per year it was computed from, and the supplement per year.
+    baseRentOre: integer('base_rent_ore').notNull(),
+    supplementOre: integer('supplement_ore').notNull(),
+    chargeId: text('charge_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    companyKey('index_adjustment', t),
+    sameCompany(t, t.agreementId, agreement).onDelete('cascade'),
+    sameCompany(t, t.chargeId, charge),
+    uniqueIndex('index_adjustment_agreement_date_uq').on(t.agreementId, t.effectiveDate),
+  ],
+)
+
+// KPI (konsumentprisindex, 1980=100) per month, from SCB. Reference data, not company data: the
+// one table without `organizationId`. Domain code only reads it; values come from SCB alone (the
+// baseline history in a migration, new months through `syncKpi`), never from a form.
+export const kpi = sqliteTable('kpi', {
+  // "2026-10"
+  month: text('month').primaryKey(),
+  // The index times 100, e.g. 419.35 → 41935.
+  valueHundredths: integer('value_hundredths').notNull(),
+})
+
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
 
 export const unitRelations = relations(unit, ({ one, many }) => ({
@@ -311,6 +370,7 @@ export const agreementRelations = relations(agreement, ({ one, many }) => ({
   charges: many(charge),
   leaseTerms: one(leaseTerms),
   ownershipTerms: one(ownershipTerms),
+  indexClause: one(indexClause),
   invoices: many(invoice),
 }))
 
@@ -326,6 +386,10 @@ export const agreementPartyRelations = relations(agreementParty, ({ one }) => ({
 
 export const leaseTermsRelations = relations(leaseTerms, ({ one }) => ({
   agreement: one(agreement, { fields: [leaseTerms.agreementId], references: [agreement.id] }),
+}))
+
+export const indexClauseRelations = relations(indexClause, ({ one }) => ({
+  agreement: one(agreement, { fields: [indexClause.agreementId], references: [agreement.id] }),
 }))
 
 export const ownershipTermsRelations = relations(ownershipTerms, ({ one }) => ({

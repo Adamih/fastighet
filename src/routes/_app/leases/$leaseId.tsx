@@ -36,6 +36,7 @@ import { useChangeBaseChargeDrawer } from '#/features/agreements/change-charge-f
 import { ChargesPanel } from '#/features/agreements/charges-panel'
 import { useAddOneOffDrawer } from '#/features/agreements/one-off-form'
 import { useCan } from '#/features/auth/use-can'
+import { IndexClausePanel } from '#/features/indexation/index-clause-form'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
 import { invoicesQuery, type listInvoicesFn } from '#/features/invoicing/functions'
@@ -299,6 +300,7 @@ function LeasePage() {
               canManage={canManage}
               onAddOneOff={addOneOff.open}
             />
+            <IndexClausePanel lease={lease} canManage={canManage} />
             <Panel title="Villkor">
               <FactList
                 facts={[

@@ -4,6 +4,7 @@ import { and, asc, eq } from 'drizzle-orm'
 import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable } from '#/db/schema'
+import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { m } from '#/paraglide/messages'
@@ -16,6 +17,7 @@ import {
   CurrentOrganization,
   CurrentUser,
   Database,
+  KpiSource,
   PermissionChecker,
 } from './services'
 
@@ -113,6 +115,7 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
   }).pipe(
     Effect.provideService(Database, db),
     Effect.provideService(Mailer, mailer),
+    Effect.provideService(KpiSource, { fetch: fetchKpiFromScb }),
     Effect.runPromiseExit,
   )
 

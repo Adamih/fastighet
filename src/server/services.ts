@@ -22,4 +22,16 @@ export class PermissionChecker extends Context.Service<
   { readonly check: (organizationId: string, permissions: Permissions) => Promise<boolean> }
 >()('app/PermissionChecker') {}
 
-export type AppServices = Database | CurrentUser | CurrentOrganization | Mailer | PermissionChecker
+/** Where new KPI months come from: SCB in production (`features/indexation/scb.ts`), a stub in tests. */
+export class KpiSource extends Context.Service<
+  KpiSource,
+  { readonly fetch: () => Promise<readonly { month: string; valueHundredths: number }[]> }
+>()('app/KpiSource') {}
+
+export type AppServices =
+  | Database
+  | CurrentUser
+  | CurrentOrganization
+  | Mailer
+  | PermissionChecker
+  | KpiSource

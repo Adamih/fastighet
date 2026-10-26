@@ -16,6 +16,13 @@ import * as schema from '#/db/schema'
 import { type BillableAgreement, billFor } from '#/features/agreements/billing'
 import type { Charge, InvoiceLineDraft } from '#/features/agreements/charges'
 import { equalShares, type Party } from '#/features/agreements/parties'
+import {
+  adjustmentDate,
+  defaultBaseMonth,
+  indexSupplement,
+  kpiMonthFor,
+  perYear,
+} from '#/features/indexation/rules'
 import { type CreditRequest, draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
@@ -680,6 +687,65 @@ async function seed() {
     createdOn: today,
   })
 
+  // The commercial leases have Fastighetsägarna's index clause: all of the base rent follows KPI
+  // from October before the lease started, adjusted each 1 January. Past adjustments were run in
+  // late November, after SCB published October, with the same rules as "Indexuppräkning".
+  const kpiByMonth = new Map(
+    (await db.select().from(schema.kpi)).map((k) => [k.month, k.valueHundredths]),
+  )
+  const indexClauses = ['cafe', 'salong', 'redovisning'].map((key) => {
+    const lease = leaseByKey(key)
+    return { lease, baseMonth: defaultBaseMonth(lease.terms.startDate) }
+  })
+  const indexAdjustments: (typeof schema.indexAdjustment.$inferInsert)[] = []
+  for (const { lease, baseMonth } of indexClauses) {
+    const baseKpi = kpiByMonth.get(baseMonth)
+    let previous: SeedCharge | null = null
+    for (let y = Number(lease.terms.startDate.slice(0, 4)) + 1; y <= year; y++) {
+      const date = adjustmentDate(y, 1)
+      const kpiMonth = kpiMonthFor(date)
+      const value = kpiByMonth.get(kpiMonth)
+      const recordedOn = `${y - 1}-11-20`
+      if (baseKpi === undefined || value === undefined || recordedOn > today) break
+      const baseRentPerYearOre = perYear(lease.rentOre, lease.rentInterval)
+      const supplementOre = indexSupplement({
+        baseRentPerYearOre,
+        sharePercent: 100,
+        baseKpi,
+        kpi: value,
+        floorAtBase: true,
+      })
+      if (previous) previous.toDate = addDays(date, -1)
+      previous =
+        supplementOre === 0
+          ? null
+          : addCharge(lease, {
+              kind: 'index',
+              unitId: null,
+              description: null,
+              amountOre: supplementOre,
+              interval: 'yearly',
+              vat: lease.vat,
+              fromDate: date,
+              toDate: null,
+              createdOn: recordedOn,
+            })
+      indexAdjustments.push({
+        organizationId: orgId,
+        agreementId: lease.id,
+        effectiveDate: date,
+        baseMonth,
+        baseKpiHundredths: baseKpi,
+        kpiMonth,
+        kpiHundredths: value,
+        baseRentOre: baseRentPerYearOre,
+        supplementOre,
+        chargeId: previous?.id ?? null,
+        createdAt: new Date(`${recordedOn}T09:00:00Z`),
+      })
+    }
+  }
+
   // Leases are agreements with lease terms; the agreement's end date is the last billed day.
   await insertAll(
     schema.agreement,
@@ -702,6 +768,15 @@ async function seed() {
       createdAt: new Date(`${createdOn}T09:00:00Z`),
     })),
   )
+  await insertAll(
+    schema.indexClause,
+    indexClauses.map(({ lease, baseMonth }) => ({
+      agreementId: lease.id,
+      organizationId: orgId,
+      baseMonth,
+    })),
+  )
+  await insertAll(schema.indexAdjustment, indexAdjustments)
   await insertAll(
     schema.leaseTerms,
     leases.map((l) => ({

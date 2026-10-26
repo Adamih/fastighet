@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { useCan } from '#/features/auth/use-can'
+import { useIndexationDrawer } from '#/features/indexation/indexation-form'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { leasesQuery } from '#/features/leases/functions'
 import { useAddLeaseDrawer, useEditLeaseDrawer } from '#/features/leases/lease-form'
@@ -83,6 +84,8 @@ function LeasesPage() {
   const { data: leases } = useSuspenseQuery(leasesQuery())
   const [query, setQuery] = useState('')
   const addLease = useAddLeaseDrawer()
+  const indexation = useIndexationDrawer()
+  const canIndex = can({ lease: ['manage'] }) && leases.some((l) => l.indexClause)
   const today = stockholmDate(Date.now())
   const overview = leaseOverview(leases, today)
 
@@ -115,6 +118,11 @@ function LeasesPage() {
         </div>
         {/* Phones: the button sits beside the title and the search gets its own row. */}
         <div className="contents md:ml-auto md:flex md:items-center md:gap-2.5">
+          {canIndex && (
+            <Button variant="outline" className="h-11 md:h-10" onClick={indexation.open}>
+              {m.indexation_title()}
+            </Button>
+          )}
           {canCreate && (
             <Button className="h-11 md:h-10" onClick={addLease.open} aria-label={m.lease_new()}>
               <Plus aria-hidden="true" />
