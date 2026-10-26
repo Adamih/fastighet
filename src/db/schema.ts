@@ -320,6 +320,10 @@ export const organizationSettings = sqliteTable('organization_settings', {
   reminderFeeOre: integer('reminder_fee_ore'),
   reminderIntervalDays: integer('reminder_interval_days').notNull().default(10),
   reminderDueDays: integer('reminder_due_days').notNull().default(10),
+  // Bookkeeping: the month the financial year starts (1 = January), and the company's own
+  // account numbers for the SIE export as JSON; unset ones are BAS (`features/bookkeeping`).
+  financialYearStartMonth: integer('financial_year_start_month').notNull().default(1),
+  bookkeepingAccounts: text('bookkeeping_accounts'),
 })
 
 // Issued invoices are accounting records: they are never deleted, only voided, and their
@@ -505,6 +509,24 @@ export const paymentReminder = sqliteTable(
 export const paymentReminderRelations = relations(paymentReminder, ({ one }) => ({
   invoice: one(invoice, { fields: [paymentReminder.invoiceId], references: [invoice.id] }),
 }))
+
+// A SIE file someone downloaded: which period, how many vouchers. Exporting a period again is
+// allowed, but warned about, since importing the same vouchers twice duplicates them.
+export const bookkeepingExport = sqliteTable(
+  'bookkeeping_export',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    fromDate: text('from_date').notNull(),
+    toDate: text('to_date').notNull(),
+    voucherCount: integer('voucher_count').notNull(),
+    exportedByUserId: text('exported_by_user_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [index('bookkeeping_export_org_idx').on(t.organizationId, t.createdAt)],
+)
 
 /** One uploaded bank file (camt.054). */
 export const paymentImport = sqliteTable(

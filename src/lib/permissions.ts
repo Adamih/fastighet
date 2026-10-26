@@ -23,6 +23,8 @@ export const statement = {
   payment: ['read', 'manage'],
   /** Company settings printed on invoices (bankgiro, address, …). */
   settings: ['read', 'manage'],
+  /** The SIE export (`read`) and the company's account numbers (`manage`). */
+  bookkeeping: ['read', 'manage'],
 } as const
 
 export const ac = createAccessControl(statement)
@@ -37,12 +39,16 @@ const appFull = {
   invoice: full,
   payment: full,
   settings: full,
+  bookkeeping: full,
 }
 
 export const owner = ac.newRole({ ...ownerAc.statements, ...appFull })
 export const admin = ac.newRole({ ...adminAc.statements, ...appFull })
-/** Runs the day-to-day work; cannot change company settings or manage the team. */
-export const member = ac.newRole({ ...memberAc.statements, ...appFull, settings: readOnly })
+/**
+ * Runs the day-to-day work; cannot change company settings, manage the team, or export the books.
+ */
+const { bookkeeping: _, ...memberApp } = appFull
+export const member = ac.newRole({ ...memberAc.statements, ...memberApp, settings: readOnly })
 
 export const roles = { owner, admin, member }
 

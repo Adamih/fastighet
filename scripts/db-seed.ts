@@ -9,7 +9,7 @@
 // only pass their checksums.
 
 import { hashPassword } from 'better-auth/crypto'
-import { count, eq, getTableColumns } from 'drizzle-orm'
+import { and, count, eq, getTableColumns, gte, lte } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
@@ -44,7 +44,7 @@ import {
   reminderFee,
 } from '#/features/reminders/rules'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
-import { addDays, addMonths, stockholmDate, weekdayOnOrAfter } from '#/lib/dates'
+import { addDays, addMonths, endOfMonth, stockholmDate, weekdayOnOrAfter } from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
 import { formatSek } from '#/lib/money'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
@@ -1200,6 +1200,29 @@ async function seed() {
   )
   await ledger.write()
   await insertAll(schema.paymentReminder, reminders)
+
+  // The month before last was exported to the bookkeeping program, so exporting it again warns.
+  const exported = {
+    fromDate: addMonths(thisMonth, -2),
+    toDate: endOfMonth(addMonths(thisMonth, -2)),
+  }
+  const [{ vouchers }] = await db
+    .select({ vouchers: count() })
+    .from(schema.posting)
+    .where(
+      and(
+        eq(schema.posting.organizationId, orgId),
+        gte(schema.posting.date, exported.fromDate),
+        lte(schema.posting.date, exported.toDate),
+      ),
+    )
+  await db.insert(schema.bookkeepingExport).values({
+    organizationId: orgId,
+    ...exported,
+    voucherCount: vouchers,
+    exportedByUserId: owner.id,
+    createdAt: new Date(Date.now() - 20 * 86_400_000),
+  })
 
   const open = invoices.filter((i) => !i.paidOn && !i.voidedAt && i.totalOre > (i.creditedOre ?? 0))
   console.log(`Seeded ${org.name}:

@@ -10,7 +10,7 @@ const appResources = ['property', 'tenant', 'lease', 'invoice', 'payment'] as co
 
 describe('Better Auth role permissions', () => {
   test.each(['owner', 'admin'])('%p has full access to everything', (role) => {
-    for (const resource of [...appResources, 'settings'] as const) {
+    for (const resource of [...appResources, 'settings', 'bookkeeping'] as const) {
       expect(can(role, { [resource]: ['read', 'manage'] })).toBe(true)
     }
   })
@@ -24,6 +24,11 @@ describe('Better Auth role permissions', () => {
   test('member can read but not manage settings', () => {
     expect(can('member', { settings: ['read'] })).toBe(true)
     expect(can('member', { settings: ['manage'] })).toBe(false)
+  })
+
+  test('member cannot export the books or change accounts', () => {
+    expect(can('member', { bookkeeping: ['read'] })).toBe(false)
+    expect(can('member', { bookkeeping: ['manage'] })).toBe(false)
   })
 
   test('Better Auth team permissions are unchanged', () => {

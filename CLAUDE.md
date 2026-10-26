@@ -54,6 +54,10 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Payment reminders** (`features/reminders`, rules in `rules.ts`, unit-tested) go to overdue avier with something owed, once the company's interval has passed since the due date or the last reminder. A reminder is recorded in `payment_reminder` and never deleted.
   - The fee (påminnelseavgift) is opt-in in settings, at most 60 kr by law, only if agreed in advance, and charged with an avi's first reminder only. It is posted to the avi's receivable (`reminder` posting), so the avi owes it and the reminder asks for it with the same OCR.
   - Sending goes through `once()`; the email is sent first, then the reminder and its fee posting are written in one batch.
+- **Bookkeeping export** (`features/bookkeeping`, SIE rules in `sie.ts`, unit-tested) writes the ledger's postings in a date range as SIE type 4 vouchers (faktureringsmetoden), PC8-encoded with CRLF.
+  - One posting is one voucher. Series: F avier, voids and reminder fees; K credit notes; B payments, allocations, payments by hand and refunds. Unmatched money sits on the suspense account.
+  - Ledger accounts map to BAS accounts through `accountFor` (`accounts.ts`); a company can change the numbers, and only numbers that differ from BAS are stored. Income goes by charge kind and VAT.
+  - Every export is recorded in `bookkeeping_export`, so an overlapping export can be warned about. It needs `bookkeeping` permissions, which members don't have.
 - **Payments** come from camt.054 bank files (`src/features/payments/camt054.ts`). Like invoices, they're never deleted:
   - Their status moves between matched, review, unmatched and ignored.
   - A bank reference is unique per company, which makes re-importing safe.

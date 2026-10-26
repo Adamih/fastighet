@@ -1,6 +1,7 @@
 import { Link, useRouteContext, useRouter, useRouterState } from '@tanstack/react-router'
 import {
   Banknote,
+  BookOpenCheck,
   Building2,
   FileText,
   KeyRound,
@@ -50,6 +51,12 @@ const navigation = [
   { title: m.nav_leases, to: '/leases', icon: FileText, permission: { lease: ['read'] } },
   { title: m.nav_invoices, to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
   { title: m.nav_payments, to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
+  {
+    title: m.nav_bookkeeping,
+    to: '/bookkeeping',
+    icon: BookOpenCheck,
+    permission: { bookkeeping: ['read'] },
+  },
   { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined },
   { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
 ] as const satisfies readonly {
