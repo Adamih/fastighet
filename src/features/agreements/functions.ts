@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -17,7 +18,10 @@ export const changeBaseChargeFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('changeBaseCharge', data, { lease: ['manage'] }, changeBaseCharge(data))),
+    runApp(
+      once('changeBaseCharge', data, { lease: ['manage'] }, changeBaseCharge(data)),
+      audit('charge.change_base', data.agreementId),
+    ),
   )
 
 export const addOneOffChargeFn = createServerFn({ method: 'POST' })
@@ -30,9 +34,14 @@ export const addOneOffChargeFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('addOneOffCharge', data, { lease: ['manage'] }, addOneOffCharge(data))),
+    runApp(
+      once('addOneOffCharge', data, { lease: ['manage'] }, addOneOffCharge(data)),
+      audit('charge.add_one_off', data.agreementId),
+    ),
   )
 
 export const removeOneOffChargeFn = createServerFn({ method: 'POST' })
   .validator(validate(ChargeIdInput))
-  .handler(({ data }) => runApp(removeOneOffCharge(data.chargeId)))
+  .handler(({ data }) =>
+    runApp(removeOneOffCharge(data.chargeId), audit('charge.remove_one_off', null)),
+  )

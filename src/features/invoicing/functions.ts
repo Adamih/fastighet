@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -53,6 +54,7 @@ export const createInvoiceRunFn = createServerFn({ method: 'POST' })
         { invoice: ['manage'], lease: ['read'] },
         createInvoiceRun(data),
       ),
+      audit('invoice.run', null),
     ),
   )
 
@@ -66,19 +68,23 @@ export const getInvoiceFn = createServerFn({ method: 'GET' })
 
 export const emailInvoiceFn = createServerFn({ method: 'POST' })
   .validator(std(InvoiceIdInput))
-  .handler(({ data }) => runApp(emailInvoice(data.invoiceId)))
+  .handler(({ data }) =>
+    runApp(emailInvoice(data.invoiceId), audit('invoice.email', data.invoiceId)),
+  )
 
 export const markInvoicePaidFn = createServerFn({ method: 'POST' })
   .validator(std(MarkPaidInput))
-  .handler(({ data }) => runApp(markInvoicePaid(data)))
+  .handler(({ data }) => runApp(markInvoicePaid(data), audit('invoice.mark_paid', data.invoiceId)))
 
 export const unmarkInvoicePaidFn = createServerFn({ method: 'POST' })
   .validator(std(InvoiceIdInput))
-  .handler(({ data }) => runApp(unmarkInvoicePaid(data.invoiceId)))
+  .handler(({ data }) =>
+    runApp(unmarkInvoicePaid(data.invoiceId), audit('invoice.unmark_paid', data.invoiceId)),
+  )
 
 export const voidInvoiceFn = createServerFn({ method: 'POST' })
   .validator(std(InvoiceIdInput))
-  .handler(({ data }) => runApp(voidInvoice(data.invoiceId)))
+  .handler(({ data }) => runApp(voidInvoice(data.invoiceId), audit('invoice.void', data.invoiceId)))
 
 export const createCreditNoteFn = createServerFn({ method: 'POST' })
   .validator(
@@ -90,7 +96,10 @@ export const createCreditNoteFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('createCreditNote', data, { invoice: ['manage'] }, createCreditNote(data))),
+    runApp(
+      once('createCreditNote', data, { invoice: ['manage'] }, createCreditNote(data)),
+      audit('credit_note.create', data.invoiceId),
+    ),
   )
 
 export const getCreditNoteFn = createServerFn({ method: 'GET' })
@@ -99,7 +108,9 @@ export const getCreditNoteFn = createServerFn({ method: 'GET' })
 
 export const emailCreditNoteFn = createServerFn({ method: 'POST' })
   .validator(std(CreditNoteIdInput))
-  .handler(({ data }) => runApp(emailCreditNote(data.creditNoteId)))
+  .handler(({ data }) =>
+    runApp(emailCreditNote(data.creditNoteId), audit('credit_note.email', data.creditNoteId)),
+  )
 
 export const previewReissueFn = createServerFn({ method: 'GET' })
   .validator(std(InvoiceIdInput))
@@ -122,6 +133,7 @@ export const reissueInvoiceFn = createServerFn({ method: 'POST' })
         { invoice: ['manage'], lease: ['read'] },
         reissueInvoice(data.invoiceId),
       ),
+      audit('invoice.reissue', data.invoiceId),
     ),
   )
 

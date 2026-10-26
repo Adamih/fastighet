@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { validate } from '#/server/validate'
 import {
@@ -20,7 +21,9 @@ export const bookkeepingSettingsFn = createServerFn({ method: 'GET' }).handler((
 
 export const updateBookkeepingSettingsFn = createServerFn({ method: 'POST' })
   .validator(validate(Schema.Struct({ ...UpdateBookkeepingSettingsInput.fields, requestId })))
-  .handler(({ data }) => runApp(updateBookkeepingSettings(data)))
+  .handler(({ data }) =>
+    runApp(updateBookkeepingSettings(data), audit('bookkeeping.settings', null)),
+  )
 
 export const previewExportFn = createServerFn({ method: 'GET' })
   .validator(validate(ExportPeriodInput))
@@ -29,7 +32,7 @@ export const previewExportFn = createServerFn({ method: 'GET' })
 // Exporting only records that it happened, so a retry just records it again.
 export const exportSieFn = createServerFn({ method: 'POST' })
   .validator(validate(ExportPeriodInput))
-  .handler(({ data }) => runApp(exportSie(data)))
+  .handler(({ data }) => runApp(exportSie(data), audit('bookkeeping.export', null)))
 
 export const bookkeepingExportsFn = createServerFn({ method: 'GET' }).handler(() =>
   runApp(listExports),

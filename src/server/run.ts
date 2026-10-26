@@ -4,11 +4,13 @@ import { and, asc, eq } from 'drizzle-orm'
 import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable } from '#/db/schema'
+import type { Audit } from '#/features/audit/actions'
 import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
 import { m } from '#/paraglide/messages'
+import { recordAudit } from './audit'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { resolveFocus } from './focus'
 import { Mailer } from './mail/mailer'
@@ -110,10 +112,14 @@ function toThrowable(cause: Cause.Cause<unknown>): unknown {
  * in focus (their own, or one their company manages), the database and the mailer provided. Expected failures become redirects or
  * user-facing errors.
  */
-export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): Promise<A> {
+export async function runApp<A, E>(
+  program: Effect.Effect<A, E, AppServices>,
+  /** For writes: what to record in the company's audit log once the program succeeds. */
+  audit?: Audit,
+): Promise<A> {
   const exit = await Effect.gen(function* () {
     const context = yield* loadRequestContext
-    return yield* program.pipe(
+    const result = yield* program.pipe(
       Effect.provideService(CurrentUser, context.user),
       Effect.provideService(CurrentOrganization, context.organization),
       Effect.provideService(HomeOrganization, context.home),
@@ -127,6 +133,18 @@ export async function runApp<A, E>(program: Effect.Effect<A, E, AppServices>): P
         },
       }),
     )
+    if (audit) {
+      yield* recordAudit(
+        {
+          organizationId: context.organization.id,
+          user: context.user,
+          actor: context.home,
+        },
+        audit,
+        result,
+      )
+    }
+    return result
   }).pipe(
     Effect.provideService(Database, db),
     Effect.provideService(Mailer, mailer),

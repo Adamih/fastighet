@@ -1,14 +1,16 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router'
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { createFileRoute, Link, redirect, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { PageHeader } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { Switch } from '#/components/ui/switch'
+import { type AuditAction, auditActions, isAuditAction } from '#/features/audit/actions'
 import { useCan } from '#/features/auth/use-can'
 import {
   acceptRequestFn,
+  managerActivityQuery,
   managersQuery,
   previewRequestFn,
   revokeGrantFn,
@@ -67,7 +69,130 @@ function ManagersPage() {
           </ul>
         )}
       </section>
+      <Activity />
     </div>
+  )
+}
+
+const dateTime = new Intl.DateTimeFormat('sv-SE', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+  timeZone: 'Europe/Stockholm',
+})
+
+/** Where an event's record is, when it still has a page. */
+function EventLink({
+  action,
+  entityId,
+  agreementKind,
+}: {
+  action: AuditAction
+  entityId: string | null
+  agreementKind: string | null
+}) {
+  const label = auditActions[action].label()
+  if (!entityId) return <>{label}</>
+  const className = 'underline-offset-4 hover:underline'
+  switch (auditActions[action].entity) {
+    case 'property':
+      return (
+        <Link to="/properties/$propertyId" params={{ propertyId: entityId }} className={className}>
+          {label}
+        </Link>
+      )
+    case 'unit':
+      return (
+        <Link to="/units/$unitId" params={{ unitId: entityId }} className={className}>
+          {label}
+        </Link>
+      )
+    case 'party':
+      return (
+        <Link to="/tenants/$tenantId" params={{ tenantId: entityId }} className={className}>
+          {label}
+        </Link>
+      )
+    case 'invoice':
+      return (
+        <Link to="/invoices/$invoiceId" params={{ invoiceId: entityId }} className={className}>
+          {label}
+        </Link>
+      )
+    case 'creditNote':
+      return (
+        <Link
+          to="/credit-notes/$creditNoteId"
+          params={{ creditNoteId: entityId }}
+          className={className}
+        >
+          {label}
+        </Link>
+      )
+    case 'payment':
+      return (
+        <Link to="/payments" className={className}>
+          {label}
+        </Link>
+      )
+    case 'agreement':
+      if (agreementKind === 'lease')
+        return (
+          <Link to="/leases/$leaseId" params={{ leaseId: entityId }} className={className}>
+            {label}
+          </Link>
+        )
+      if (agreementKind === 'tenant_ownership')
+        return (
+          <Link
+            to="/ownerships/$ownershipId"
+            params={{ ownershipId: entityId }}
+            className={className}
+          >
+            {label}
+          </Link>
+        )
+      return <>{label}</>
+    default:
+      return <>{label}</>
+  }
+}
+
+/** What managers' staff did here: the managed company's view of the audit log. */
+function Activity() {
+  const activity = useQuery(managerActivityQuery())
+  if (!activity.data) return null
+  return (
+    <section aria-labelledby="activity" className="overflow-hidden rounded-xl border bg-card">
+      <div className="grid gap-1 border-b px-5 py-4">
+        <h2 id="activity" className="font-bold text-[15px]">
+          {m.managers_activity()}
+        </h2>
+        <p className="text-muted-foreground text-sm">{m.managers_activity_description()}</p>
+      </div>
+      {activity.data.length === 0 ? (
+        <p className="px-5 py-4 text-muted-foreground text-sm">{m.managers_activity_empty()}</p>
+      ) : (
+        <ul className="divide-y">
+          {activity.data
+            .filter((e) => isAuditAction(e.action))
+            .map((e) => (
+              <li key={e.id} className="grid gap-0.5 px-5 py-3 text-sm">
+                <span className="font-medium">
+                  <EventLink
+                    action={e.action as AuditAction}
+                    entityId={e.entityId}
+                    agreementKind={e.agreementKind}
+                  />
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  {dateTime.format(e.at)} ·{' '}
+                  {m.managers_activity_by({ name: e.userName, organization: e.companyName })}
+                </span>
+              </li>
+            ))}
+        </ul>
+      )}
+    </section>
   )
 }
 

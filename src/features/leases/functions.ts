@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -47,28 +48,31 @@ export const createLeaseFn = createServerFn({ method: 'POST' })
         { lease: ['manage'], tenant: ['read'], property: ['read'] },
         createLease(data),
       ),
+      audit('lease.create'),
     ),
   )
 
 export const updateLeaseFn = createServerFn({ method: 'POST' })
   .validator(std(UpdateLeaseInput))
-  .handler(({ data }) => runApp(updateLease(data)))
+  .handler(({ data }) => runApp(updateLease(data), audit('lease.update', data.leaseId)))
 
 export const terminateLeaseFn = createServerFn({ method: 'POST' })
   .validator(std(TerminateLeaseInput))
-  .handler(({ data }) => runApp(terminateLease(data)))
+  .handler(({ data }) => runApp(terminateLease(data), audit('lease.terminate', data.leaseId)))
 
 export const withdrawTerminationFn = createServerFn({ method: 'POST' })
   .validator(std(LeaseIdInput))
-  .handler(({ data }) => runApp(withdrawTermination(data.leaseId)))
+  .handler(({ data }) =>
+    runApp(withdrawTermination(data.leaseId), audit('lease.withdraw_termination', data.leaseId)),
+  )
 
 export const deleteLeaseFn = createServerFn({ method: 'POST' })
   .validator(std(LeaseIdInput))
-  .handler(({ data }) => runApp(deleteLease(data.leaseId)))
+  .handler(({ data }) => runApp(deleteLease(data.leaseId), audit('lease.delete', null)))
 
 export const changeLeaseFromFn = createServerFn({ method: 'POST' })
   .validator(std(ChangeLeaseFromInput))
-  .handler(({ data }) => runApp(changeLeaseFrom(data)))
+  .handler(({ data }) => runApp(changeLeaseFrom(data), audit('lease.change_from', data.leaseId)))
 
 export const leasesQuery = () =>
   queryOptions({ queryKey: ['leases'], queryFn: () => listLeasesFn() })

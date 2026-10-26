@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { LeaseIdInput } from '#/features/leases/schemas'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
@@ -12,11 +13,13 @@ const requestId = Schema.optional(Schema.String.check(Schema.isMaxLength(100)))
 
 export const setIndexClauseFn = createServerFn({ method: 'POST' })
   .validator(validate(Schema.Struct({ ...IndexClauseInput.fields, requestId })))
-  .handler(({ data }) => runApp(setIndexClause(data)))
+  .handler(({ data }) => runApp(setIndexClause(data), audit('index_clause.set', data.leaseId)))
 
 export const removeIndexClauseFn = createServerFn({ method: 'POST' })
   .validator(validate(LeaseIdInput))
-  .handler(({ data }) => runApp(removeIndexClause(data.leaseId)))
+  .handler(({ data }) =>
+    runApp(removeIndexClause(data.leaseId), audit('index_clause.remove', data.leaseId)),
+  )
 
 export const indexationPreviewFn = createServerFn({ method: 'GET' })
   .validator(validate(IndexationYearInput))
@@ -34,6 +37,7 @@ export const runIndexationFn = createServerFn({ method: 'POST' })
         { lease: ['manage'] },
         runIndexation(data.year, { notify: data.notify }),
       ),
+      audit('indexation.run', null),
     ),
   )
 

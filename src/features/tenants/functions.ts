@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -23,16 +24,19 @@ export const createTenantFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('createTenant', data, { tenant: ['manage'] }, createTenant(data))),
+    runApp(
+      once('createTenant', data, { tenant: ['manage'] }, createTenant(data)),
+      audit('tenant.create'),
+    ),
   )
 
 export const updateTenantFn = createServerFn({ method: 'POST' })
   .validator(validate(UpdateTenantInput))
-  .handler(({ data }) => runApp(updateTenant(data)))
+  .handler(({ data }) => runApp(updateTenant(data), audit('tenant.update', data.tenantId)))
 
 export const deleteTenantFn = createServerFn({ method: 'POST' })
   .validator(validate(TenantIdInput))
-  .handler(({ data }) => runApp(deleteTenant(data.tenantId)))
+  .handler(({ data }) => runApp(deleteTenant(data.tenantId), audit('tenant.delete', null)))
 
 export const tenantsQuery = () =>
   queryOptions({ queryKey: ['tenants'], queryFn: () => listTenantsFn() })

@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, Link, redirect } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect, useRouter } from '@tanstack/react-router'
+import { useState } from 'react'
 import { PageHeader } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
-import { clientsQuery, withdrawRequestFn } from '#/features/management/functions'
+import { clientsQuery, endClientFn, withdrawRequestFn } from '#/features/management/functions'
 import { assignmentRoleLabel, grantSummary } from '#/features/management/grant-levels'
 import {
   type StaffMember,
@@ -72,38 +73,88 @@ function ClientRow({
   manage: boolean
 }) {
   const assign = useAssignStaffDrawer(client, staff)
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  const [confirming, setConfirming] = useState(false)
+  const end = useMutation({
+    mutationFn: () => endClientFn({ data: { grantId: client.grantId } }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: clientsQuery().queryKey })
+      // The company switcher lists the clients; it comes from the route context.
+      await router.invalidate()
+    },
+  })
   const assigned = client.assigned.map((a) =>
     a.role && isAssignmentRole(a.role)
       ? `${a.name} (${assignmentRoleLabel[a.role]().toLowerCase()})`
       : a.name,
   )
   return (
-    <li className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-      <div className="grid min-w-0 gap-1">
-        <span className="truncate font-semibold">{client.name}</span>
-        <span className="text-muted-foreground text-xs">
-          {grantSummary(client.grant)} · {m.clients_since({ date: client.since })}
-        </span>
-        <span className="text-xs">
-          {assigned.length > 0 ? assigned.join(', ') : m.clients_assigned_none()}
-        </span>
-      </div>
-      <div className="flex gap-2">
-        {manage && (
-          <Button
-            variant="outline"
-            className="h-11 flex-1 sm:h-9 sm:flex-none"
-            onClick={assign.open}
-          >
-            {m.clients_assign()}
+    <li className="grid gap-3 px-5 py-4">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+        <div className="grid min-w-0 gap-1">
+          <span className="truncate font-semibold">{client.name}</span>
+          <span className="text-muted-foreground text-xs">
+            {grantSummary(client.grant)} · {m.clients_since({ date: client.since })}
+          </span>
+          <span className="text-xs">
+            {assigned.length > 0 ? assigned.join(', ') : m.clients_assigned_none()}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          {manage && (
+            <Button
+              variant="outline"
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              onClick={assign.open}
+            >
+              {m.clients_assign()}
+            </Button>
+          )}
+          {manage && (
+            <Button
+              variant="outline"
+              className="h-11 flex-1 sm:h-9 sm:flex-none"
+              onClick={() => setConfirming(true)}
+            >
+              {m.clients_end()}
+            </Button>
+          )}
+          <Button asChild className="h-11 flex-1 sm:h-9 sm:flex-none">
+            <Link to="/" search={{ company: client.organizationId }}>
+              {m.clients_open()}
+            </Link>
           </Button>
-        )}
-        <Button asChild className="h-11 flex-1 sm:h-9 sm:flex-none">
-          <Link to="/" search={{ company: client.organizationId }}>
-            {m.clients_open()}
-          </Link>
-        </Button>
+        </div>
       </div>
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-label={m.clients_end()}
+          className="grid gap-2.5 rounded-lg bg-amber-50 p-3 text-amber-900 text-sm dark:bg-amber-950 dark:text-amber-100"
+        >
+          <span>{m.clients_end_confirm({ organization: client.name })}</span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-11 flex-1 sm:h-9"
+              disabled={end.isPending}
+              onClick={() => setConfirming(false)}
+            >
+              {m.clients_cancel()}
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-11 flex-1 sm:h-9"
+              disabled={end.isPending}
+              onClick={() => end.mutate()}
+            >
+              {m.clients_end_yes()}
+            </Button>
+          </div>
+        </div>
+      )}
+      {end.error && <p className="text-destructive text-sm">{end.error.message}</p>}
     </li>
   )
 }

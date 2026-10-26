@@ -1,14 +1,18 @@
 import { expect, test } from 'bun:test'
+import { portfolio } from '#/features/portfolio/program'
 import { createProperty, listProperties } from '#/features/properties/program'
 import { getTeam } from '#/features/team/program'
 import { grantPresets, levelsFromGrant } from '#/lib/managed-access'
+import { recordAudit } from '#/server/audit'
 import { managedCompanies, resolveFocus } from '#/server/focus'
 import { fail, harness } from '#/test/harness'
 import {
   acceptRequest,
   assignStaff,
+  endClient,
   listClients,
   listManagers,
+  managerActivity,
   previewRequest,
   requestAccess,
   revokeGrant,
@@ -286,4 +290,90 @@ test('domain programs follow the grant and the role in a managed company; the te
   expect(await fail(as('owner', grantPresets.full)(getTeam))).toContain('Forbidden')
   // In their own company the team is open as before.
   expect((await h.run(getTeam)).members.length).toBe(1)
+})
+
+test('the manager can end its own access; the client sees it in its log', async () => {
+  const h = setup()
+  const { grantId } = await grantAccess(h)
+  // Only the manager's own grants, and only from its own company.
+  const asOther = h.runAs({ user: 'stranger', home: { id: 'other', name: 'Annat', role: 'owner' } })
+  expect(await fail(asOther(endClient(grantId)))).toContain('NotFound')
+
+  await h.asBoss(endClient(grantId))
+  expect(await h.run(listManagers)).toEqual([])
+  expect(await fail(h.asBoss(endClient(grantId)))).toContain('NotFound')
+  const [event] = await h.run(managerActivity)
+  expect(event).toMatchObject({
+    action: 'management.end_client',
+    userName: 'boss',
+    companyName: 'Förvaltning',
+  })
+})
+
+test("the log lists what other companies' staff did, not the company's own changes", async () => {
+  const h = setup()
+  await grantAccess(h)
+  const actor = { id: 'mgr', name: 'Förvaltning' }
+  const own = { id: 'org', name: 'Test' }
+  const write = (who: typeof actor, action: 'invoice.void' | 'lease.update', entityId: string) =>
+    h.run(
+      recordAudit(
+        { organizationId: 'org', user: { id: 'boss', name: 'Boss' }, actor: who },
+        { action, entityId },
+        undefined,
+      ),
+    )
+  h.sqlite.exec(
+    `INSERT INTO agreement (id, organization_id, kind, number, start_date, invoice_interval) VALUES ('a1', 'org', 'lease', 1, '2024-01-01', 'monthly')`,
+  )
+  await write(actor, 'invoice.void', 'i1')
+  await write(actor, 'lease.update', 'a1')
+  await write(own, 'invoice.void', 'i2')
+  const events = await h.run(managerActivity)
+  expect(events.map((e) => [e.action, e.entityId, e.companyName, e.agreementKind])).toEqual([
+    ['lease.update', 'a1', 'Förvaltning', 'lease'],
+    ['invoice.void', 'i1', 'Förvaltning', null],
+  ])
+  // The created id is used when none is given.
+  await h.run(
+    recordAudit(
+      { organizationId: 'org', user: { id: 'boss', name: 'Boss' }, actor },
+      { action: 'property.create' },
+      { id: 'p9' },
+    ),
+  )
+  expect((await h.run(managerActivity))[0]).toMatchObject({
+    action: 'property.create',
+    entityId: 'p9',
+  })
+  // A manager can't read the client's log from inside it.
+  const managed = h.runAs({
+    user: 'boss',
+    home: { id: 'mgr', name: 'Förvaltning', role: 'owner' },
+    organization: { id: 'org', name: 'Test', role: 'owner', grant: grantPresets.full },
+  })
+  expect(await fail(managed(managerActivity))).toContain('Forbidden')
+})
+
+test('all companies: each company with the permissions that apply there', async () => {
+  const h = setup()
+  const { grantId } = await grantAccess(h)
+  const overview = await h.asBoss(portfolio)
+  expect(overview.companies.map((c) => [c.name, c.managed, c.units])).toEqual([
+    ['Förvaltning', false, 0],
+    ['Test', true, 3],
+  ])
+  expect(overview.companies[1].overdue).toEqual({ count: 0, owedOre: 0 })
+
+  // Only properties granted: no avier or payments for that company.
+  await h.run(updateGrant({ grantId, levels: { ...levelsFromGrant({}), property: 'read' } }))
+  const narrowed = await h.asBoss(portfolio)
+  expect(narrowed.companies[1]).toMatchObject({ units: 3, overdue: null, attention: null })
+
+  // A member who isn't assigned sees only their own company.
+  const asAnna = h.runAs({
+    user: 'anna-m',
+    home: { id: 'mgr', name: 'Förvaltning', role: 'member' },
+  })
+  expect((await asAnna(portfolio)).companies.map((c) => c.name)).toEqual(['Förvaltning'])
 })

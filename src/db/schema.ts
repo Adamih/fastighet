@@ -892,3 +892,31 @@ export const managementCodeAttempt = sqliteTable(
   },
   (t) => [index('management_code_attempt_user_idx').on(t.userId, t.createdAt)],
 )
+
+/**
+ * Who changed what in a company: one row per successful write, recorded by `runApp`
+ * (`features/audit`). The actor's own company is kept, so the company sees what a manager's staff
+ * did. The entity is a plain id, not a reference, so history outlives deleted records.
+ */
+export const auditEvent = sqliteTable(
+  'audit_event',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'set null' }),
+    /** The user's name when it happened, so the log reads the same after they leave. */
+    userName: text('user_name').notNull(),
+    actorOrganizationId: text('actor_organization_id').references(() => organization.id, {
+      onDelete: 'set null',
+    }),
+    actorOrganizationName: text('actor_organization_name').notNull(),
+    /** An `AuditAction`, e.g. "invoice.void". */
+    action: text('action').notNull(),
+    entityId: text('entity_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    companyKey('audit_event', t),
+    index('audit_event_org_created_idx').on(t.organizationId, t.createdAt),
+  ],
+)

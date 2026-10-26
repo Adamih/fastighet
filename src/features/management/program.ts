@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
 import {
+  agreement,
+  auditEvent,
   managementAssignment,
   managementCodeAttempt,
   managementGrant,
@@ -303,6 +305,47 @@ export const assignStaff = (input: AssignStaffInput) =>
     })
   })
 
+/**
+ * The manager ends its own access to a client, e.g. when the contract ends. The client sees it
+ * in its log, since it happened to its data.
+ */
+export const endClient = (grantId: string) =>
+  Effect.gen(function* () {
+    const org = yield* ownCompany('client', 'manage')
+    const me = yield* CurrentUser
+    const [found] = yield* query((db) =>
+      db
+        .select({ managedOrganizationId: managementGrant.managedOrganizationId })
+        .from(managementGrant)
+        .where(
+          and(
+            eq(managementGrant.id, grantId),
+            eq(managementGrant.managingOrganizationId, org.id),
+            isNull(managementGrant.revokedAt),
+          ),
+        ),
+    )
+    if (!found) return yield* new NotFound({ entity: 'grant', id: grantId })
+    const now = new Date(yield* Clock.currentTimeMillis)
+    yield* query((db) =>
+      db.batch([
+        db
+          .update(managementGrant)
+          .set({ revokedAt: now, revokedBy: me.id })
+          .where(eq(managementGrant.id, grantId)),
+        db.insert(auditEvent).values({
+          organizationId: found.managedOrganizationId,
+          userId: me.id,
+          userName: me.name,
+          actorOrganizationId: org.id,
+          actorOrganizationName: org.name,
+          action: 'management.end_client',
+          entityId: null,
+        }),
+      ]),
+    )
+  })
+
 // --- The managed company ("Förvaltare").
 
 /** The companies that manage this one, with their permissions and who of their staff has access. */
@@ -602,3 +645,48 @@ export const revokeGrant = (grantId: string) =>
         .where(eq(managementGrant.id, grantId)),
     )
   })
+
+/**
+ * What other companies' staff changed in this company, newest first. The company's own changes
+ * are recorded too but not listed here.
+ */
+export const managerActivity = Effect.gen(function* () {
+  const org = yield* ownCompany('grant', 'read')
+  const rows = yield* query((db) =>
+    db
+      .select({
+        id: auditEvent.id,
+        at: auditEvent.createdAt,
+        userName: auditEvent.userName,
+        companyName: auditEvent.actorOrganizationName,
+        action: auditEvent.action,
+        entityId: auditEvent.entityId,
+      })
+      .from(auditEvent)
+      .where(
+        and(
+          eq(auditEvent.organizationId, org.id),
+          sql`coalesce(${auditEvent.actorOrganizationId}, '') <> ${org.id}`,
+        ),
+      )
+      .orderBy(desc(auditEvent.createdAt))
+      .limit(100),
+  )
+  // Agreements link to a lease or a bostadsrätt, by kind.
+  const agreementIds = [...new Set(rows.flatMap((r) => (r.entityId ? [r.entityId] : [])))]
+  const kinds =
+    agreementIds.length === 0
+      ? []
+      : yield* query((db) =>
+          db
+            .select({ id: agreement.id, kind: agreement.kind })
+            .from(agreement)
+            .where(and(eq(agreement.organizationId, org.id), inArray(agreement.id, agreementIds))),
+        )
+  const kindOf = new Map(kinds.map((k) => [k.id, k.kind]))
+  return rows.map((r) => ({
+    ...r,
+    at: r.at.getTime(),
+    agreementKind: r.entityId ? (kindOf.get(r.entityId) ?? null) : null,
+  }))
+})

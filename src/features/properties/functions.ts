@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -48,16 +49,19 @@ export const createPropertyFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('createProperty', data, { property: ['manage'] }, createProperty(data))),
+    runApp(
+      once('createProperty', data, { property: ['manage'] }, createProperty(data)),
+      audit('property.create'),
+    ),
   )
 
 export const updatePropertyFn = createServerFn({ method: 'POST' })
   .validator(std(UpdatePropertyInput))
-  .handler(({ data }) => runApp(updateProperty(data)))
+  .handler(({ data }) => runApp(updateProperty(data), audit('property.update', data.propertyId)))
 
 export const deletePropertyFn = createServerFn({ method: 'POST' })
   .validator(std(PropertyIdInput))
-  .handler(({ data }) => runApp(deleteProperty(data.propertyId)))
+  .handler(({ data }) => runApp(deleteProperty(data.propertyId), audit('property.delete', null)))
 
 export const getUnitFn = createServerFn({ method: 'GET' })
   .validator(std(UnitIdInput))
@@ -77,16 +81,19 @@ export const createUnitFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('createUnit', data, { property: ['manage'] }, createUnit(data))),
+    runApp(
+      once('createUnit', data, { property: ['manage'] }, createUnit(data)),
+      audit('unit.create'),
+    ),
   )
 
 export const updateUnitFn = createServerFn({ method: 'POST' })
   .validator(std(UpdateUnitInput))
-  .handler(({ data }) => runApp(updateUnit(data)))
+  .handler(({ data }) => runApp(updateUnit(data), audit('unit.update', data.unitId)))
 
 export const deleteUnitFn = createServerFn({ method: 'POST' })
   .validator(std(UnitIdInput))
-  .handler(({ data }) => runApp(deleteUnit(data.unitId)))
+  .handler(({ data }) => runApp(deleteUnit(data.unitId), audit('unit.delete', null)))
 
 export const propertiesQuery = () =>
   queryOptions({ queryKey: ['properties'], queryFn: () => listPropertiesFn() })

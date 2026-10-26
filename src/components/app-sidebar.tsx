@@ -7,6 +7,7 @@ import {
   FileText,
   Handshake,
   KeyRound,
+  LayoutGrid,
   LogOut,
   Receipt,
   Settings,
@@ -45,6 +46,14 @@ import type { Permissions } from '#/lib/permissions'
 import { m } from '#/paraglide/messages'
 
 const navigation = [
+  {
+    title: m.nav_portfolio,
+    to: '/portfolio',
+    icon: LayoutGrid,
+    permission: undefined,
+    own: true,
+    showIf: (app: { companies: readonly unknown[] }) => app.companies.length > 1,
+  },
   { title: m.nav_properties, to: '/', icon: Building2, permission: { property: ['read'] } },
   {
     title: (kind: CompanyKind) => companyTerms(kind).parties,
@@ -195,6 +204,9 @@ export function AppSidebar() {
   )
 }
 
+/** The switcher's "Alla bolag": the overview of every company, not a company in focus. */
+const ALL = '*all'
+
 /**
  * Switches the company in focus: the user's own, or one their company manages. The choice lives
  * in the URL (`?company=`), so each tab can show its own company.
@@ -204,15 +216,17 @@ function CompanySwitcher({ onSwitch }: { onSwitch: () => void }) {
   const router = useRouter()
   const own = app.companies.filter((c) => !c.managed)
   const managed = app.companies.filter((c) => c.managed)
+  const pathname = useRouterState({ select: (state) => state.location.pathname })
   return (
     <Select
-      value={app.organization.id}
+      value={pathname === '/portfolio' ? ALL : app.organization.id}
       onValueChange={async (id) => {
         onSwitch()
-        await router.navigate({
-          to: '/',
-          search: { company: id === app.home.id ? undefined : id },
-        })
+        await router.navigate(
+          id === ALL
+            ? { to: '/portfolio', search: { company: undefined } }
+            : { to: '/', search: { company: id === app.home.id ? undefined : id } },
+        )
       }}
     >
       <SelectTrigger
@@ -222,6 +236,7 @@ function CompanySwitcher({ onSwitch }: { onSwitch: () => void }) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
+        <SelectItem value={ALL}>{m.company_switch_all()}</SelectItem>
         <SelectGroup>
           <SelectLabel>{m.company_switch_own()}</SelectLabel>
           {own.map((c) => (

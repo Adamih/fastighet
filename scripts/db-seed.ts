@@ -2029,6 +2029,27 @@ async function seedManager(
     },
   ])
 
+  // What the manager's staff did at Brf Linden lately, as the audit log recorded it.
+  const ago = (days: number) => new Date(now.getTime() - days * 86_400_000)
+  await db.insert(schema.auditEvent).values(
+    (
+      [
+        [frida, 'invoice.run', 9],
+        [elin, 'payment.import', 6],
+        [hugo, 'reminder.send_many', 3],
+        [elin, 'bookkeeping.export', 1],
+      ] as const
+    ).map(([u, action, days]) => ({
+      organizationId: brf.id,
+      userId: u.id,
+      userName: u.name,
+      actorOrganizationId: org.id,
+      actorOrganizationName: org.name,
+      action,
+      createdAt: ago(days),
+    })),
+  )
+
   // A request still waiting, for trying the approval flow from another company.
   const code = generateCode()
   await db.insert(schema.managementRequest).values({

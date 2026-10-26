@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
@@ -16,7 +17,10 @@ export const reminderCandidatesFn = createServerFn({ method: 'GET' }).handler(()
 export const sendReminderFn = createServerFn({ method: 'POST' })
   .validator(validate(Schema.Struct({ invoiceId: Schema.String, requestId })))
   .handler(({ data }) =>
-    runApp(once('sendReminder', data, { invoice: ['manage'] }, sendReminder(data.invoiceId))),
+    runApp(
+      once('sendReminder', data, { invoice: ['manage'] }, sendReminder(data.invoiceId)),
+      audit('reminder.send', data.invoiceId),
+    ),
   )
 
 export const sendRemindersFn = createServerFn({ method: 'POST' })
@@ -29,7 +33,10 @@ export const sendRemindersFn = createServerFn({ method: 'POST' })
     ),
   )
   .handler(({ data }) =>
-    runApp(once('sendReminders', data, { invoice: ['manage'] }, sendReminders(data.invoiceIds))),
+    runApp(
+      once('sendReminders', data, { invoice: ['manage'] }, sendReminders(data.invoiceIds)),
+      audit('reminder.send_many', null),
+    ),
   )
 
 export const reminderCandidatesQuery = () =>

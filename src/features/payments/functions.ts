@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query'
 import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
+import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import {
   assignPayment,
@@ -24,7 +25,7 @@ const std = Schema.toStandardSchemaV1
 
 export const importPaymentsFn = createServerFn({ method: 'POST' })
   .validator(std(ImportPaymentsInput))
-  .handler(({ data }) => runApp(importPayments(data)))
+  .handler(({ data }) => runApp(importPayments(data), audit('payment.import', null)))
 
 export const listPaymentsFn = createServerFn({ method: 'GET' })
   .validator(std(ListPaymentsInput))
@@ -42,15 +43,17 @@ export const previewAssignmentFn = createServerFn({ method: 'GET' })
 
 export const assignPaymentFn = createServerFn({ method: 'POST' })
   .validator(std(AssignPaymentInput))
-  .handler(({ data }) => runApp(assignPayment(data)))
+  .handler(({ data }) => runApp(assignPayment(data), audit('payment.assign', data.paymentId)))
 
 export const ignorePaymentFn = createServerFn({ method: 'POST' })
   .validator(std(PaymentIdInput))
-  .handler(({ data }) => runApp(ignorePayment(data.paymentId)))
+  .handler(({ data }) =>
+    runApp(ignorePayment(data.paymentId), audit('payment.ignore', data.paymentId)),
+  )
 
 export const undoPaymentFn = createServerFn({ method: 'POST' })
   .validator(std(PaymentIdInput))
-  .handler(({ data }) => runApp(undoPayment(data.paymentId)))
+  .handler(({ data }) => runApp(undoPayment(data.paymentId), audit('payment.undo', data.paymentId)))
 
 export const paymentsQuery = (filter: PaymentFilter) =>
   queryOptions({
