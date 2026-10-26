@@ -15,6 +15,7 @@ import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
+import { AccountPanel } from '#/features/accounts/account-panel'
 import { AgreementLink, agreementNumberLabel } from '#/features/agreements/components'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
@@ -223,6 +224,12 @@ function TenantPage() {
                   </div>
                 )}
               </Panel>
+            )}
+            {can({ invoice: ['read'] }) && (
+              <AccountPanel
+                partyId={tenant.id}
+                canRefund={can({ invoice: ['manage'], payment: ['manage'] })}
+              />
             )}
             {can({ invoice: ['read'] }) && (
               <Panel title={m.tenant_recent_invoices()}>

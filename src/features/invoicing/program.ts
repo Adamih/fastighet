@@ -17,19 +17,22 @@ import { billFor } from '#/features/agreements/billing'
 import { billedOnceChargeIds } from '#/features/agreements/program'
 import {
   creditNoteEntries,
+  creditTransferEntries,
+  creditUseEntries,
   type InvoiceMoney,
   invoiceEntries,
   manualPaymentEntries,
-  refundEntries,
   statusFromMoney,
 } from '#/features/ledger/postings'
 import {
   allInvoiceMoney,
+  creditBalances,
   invoiceMoneyFor,
   livePostings,
   postingStatements,
   reversalStatements,
 } from '#/features/ledger/program'
+import { undoPaymentStatements } from '#/features/payments/program'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
@@ -41,14 +44,7 @@ import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
-import {
-  type RefundProblem,
-  type ReissueProblem,
-  refundProblem,
-  reissueProblem,
-  type VoidProblem,
-  voidProblem,
-} from './correction'
+import { type ReissueProblem, reissueProblem, type VoidProblem, voidProblem } from './correction'
 import { type CreditProblem, draftCreditNote } from './credit'
 import { matchesFilter } from './overview'
 import { dueDate, invoicePeriod, ocrFor, type Period, periodLabel } from './rules'
@@ -57,8 +53,37 @@ import type {
   CreateInvoiceRunInput,
   ListInvoicesInput,
   MarkPaidInput,
-  RefundInvoiceInput,
 } from './schemas'
+
+/**
+ * The statements that use the party's credit balance (tillgodo) on a new avi, in the batch that
+ * issues it: as much as the avi's total allows. `credit` tracks what is left per party during a
+ * run, so two avier to the same party don't use the same credit twice.
+ */
+function creditUseStatements(
+  db: Parameters<Parameters<typeof orgQuery>[0]>[0],
+  organizationId: string,
+  credit: Map<string, number>,
+  avi: { id: string; number: number; totalOre: number; issueDate: string },
+  owner: { partyId: string; agreementId: string },
+) {
+  const available = credit.get(owner.partyId) ?? 0
+  const amountOre = Math.min(available, avi.totalOre)
+  if (amountOre <= 0) return []
+  credit.set(owner.partyId, available - amountOre)
+  return postingStatements(
+    db,
+    organizationId,
+    {
+      date: avi.issueDate,
+      kind: 'credit_use',
+      description: `Tillgodo avräknat på avi ${avi.number}`,
+      invoiceId: avi.id,
+    },
+    creditUseEntries(avi.id, amountOre),
+    owner,
+  )
+}
 
 const read: Permissions = { invoice: ['read'] }
 const manage: Permissions = { invoice: ['manage'] }
@@ -68,7 +93,6 @@ const manage: Permissions = { invoice: ['manage'] }
  */
 const runInvoices: Permissions = { invoice: ['manage'], lease: ['read'] }
 /** Paying money back is booked like a payment. */
-const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
 
 // ---------------------------------------------------------------------------------------------
 // Invoice runs
@@ -179,6 +203,7 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
       })
     }
     const pending = preview.rows.filter((r) => !r.alreadyInvoiced)
+    const credit = yield* creditBalances(pending.map((r) => r.recipient.partyId))
 
     const [{ maxNumber }] = yield* orgQuery((db, organizationId) =>
       db
@@ -230,6 +255,13 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
               invoiceId: id,
             },
             invoiceEntries({ id, ...row }),
+            { partyId: row.recipient.partyId, agreementId: row.agreementId },
+          ),
+          ...creditUseStatements(
+            db,
+            organizationId,
+            credit,
+            { id, number, totalOre: row.totalOre, issueDate: preview.issueDate },
             { partyId: row.recipient.partyId, agreementId: row.agreementId },
           ),
         ])
@@ -368,11 +400,7 @@ export const getInvoice = (invoiceId: string) =>
     const payments = (yield* hasPermission({ payment: ['read'] }))
       ? yield* invoicePayments(row.id)
       : []
-    const refunds = (yield* livePostings({ kinds: ['refund'], invoiceId: row.id })).map((r) => ({
-      date: r.posting.date,
-      amountOre: r.entries.find((e) => e.account === 'receivable')?.amountOre ?? 0,
-    }))
-    return { ...toView(row, money, yield* today), payments, refunds, seller }
+    return { ...toView(row, money, yield* today), payments, seller }
   })
 
 export type InvoiceView = Effect.Success<ReturnType<typeof getInvoice>>
@@ -452,6 +480,8 @@ export const emailInvoice = (invoiceId: string, options: { skipWithoutEmail?: bo
         net: formatSek(inv.netOre),
         vat: inv.vatOre > 0 ? formatSek(inv.vatOre) : null,
         total: formatSek(inv.totalOre),
+        creditUsed: inv.creditUsedOre > 0 ? formatSek(-inv.creditUsedOre) : null,
+        toPay: formatSek(inv.totalOre - inv.creditUsedOre),
         dueDate: inv.dueDate,
         bankgiro: inv.seller.bankgiro,
         ocr: inv.ocr,
@@ -500,51 +530,33 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
   })
 
 /**
- * "Ångra betalning": reverses every payment on the avi. Bank payments go back to needing
- * attention (unless they still settle other avier); payments by hand are reversed.
+ * "Ångra betalning": reverses every payment on the avi. A bank payment is undone as a whole, on
+ * every avi it was split over, and goes back to needing attention; payments by hand are
+ * reversed. Credit used on the avi stays.
  */
 export const unmarkInvoicePaid = (invoiceId: string) =>
   Effect.gen(function* () {
     yield* requirePermission({ invoice: ['manage'], payment: ['manage'] })
     const inv = yield* getInvoice(invoiceId)
     if (inv.paidOre <= 0) return yield* new Conflict({ message: 'Avin har inga betalningar' })
-    if (inv.refundedOre > 0) {
-      return yield* new Conflict({
-        message: 'Avin har en registrerad återbetalning. Ångra återbetalningen först.',
-      })
-    }
     const live = yield* livePostings({ kinds: ['allocation', 'manual_payment'], invoiceId: inv.id })
+    const byHand = live.filter((l) => l.posting.kind === 'manual_payment')
     const paymentIds = [
       ...new Set(live.flatMap((l) => (l.posting.paymentId ? [l.posting.paymentId] : []))),
     ]
-    // Payments that settle only this avi have nothing left once it is undone.
-    const elsewhere =
-      paymentIds.length === 0
-        ? []
-        : (yield* livePostings({ kinds: ['allocation'], paymentIds })).filter(
-            (l) => l.posting.invoiceId !== inv.id,
-          )
-    const freed = paymentIds.filter((id) => !elsewhere.some((l) => l.posting.paymentId === id))
     const on = yield* today
+    const bank = paymentIds.length > 0 ? yield* undoPaymentStatements(paymentIds, on) : null
     yield* orgQuery((db, organizationId) => {
-      const statements = [
+      const [first, ...rest] = [
         ...reversalStatements(
           db,
           organizationId,
-          live,
+          byHand,
           on,
           () => `Ångrad betalning av avi ${inv.number}`,
         ),
-        ...(freed.length > 0
-          ? [
-              db
-                .update(payment)
-                .set({ status: 'unmatched', note: null })
-                .where(and(eq(payment.organizationId, organizationId), inArray(payment.id, freed))),
-            ]
-          : []),
+        ...(bank ? bank(db, organizationId) : []),
       ]
-      const [first, ...rest] = statements
       return db.batch([first, ...rest])
     })
     return yield* getInvoice(inv.id)
@@ -566,7 +578,9 @@ export const voidInvoice = (invoiceId: string) =>
     if (problem) return yield* new Conflict({ message: voidProblemMessages[problem] })
     const voidedAt = new Date(yield* Clock.currentTimeMillis)
     const issued = yield* livePostings({ kinds: ['invoice'], invoiceId: inv.id })
-    // Voiding reverses the avi's posting, so nothing is owed or booked as income.
+    const creditUsed = yield* livePostings({ kinds: ['credit_use'], invoiceId: inv.id })
+    // Voiding reverses the avi's posting, so nothing is owed or booked as income, and gives back
+    // any credit used on it.
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db
@@ -580,6 +594,13 @@ export const voidInvoice = (invoiceId: string) =>
           stockholmDate(voidedAt.getTime()),
           () => `Makulering av avi ${inv.number}`,
           'void',
+        ),
+        ...reversalStatements(
+          db,
+          organizationId,
+          creditUsed,
+          stockholmDate(voidedAt.getTime()),
+          () => `Tillgodo åter vid makulering av avi ${inv.number}`,
         ),
       ]),
     )
@@ -621,6 +642,10 @@ export const createCreditNote = (input: CreateCreditNoteInput) =>
         .where(eq(creditNote.organizationId, organizationId)),
     )
     const id = crypto.randomUUID()
+    // A credit beyond what is still owed (the avi was paid, or paid with credit) becomes the
+    // party's credit balance, to be used on the next avi or paid back.
+    const toCreditOre = Math.max(0, draft.totalOre - Math.max(0, inv.owedOre))
+    const owner = { partyId: inv.partyId, agreementId: inv.agreementId }
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db.insert(creditNote).values({
@@ -662,8 +687,23 @@ export const createCreditNote = (input: CreateCreditNoteInput) =>
             creditNoteId: id,
           },
           creditNoteEntries(inv.id, draft),
-          { partyId: inv.partyId, agreementId: inv.agreementId },
+          owner,
         ),
+        ...(toCreditOre > 0
+          ? postingStatements(
+              db,
+              organizationId,
+              {
+                date: issueDate,
+                kind: 'credit_transfer',
+                description: `Kreditfaktura ${maxNumber + 1} till tillgodo`,
+                invoiceId: inv.id,
+                creditNoteId: id,
+              },
+              creditTransferEntries(inv.id, toCreditOre),
+              owner,
+            )
+          : []),
       ]),
     )
     return { id }
@@ -694,8 +734,8 @@ export const getCreditNote = (creditNoteId: string) =>
     const money = (yield* invoiceMoneyFor([row.invoice.id])).get(row.invoice.id) as InvoiceMoney
     return {
       ...row,
-      /** Whether the credited avi had been paid, so the credit is paid back rather than deducted. */
-      refund: money.paidOre > 0,
+      /** Whether the credit went (in part) to the party's credit balance: the avi had been paid. */
+      toCredit: money.toCreditOre > 0,
       invoiceMoney: money,
       seller: yield* loadSettings,
     }
@@ -728,7 +768,7 @@ export const emailCreditNote = (creditNoteId: string) =>
         net: negative(note.netOre),
         vat: note.vatOre > 0 ? negative(note.vatOre) : null,
         total: negative(note.totalOre),
-        refund: note.refund,
+        toCredit: note.toCredit,
         sellerDetails: sellerDetails(note.seller, note.vatOre > 0),
       },
     })
@@ -740,60 +780,6 @@ export const emailCreditNote = (creditNoteId: string) =>
         .where(and(eq(creditNote.id, note.id), eq(creditNote.organizationId, organizationId))),
     )
     return true
-  })
-
-const refundProblemMessages: Record<RefundProblem, string> = {
-  nothing_due: 'Avin har inget att betala tillbaka',
-  future: 'Datumet kan inte vara i framtiden',
-}
-
-/** Records that what an avi was overpaid by (after a credit note) has been paid back. */
-export const refundInvoice = (input: RefundInvoiceInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(refundMoney)
-    const inv = yield* getInvoice(input.invoiceId)
-    const problem = refundProblem(inv, input.refundedOn, yield* today)
-    if (problem) return yield* new Conflict({ message: refundProblemMessages[problem] })
-    yield* orgQuery((db, organizationId) =>
-      db.batch([
-        ...postingStatements(
-          db,
-          organizationId,
-          {
-            date: input.refundedOn,
-            kind: 'refund',
-            description: `Återbetalning, avi ${inv.number}`,
-            invoiceId: inv.id,
-          },
-          refundEntries(inv.id, inv.refundDueOre),
-          { partyId: inv.partyId, agreementId: inv.agreementId },
-        ),
-      ]),
-    )
-    return yield* getInvoice(inv.id)
-  })
-
-/** Undoes the refunds recorded on an avi; what was overpaid is to be paid back again. */
-export const undoInvoiceRefund = (invoiceId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(refundMoney)
-    const inv = yield* getInvoice(invoiceId)
-    const live = yield* livePostings({ kinds: ['refund'], invoiceId: inv.id })
-    if (live.length === 0) {
-      return yield* new Conflict({ message: 'Ingen återbetalning är registrerad' })
-    }
-    const on = yield* today
-    yield* orgQuery((db, organizationId) => {
-      const [first, ...rest] = reversalStatements(
-        db,
-        organizationId,
-        live,
-        on,
-        () => `Ångrad återbetalning, avi ${inv.number}`,
-      )
-      return db.batch([first, ...rest])
-    })
-    return yield* getInvoice(inv.id)
   })
 
 // ---------------------------------------------------------------------------------------------
@@ -889,6 +875,7 @@ export const reissueInvoice = (invoiceId: string) =>
     if (!recipient) return yield* new Conflict({ message: 'Avtalet har ingen hyra för perioden' })
     const number = maxNumber + 1
     const id = crypto.randomUUID()
+    const credit = yield* creditBalances([recipient.partyId])
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db.insert(invoice).values({
@@ -920,6 +907,13 @@ export const reissueInvoice = (invoiceId: string) =>
           organizationId,
           { date: preview.issueDate, kind: 'invoice', description: `Avi ${number}`, invoiceId: id },
           invoiceEntries({ id, ...preview }),
+          { partyId: recipient.partyId, agreementId: preview.agreementId },
+        ),
+        ...creditUseStatements(
+          db,
+          organizationId,
+          credit,
+          { id, number, totalOre: preview.totalOre, issueDate: preview.issueDate },
           { partyId: recipient.partyId, agreementId: preview.agreementId },
         ),
       ]),

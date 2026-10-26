@@ -9,7 +9,6 @@ export type InvoiceEventKind =
   | 'paid'
   | 'voided'
   | 'credited'
-  | 'refunded'
   | 'reminded'
   | 'replaced'
 
@@ -17,7 +16,7 @@ export interface InvoiceEvent {
   readonly kind: InvoiceEventKind
   /** ISO date. */
   readonly date: string
-  /** For `refunded`: the amount paid back; for `reminded`, the fee charged. */
+  /** For `reminded`: the fee charged. */
   readonly amountOre?: number
   /** For `reminded`: 1 for the first reminder, 2 for the second, … */
   readonly sequence?: number
@@ -44,8 +43,6 @@ export function invoiceEvents(
     }[]
     /** Payment reminders sent. */
     reminders?: readonly { sequence: number; sentOn: string; feeOre: number }[]
-    /** Amounts paid back (after a credit note on a paid avi). */
-    refunds?: readonly { date: string; amountOre: number }[]
     /** Corrected avier issued in its place. */
     replacedBy?: readonly { number: number; issueDate: string }[]
   },
@@ -76,11 +73,6 @@ export function invoiceEvents(
       date: note.issueDate,
       creditNote: { number: note.number, totalOre: note.totalOre },
     })),
-    ...(invoice.refunds ?? []).map((refund) => ({
-      kind: 'refunded' as const,
-      date: refund.date,
-      amountOre: refund.amountOre,
-    })),
     ...(invoice.reminders ?? []).map((reminder) => ({
       kind: 'reminded' as const,
       date: reminder.sentOn,
@@ -101,12 +93,11 @@ export function invoiceEvents(
 /** On the same day, later steps come first (the list is newest first). */
 const order: Record<InvoiceEventKind, number> = {
   replaced: 0,
-  refunded: 1,
-  reminded: 2,
-  voided: 3,
-  credited: 4,
-  paid: 5,
-  fellDue: 6,
-  sent: 7,
+  reminded: 1,
+  voided: 2,
+  credited: 3,
+  paid: 4,
+  fellDue: 5,
+  sent: 6,
   created: 8,
 }

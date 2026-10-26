@@ -305,15 +305,8 @@ function objectLine(invoice: Invoice) {
   return [units.designations, units.labels.join(', ')].filter(Boolean).join(' · ')
 }
 
-/** "av 8 450 kr" under a partly credited open avi, or what is still to be paid back. */
+/** "av 8 450 kr" under a partly credited open avi. */
 function AmountNote({ invoice }: { invoice: Invoice }) {
-  if (invoice.refundDueOre > 0) {
-    return (
-      <span className="whitespace-nowrap font-medium text-amber-700 text-xs dark:text-amber-300">
-        {m.invoice_list_refund_due({ amount: formatSekShort(invoice.refundDueOre) })}
-      </span>
-    )
-  }
   if (isOpen(invoice) && invoice.creditedOre > 0) {
     return (
       <span className="whitespace-nowrap font-normal text-muted-foreground text-xs">

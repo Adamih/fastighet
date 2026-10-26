@@ -22,14 +22,16 @@ import {
 import { useCan } from '#/features/auth/use-can'
 import { PaymentStatusBadge } from '#/features/payments/components'
 import {
+  assignmentPreviewQuery,
   assignPaymentFn,
   ignorePaymentFn,
   importPaymentsFn,
-  openInvoicesQuery,
+  payersQuery,
   paymentImportsQuery,
   paymentsQuery,
   undoPaymentFn,
 } from '#/features/payments/functions'
+import { allocationSummary } from '#/features/payments/matching'
 import type { listPayments } from '#/features/payments/program'
 import { type PaymentFilter, paymentFilters } from '#/features/payments/schemas'
 import { formatSek } from '#/lib/money'
@@ -183,7 +185,9 @@ function ImportForm() {
         <ul className="grid gap-0.5 text-sm">
           <li>{m.payment_imported({ count: summary.imported })}</li>
           <li>{m.payment_booked({ count: summary.matched })}</li>
-          {summary.review > 0 && <li>{m.payment_review_count({ count: summary.review })}</li>}
+          {summary.toCredit > 0 && (
+            <li>{m.payment_to_credit_count({ count: summary.toCredit })}</li>
+          )}
           {summary.unmatched > 0 && (
             <li>{m.payment_unmatched_count({ count: summary.unmatched })}</li>
           )}
@@ -257,6 +261,11 @@ function PaymentStatusDetails({
           })}
         </Link>
       )}
+      {payment.allocations.length > 0 && (
+        <span className="text-muted-foreground text-xs">
+          {allocationSummary(payment.allocations)}
+        </span>
+      )}
       {payment.note && <span className="text-muted-foreground text-xs">{payment.note}</span>}
       {error && <span className="text-destructive text-xs">{error.message}</span>}
     </>
@@ -309,9 +318,8 @@ function PaymentButtons({
 function AssignPanel({ payment, actions }: { payment: PaymentRowData; actions: PaymentActions }) {
   if (!(actions.canAssign && actions.open && actions.assigning)) return null
   return (
-    <AssignToInvoice
+    <AssignToPayer
       paymentId={payment.id}
-      suggestedInvoiceId={payment.invoice?.id}
       onDone={async () => {
         actions.setAssigning(false)
         await actions.refresh()
@@ -374,56 +382,51 @@ function PaymentRow({ payment }: { payment: PaymentRowData }) {
   )
 }
 
-function AssignToInvoice({
-  paymentId,
-  suggestedInvoiceId,
-  onDone,
-}: {
-  paymentId: string
-  suggestedInvoiceId: string | null
-  onDone: () => Promise<void>
-}) {
-  const { data: invoices, isPending } = useQuery(openInvoicesQuery())
-  const [invoiceId, setInvoiceId] = useState(suggestedInvoiceId ?? '')
+/** "Koppla": pick who paid; the app shows how it splits over their avier, then books it. */
+function AssignToPayer({ paymentId, onDone }: { paymentId: string; onDone: () => Promise<void> }) {
+  const { data: payers, isPending } = useQuery(payersQuery())
+  const [partyId, setPartyId] = useState('')
+  const plan = useQuery({ ...assignmentPreviewQuery({ paymentId, partyId }), enabled: !!partyId })
   const assign = useMutation({ mutationFn: assignPaymentFn, onSuccess: onDone })
 
-  if (isPending)
-    return <p className="text-muted-foreground text-sm">{m.payment_loading_invoices()}</p>
-  if (!invoices || invoices.length === 0) {
-    return <p className="text-sm">{m.payment_no_open_invoices()}</p>
-  }
+  if (isPending) return <p className="text-muted-foreground text-sm">{m.common_loading()}</p>
+  if (!payers || payers.length === 0) return <p className="text-sm">{m.payment_no_payers()}</p>
 
   return (
-    <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
-      <Select value={invoiceId || undefined} onValueChange={setInvoiceId}>
-        <SelectTrigger
-          className="h-11 w-full sm:h-9 sm:w-96"
-          aria-label={m.payment_assign_invoice_label()}
+    <div className="grid gap-3">
+      <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center">
+        <Select value={partyId || undefined} onValueChange={setPartyId}>
+          <SelectTrigger
+            className="h-11 w-full sm:h-9 sm:w-96"
+            aria-label={m.payment_payer_label()}
+          >
+            <SelectValue placeholder={m.payment_choose_payer()} />
+          </SelectTrigger>
+          <SelectContent>
+            {payers.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.owedOre > 0
+                  ? m.payment_payer_option({ name: p.name, amount: formatSek(p.owedOre) })
+                  : p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          className="h-11 sm:h-8"
+          disabled={!partyId || !plan.data || assign.isPending}
+          onClick={() => assign.mutate({ data: { paymentId, partyId } })}
         >
-          <SelectValue placeholder={m.payment_choose_invoice()} />
-        </SelectTrigger>
-        <SelectContent>
-          {invoices.map((i) => (
-            <SelectItem key={i.id} value={i.id}>
-              {m.payment_invoice_option({
-                number: i.number,
-                recipient: i.recipientName,
-                amount: formatSek(i.owedOre),
-                ocr: i.ocr,
-              })}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        size="sm"
-        className="h-11 sm:h-8"
-        disabled={!invoiceId || assign.isPending}
-        onClick={() => assign.mutate({ data: { paymentId, invoiceId } })}
-      >
-        {m.payment_assign_and_pay()}
-      </Button>
-      {assign.error && <span className="text-destructive text-sm">{assign.error.message}</span>}
+          {m.payment_assign()}
+        </Button>
+      </div>
+      {plan.data && (
+        <p className="text-sm">{m.payment_assign_plan({ plan: allocationSummary(plan.data) })}</p>
+      )}
+      {(plan.error ?? assign.error) && (
+        <span className="text-destructive text-sm">{(plan.error ?? assign.error)?.message}</span>
+      )}
     </div>
   )
 }

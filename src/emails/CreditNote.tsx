@@ -18,8 +18,8 @@ export type Props = {
   /** Null when no VAT is credited. */
   vat: string | null
   total: string
-  /** Whether the credited invoice was already paid, so the amount will be paid back. */
-  refund: boolean
+  /** Whether the credited invoice was already paid, so the amount becomes credit (tillgodo). */
+  toCredit: boolean
   /** Seller details for the footer: address, organisationsnummer, VAT number, F-skatt. */
   sellerDetails: string[]
 }
@@ -53,8 +53,8 @@ export default function CreditNote(props: Props) {
       <Paragraph>
         {props.organizationName} har krediterat din {props.invoiceName.toLowerCase()}{' '}
         {props.invoiceNumber} ({props.invoiceIssueDate}).{' '}
-        {props.refund
-          ? 'Avin var redan betald, så beloppet betalas tillbaka till dig.'
+        {props.toCredit
+          ? 'Avin var redan betald, så beloppet står till godo hos oss. Det dras av på din nästa avi, eller betalas tillbaka om du ber om det.'
           : 'Beloppet dras av från det du ska betala på avin.'}
       </Paragraph>
 
@@ -109,7 +109,7 @@ CreditNote.PreviewProps = {
   net: '−2 000,00 kr',
   vat: null,
   total: '−2 000,00 kr',
-  refund: false,
+  toCredit: false,
   sellerDetails: [
     'Exempel Fastigheter AB, Storgatan 1, 753 20 Uppsala',
     'Org.nr 556677-8899 · Godkänd för F-skatt',

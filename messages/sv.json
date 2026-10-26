@@ -1,5 +1,18 @@
 {
   "$schema": "https://inlang.com/schema/inlang-message-format",
+  "account_balance_credit": "tillgodo {amount}",
+  "account_balance_owed": "saldo {amount}",
+  "account_credit": "Tillgodo {amount}",
+  "account_credit_hint": "Tillgodo dras av på nästa avi, eller betalas tillbaka om hyresgästen flyttar eller ber om det.",
+  "account_history": "Händelser",
+  "account_owed": "Att betala {amount}",
+  "account_refund": "Betala tillbaka",
+  "account_refund_confirm": "Registrera återbetalning av {amount}",
+  "account_refund_date": "Återbetalt den",
+  "account_refunded": "Återbetalt {amount} den {date}",
+  "account_settled": "Inget att betala",
+  "account_title": "Saldo",
+  "account_undo_refund": "Ångra återbetalning",
   "auth_back_to_login": "Tillbaka till inloggningen",
   "auth_error_email_not_verified": "Du behöver bekräfta din e-postadress. Vi har skickat en ny länk till din inkorg.",
   "auth_error_email_verification_required_before_accepting_or_rejecting_invitation": "Bekräfta din e-postadress innan du svarar på inbjudan",
@@ -186,15 +199,12 @@
   "credit_note_not_sent": "Inte skickad",
   "credit_note_number": "Kreditfaktura {number}",
   "credit_note_reduce_hint": "Dras av från det som ska betalas på avin.",
-  "credit_note_refund": "Återbetalning",
   "credit_note_refund_date": "Återbetald den",
   "credit_note_refund_due": "Ska betalas tillbaka",
-  "credit_note_refund_hint": "Avin var betald – beloppet betalas tillbaka till hyresgästen.",
-  "credit_note_refund_on_invoice": "Återbetalningen registreras på {invoice}.",
   "credit_note_refunded_on": "Återbetald {date}",
   "credit_note_register_refund": "Registrera återbetalning",
   "credit_note_sent": "Skickad",
-  "credit_note_undo_refund": "Ångra återbetalning",
+  "credit_note_to_credit_hint": "Avin var betald – beloppet står till godo för hyresgästen och dras av på nästa avi.",
   "credit_preview_credited": "Krediteras",
   "credit_preview_left": "Kvar att betala på avin",
   "credit_preview_refund": "Betalas tillbaka till hyresgästen",
@@ -335,6 +345,7 @@
   "invoice_create_short": "Skapa",
   "invoice_credit": "Kreditera",
   "invoice_credit_notes": "Krediteringar",
+  "invoice_credit_used": "varav {amount} betalt med tillgodo",
   "invoice_due_date": "Förfallodag",
   "invoice_due_on": "Förfaller {date}",
   "invoice_due_relative": "Förfaller {when}",
@@ -342,7 +353,6 @@
   "invoice_event_created": "Utfärdad",
   "invoice_event_credited": "Krediterad {amount} (kreditfaktura {number})",
   "invoice_event_fell_due": "Förföll obetald",
-  "invoice_event_refunded": "Återbetalt {amount}",
   "invoice_event_reminded": "Påminnelse {sequence} skickad",
   "invoice_event_reminded_fee": "Påminnelse {sequence} skickad, avgift {fee}",
   "invoice_event_replaced": "Ersatt av avi {number}",
@@ -358,7 +368,6 @@
   "invoice_list_empty": "Inga avier ännu.",
   "invoice_list_no_match": "Inga avier matchar.",
   "invoice_list_outstanding": "Utestående i listan: {amount}",
-  "invoice_list_refund_due": "Återbetalas {amount}",
   "invoice_list_reminded": "Påmind {date}",
   "invoice_list_showing": [
     {
@@ -426,8 +435,6 @@
   "invoice_payments": "Inbetalningar",
   "invoice_payments_empty": "Ingen inbetalning har matchats mot avin.",
   "invoice_print": "Skriv ut",
-  "invoice_refund_due": "Krediterat {amount} – betalas tillbaka",
-  "invoice_refunded": "Krediterat {amount} – återbetalt",
   "invoice_register_payment": "Registrera betalning",
   "invoice_reissue": "Ny avi för perioden",
   "invoice_reminder_fee": "varav avgift {fee}",
@@ -541,6 +548,7 @@
   "invoice_status_paid": "Betald",
   "invoice_status_unpaid": "Obetald",
   "invoice_status_void": "Makulerad",
+  "invoice_to_credit": "Krediterat {amount} – fört till tillgodo",
   "invoice_undo_payment": "Ångra betalning",
   "invoice_void": "Makulera avi",
   "invoice_void_confirm": "Makulera avi {number}? Den behåller sitt nummer men ska inte betalas.",
@@ -838,8 +846,7 @@
   "ownership_units": "Lägenhet och tillhörande objekt",
   "ownership_units_hint": "Till exempel lägenheten och ett förråd som hör till bostadsrätten.",
   "payment_assign": "Koppla",
-  "payment_assign_and_pay": "Koppla och markera betald",
-  "payment_assign_invoice_label": "Avi att koppla till",
+  "payment_assign_plan": "Fördelas så här: {plan}",
   "payment_booked": [
     {
       "declarations": [
@@ -850,12 +857,13 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} bokad mot avi",
-        "countPlural=other": "{count} bokade mot avier"
+        "countPlural=one": "{count} bokförd",
+        "countPlural=other": "{count} bokförda"
       }
     }
   ],
   "payment_choose_invoice": "Välj avi",
+  "payment_choose_payer": "Välj vem som betalat",
   "payment_duplicates": [
     {
       "declarations": [
@@ -929,26 +937,14 @@
   "payment_invoice_option": "Avi {number} · {recipient} · {amount} · OCR {ocr}",
   "payment_loading_invoices": "Hämtar avier…",
   "payment_no_open_invoices": "Det finns inga obetalda avier att koppla till.",
+  "payment_no_payers": "Ingen har fått någon avi än.",
   "payment_none": "Inga betalningar.",
   "payment_none_attention": "Inga betalningar att hantera.",
   "payment_payer": "Betalare",
+  "payment_payer_label": "Vem betalningen kommer från",
+  "payment_payer_option": "{name} · att betala {amount}",
   "payment_recent_imports": "Senaste importer",
   "payment_reference": "Referens",
-  "payment_review_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} att kontrollera",
-        "countPlural=other": "{count} att kontrollera"
-      }
-    }
-  ],
   "payment_skipped": [
     {
       "declarations": [
@@ -964,6 +960,21 @@
       }
     }
   ],
+  "payment_to_credit_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} gav tillgodo",
+        "countPlural=other": "{count} gav tillgodo"
+      }
+    }
+  ],
   "payment_unknown_payer": "Okänd betalare",
   "payment_unmatched_count": [
     {
@@ -975,8 +986,8 @@
         "countPlural"
       ],
       "match": {
-        "countPlural=one": "{count} utan matchande avi",
-        "countPlural=other": "{count} utan matchande avi"
+        "countPlural=one": "{count} utan känt OCR-nummer, att hantera",
+        "countPlural=other": "{count} utan känt OCR-nummer, att hantera"
       }
     }
   ],
@@ -1011,8 +1022,6 @@
   "property_occupancy_percent": "{percent} % uthyrt",
   "property_save": "Spara fastighet",
   "property_shared_lease": "Avtal #{number}, flera objekt",
-  "refund_due_amount": "Att betala tillbaka: {amount}",
-  "refund_refunded_amount": "Återbetalt {amount}",
   "reissue_description": "Ersätter avi {number}. Hyran räknas från avtalet som det ser ut i dag och avin får ett nytt nummer.",
   "reissue_recipient": "Mottagare",
   "reissue_recipient_email": "E-post",

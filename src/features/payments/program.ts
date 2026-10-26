@@ -1,20 +1,21 @@
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { invoice, payment, paymentImport } from '#/db/schema'
+import type { Db } from '#/db'
+import { invoice, party, payment, paymentImport } from '#/db/schema'
 import {
   allocationEntries,
-  type InvoiceMoney,
+  creditAllocationEntries,
   paymentEntries,
-  statusFromMoney,
 } from '#/features/ledger/postings'
 import {
-  allInvoiceMoney,
-  invoiceMoneyFor,
+  creditBalances,
   livePostings,
+  openAvierFor,
   paymentAllocations,
   postingStatements,
   reversalStatements,
 } from '#/features/ledger/program'
+import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -22,17 +23,13 @@ import { orgQuery } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import { Camt054Error, parseCamt054 } from './camt054'
-import { type InvoiceForMatching, matchPayments } from './matching'
+import { type Allocation, allocate, matchPayments } from './matching'
 import type { AssignPaymentInput, ImportPaymentsInput, PaymentFilter } from './schemas'
 
 /** D1 allows 100 bound parameters per statement; `IN (...)` lists stay well below that. */
 const IN_CHUNK = 50
-/**
- * Statements per D1 batch. Each payment needs at most five: the payment, its posting and
- * entries, and when matched the allocation posting and entries.
- */
+/** Statements per D1 batch. A payment's statements always share a batch. */
 const BATCH_STATEMENTS = 50
-const PER_PAYMENT = 5
 
 const chunks = <T>(items: readonly T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
@@ -43,6 +40,77 @@ const read: Permissions = { payment: ['read'] }
 const manage: Permissions = { payment: ['manage'] }
 /** Booking a payment changes whether an invoice is paid, so it needs both. */
 const book: Permissions = { payment: ['manage'], invoice: ['manage'] }
+
+/** What allocations need about each avi: its number and owner. */
+type AviOwner = { number: number; partyId: string; agreementId: string }
+
+/**
+ * The postings that split a payment: one allocation per avi, and the rest to the party's credit
+ * balance. `creditOwner` is whose credit balance it is.
+ */
+function allocationStatements(
+  db: Db,
+  organizationId: string,
+  p: { id: string; bookingDate: string },
+  allocations: readonly Allocation[],
+  owners: ReadonlyMap<string, AviOwner>,
+  creditOwner: { partyId: string; agreementId: string | null },
+) {
+  return allocations.flatMap((a) => {
+    if (a.invoiceId === null) {
+      return postingStatements(
+        db,
+        organizationId,
+        {
+          date: p.bookingDate,
+          kind: 'allocation',
+          description: 'Inbetalning till tillgodo',
+          paymentId: p.id,
+        },
+        creditAllocationEntries(p.id, a.amountOre),
+        creditOwner,
+      )
+    }
+    const owner = owners.get(a.invoiceId)
+    if (!owner) throw new Error(`No owner for avi ${a.invoiceId}`)
+    return postingStatements(
+      db,
+      organizationId,
+      {
+        date: p.bookingDate,
+        kind: 'allocation',
+        description: `Betalning av avi ${owner.number}`,
+        invoiceId: a.invoiceId,
+        paymentId: p.id,
+      },
+      allocationEntries(p.id, a.invoiceId, a.amountOre),
+      owner,
+    )
+  })
+}
+
+/** Number and owner of avier, for allocation postings and labels. */
+const aviOwners = (invoiceIds: readonly string[]) =>
+  Effect.gen(function* () {
+    const rows: ({ id: string; recipientName: string } & AviOwner)[] = []
+    for (const batch of chunks([...new Set(invoiceIds)], IN_CHUNK)) {
+      rows.push(
+        ...(yield* orgQuery((db, organizationId) =>
+          db
+            .select({
+              id: invoice.id,
+              number: invoice.number,
+              partyId: invoice.partyId,
+              agreementId: invoice.agreementId,
+              recipientName: invoice.recipientName,
+            })
+            .from(invoice)
+            .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.id, batch))),
+        )),
+      )
+    }
+    return new Map(rows.map((r) => [r.id, r]))
+  })
 
 // ---------------------------------------------------------------------------------------------
 // Import
@@ -84,9 +152,15 @@ export const importPayments = (input: ImportPaymentsInput) =>
       return true
     })
 
-    const invoicesByOcr = yield* invoicesForOcrs(fresh.map((p) => p.reference))
-    const results = matchPayments(fresh, invoicesByOcr)
-    const owners = new Map([...invoicesByOcr.values()].map((i) => [i.id, i]))
+    // The avi each OCR names tells whose payment it is; their open avier decide the split.
+    const named = yield* avierForOcrs(fresh.map((p) => p.reference))
+    const partyIds = [...new Set([...named.values()].map((a) => a.partyId))]
+    const open = yield* openAvierFor(partyIds)
+    const results = matchPayments(fresh, named, open)
+    const owners = yield* aviOwners([
+      ...[...named.values()].map((a) => a.id),
+      ...[...open.values()].flat().map((a) => a.id),
+    ])
 
     const importId = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
@@ -102,61 +176,68 @@ export const importPayments = (input: ImportPaymentsInput) =>
       }),
     )
 
-    // A payment, its posting and any match always land in the same batch, so a failure part-way
-    // leaves no half-booked payment; importing the file again picks up the rest.
-    const rows = fresh.map((p, i) => ({ p, match: results[i], id: crypto.randomUUID() }))
-    for (const group of chunks(rows, BATCH_STATEMENTS / PER_PAYMENT)) {
-      yield* orgQuery((db, organizationId) => {
-        const statements = group.flatMap(({ p, match, id }) => {
-          const matched = match.allocates && match.invoiceId ? owners.get(match.invoiceId) : null
-          return [
-            db.insert(payment).values({
-              id,
-              organizationId,
-              importId,
-              bankReference: p.bankReference,
-              bookingDate: p.bookingDate,
-              amountOre: p.amountOre,
-              reference: p.reference,
-              payerName: p.payerName,
-              status: match.status,
-              note: match.note,
-            }),
-            ...postingStatements(
-              db,
-              organizationId,
-              { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: id },
-              paymentEntries(id, p.amountOre),
-            ),
-            ...(matched
-              ? postingStatements(
-                  db,
-                  organizationId,
-                  {
-                    date: p.bookingDate,
-                    kind: 'allocation',
-                    description: `Betalning av avi ${matched.number}`,
-                    invoiceId: matched.id,
-                    paymentId: id,
-                  },
-                  allocationEntries(id, matched.id, p.amountOre),
-                  matched,
-                )
-              : []),
-          ]
-        })
-        const [first, ...rest] = statements
-        return db.batch([first, ...rest])
+    // A payment, its posting and its allocations always land in the same batch, so a failure
+    // part-way leaves no half-booked payment; importing the file again picks up the rest.
+    const perPayment = (db: Db, organizationId: string) =>
+      fresh.map((p, i) => {
+        const match = results[i]
+        const id = crypto.randomUUID()
+        const ocr = p.reference?.replace(/\D/g, '') ?? ''
+        const namedAvi = named.get(ocr)
+        return [
+          db.insert(payment).values({
+            id,
+            organizationId,
+            importId,
+            bankReference: p.bankReference,
+            bookingDate: p.bookingDate,
+            amountOre: p.amountOre,
+            reference: p.reference,
+            payerName: p.payerName,
+            status: match.status,
+          }),
+          ...postingStatements(
+            db,
+            organizationId,
+            { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: id },
+            paymentEntries(id, p.amountOre),
+          ),
+          ...(match.partyId && namedAvi
+            ? allocationStatements(
+                db,
+                organizationId,
+                { id, bookingDate: p.bookingDate },
+                match.allocations,
+                owners,
+                { partyId: match.partyId, agreementId: namedAvi.agreementId },
+              )
+            : []),
+        ]
       })
-    }
+    yield* orgQuery(async (db, organizationId) => {
+      let batch: ReturnType<typeof perPayment>[number] = []
+      for (const statements of perPayment(db, organizationId)) {
+        if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) {
+          const [first, ...rest] = batch
+          await db.batch([first, ...rest])
+          batch = []
+        }
+        batch = [...batch, ...statements]
+      }
+      if (batch.length > 0) {
+        const [first, ...rest] = batch
+        await db.batch([first, ...rest])
+      }
+    })
 
-    const count = (status: string) => results.filter((r) => r.status === status).length
+    const matched = results.filter((r) => r.status === 'matched')
     return {
       importId,
       imported: fresh.length,
-      matched: count('matched'),
-      review: count('review'),
-      unmatched: count('unmatched'),
+      matched: matched.length,
+      /** Matched payments that left something on a party's credit balance. */
+      toCredit: matched.filter((r) => r.allocations.some((a) => a.invoiceId === null)).length,
+      unmatched: results.length - matched.length,
       duplicates: parsed.payments.length - fresh.length,
       skippedDebits: parsed.skippedDebits,
       skippedOtherCurrency: parsed.skippedOtherCurrency,
@@ -186,30 +267,35 @@ export const listPayments = (filter: PaymentFilter) =>
       }),
     )
     const allocated = yield* paymentAllocations(rows)
-    // The avier a payment settled, or for one needing review the avi its OCR points at. Their
-    // details are shown only to those who may read invoices.
+    // Where a payment went, or for one waiting the avi its OCR names. Avi details are shown
+    // only to those who may read invoices.
     const canReadInvoices = yield* hasPermission({ invoice: ['read'] })
-    const suggested = canReadInvoices
-      ? yield* invoicesForOcrs(rows.map((r) => r.reference))
-      : new Map()
-    const allocatedIds = [...allocated.values()].flatMap((a) =>
-      a.allocations.map((x) => x.invoiceId),
-    )
+    const named = canReadInvoices
+      ? yield* avierForOcrs(rows.map((r) => r.reference))
+      : new Map<string, NamedAvi>()
     const labels = canReadInvoices
-      ? yield* invoiceLabels(allocatedIds)
-      : new Map<string, { id: string; number: number; recipientName: string }>()
+      ? yield* aviOwners(
+          [...allocated.values()].flatMap((a) =>
+            a.allocations.flatMap((x) => (x.invoiceId ? [x.invoiceId] : [])),
+          ),
+        )
+      : new Map<string, { id: string; recipientName: string } & AviOwner>()
     return rows.map((r) => {
       const { allocations, unallocatedOre } = allocated.get(r.id) ?? {
         allocations: [],
         unallocatedOre: r.amountOre,
       }
       const ocr = r.reference?.replace(/\D/g, '') ?? ''
-      const first = allocations[0] ? labels.get(allocations[0].invoiceId) : suggested.get(ocr)
+      const firstAvi = allocations.find((a) => a.invoiceId)?.invoiceId
+      const first = firstAvi ? labels.get(firstAvi) : named.get(ocr)
       return {
         ...r,
         unallocatedOre,
         allocations: canReadInvoices
-          ? allocations.map((a) => ({ ...a, number: labels.get(a.invoiceId)?.number ?? 0 }))
+          ? allocations.map((a) => ({
+              ...a,
+              number: a.invoiceId ? (labels.get(a.invoiceId)?.number ?? 0) : undefined,
+            }))
           : [],
         invoice: first
           ? { id: first.id, number: first.number, recipientName: first.recipientName }
@@ -230,91 +316,60 @@ export const listPaymentImports = requirePermission(read).pipe(
   ),
 )
 
-/** Invoices a payment can be linked to by hand: not voided, with something still owed. */
-export const listOpenInvoices = requirePermission({ ...book, invoice: ['read', 'manage'] }).pipe(
+/**
+ * Who a payment can be matched to by hand: everyone who has received an avi, with what they
+ * owe. Their names are on the avier, so reading invoices is enough.
+ */
+export const listPayers = requirePermission({ ...book, invoice: ['read', 'manage'] }).pipe(
   Effect.andThen(
     Effect.gen(function* () {
       const rows = yield* orgQuery((db, organizationId) =>
         db
-          .select({
-            id: invoice.id,
-            number: invoice.number,
-            ocr: invoice.ocr,
-            recipientName: invoice.recipientName,
-            dueDate: invoice.dueDate,
-          })
+          .selectDistinct({ id: party.id, name: party.name })
           .from(invoice)
-          .where(and(eq(invoice.organizationId, organizationId), isNull(invoice.voidedAt)))
-          .orderBy(desc(invoice.number)),
+          .innerJoin(party, eq(party.id, invoice.partyId))
+          .where(eq(invoice.organizationId, organizationId))
+          .orderBy(party.name),
       )
-      const moneyOf = yield* allInvoiceMoney
-      return rows
-        .map((r) => ({ ...r, owedOre: moneyOf(r.id).owedOre }))
-        .filter((r) => r.owedOre > 0)
+      const open = yield* openAvierFor(rows.map((r) => r.id))
+      return rows.map((r) => ({
+        ...r,
+        owedOre: (open.get(r.id) ?? []).reduce((s, a) => s + a.owedOre, 0),
+      }))
     }),
   ),
 )
 
-/** Avier by OCR number, with what they still owe, for matching payments. */
-const invoicesForOcrs = (references: readonly (string | null)[]) =>
+type NamedAvi = {
+  id: string
+  number: number
+  partyId: string
+  agreementId: string
+  recipientName: string
+}
+
+/** The avi each OCR number names (any avi, paid or not), for finding whose payment it is. */
+const avierForOcrs = (references: readonly (string | null)[]) =>
   Effect.gen(function* () {
     const ocrs = [...new Set(references.map((r) => r?.replace(/\D/g, '') ?? '').filter(Boolean))]
-    const found: (typeof invoice.$inferSelect)[] = []
+    const found = new Map<string, NamedAvi>()
     for (const batch of chunks(ocrs, IN_CHUNK)) {
-      found.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db
-            .select()
-            .from(invoice)
-            .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.ocr, batch))),
-        )),
+      const rows = yield* orgQuery((db, organizationId) =>
+        db
+          .select({
+            id: invoice.id,
+            ocr: invoice.ocr,
+            number: invoice.number,
+            partyId: invoice.partyId,
+            agreementId: invoice.agreementId,
+            recipientName: invoice.recipientName,
+          })
+          .from(invoice)
+          .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.ocr, batch))),
       )
+      for (const { ocr, ...row } of rows) found.set(ocr, row)
     }
-    const money = yield* invoiceMoneyFor(found.map((i) => i.id))
-    const on = yield* today
-    return new Map(
-      found.map((i) => {
-        const m = money.get(i.id) as InvoiceMoney
-        const status = statusFromMoney(i, m, on)
-        const matching: InvoiceForMatching & {
-          recipientName: string
-          partyId: string
-          agreementId: string
-        } = {
-          id: i.id,
-          number: i.number,
-          ocr: i.ocr,
-          owedOre: m.owedOre,
-          status: status === 'unpaid' || status === 'overdue' ? 'open' : status,
-          paidOn: m.paidOn,
-          recipientName: i.recipientName,
-          partyId: i.partyId,
-          agreementId: i.agreementId,
-        }
-        return [i.ocr, matching]
-      }),
-    )
-  })
-
-/** Number and recipient of avier, to label what payments settled. */
-const invoiceLabels = (invoiceIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const rows: { id: string; number: number; recipientName: string }[] = []
-    for (const batch of chunks([...new Set(invoiceIds)], IN_CHUNK)) {
-      rows.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db
-            .select({
-              id: invoice.id,
-              number: invoice.number,
-              recipientName: invoice.recipientName,
-            })
-            .from(invoice)
-            .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.id, batch))),
-        )),
-      )
-    }
-    return new Map(rows.map((r) => [r.id, r]))
+    return found
   })
 
 // ---------------------------------------------------------------------------------------------
@@ -339,66 +394,65 @@ const setPayment = (paymentId: string, values: Partial<typeof payment.$inferInse
       .where(and(eq(payment.id, paymentId), eq(payment.organizationId, organizationId))),
   )
 
+/** How a waiting payment would be split if matched to `partyId`: oldest avi first, then credit. */
+const planAssignment = (input: AssignPaymentInput) =>
+  Effect.gen(function* () {
+    const p = yield* getPayment(input.paymentId)
+    if (p.status === 'matched') {
+      return yield* new Conflict({ message: 'Betalningen är redan kopplad' })
+    }
+    const payer = yield* orgQuery((db, organizationId) =>
+      db.query.party.findFirst({
+        columns: { id: true, name: true },
+        where: and(eq(party.id, input.partyId), eq(party.organizationId, organizationId)),
+      }),
+    )
+    if (!payer) return yield* new NotFound({ entity: 'party', id: input.partyId })
+    const { unallocatedOre } = (yield* paymentAllocations([p])).get(p.id) ?? {
+      unallocatedOre: p.amountOre,
+    }
+    if (unallocatedOre <= 0) {
+      return yield* new Conflict({ message: 'Betalningen är redan fördelad' })
+    }
+    const open = (yield* openAvierFor([payer.id])).get(payer.id) ?? []
+    const allocations = allocate(unallocatedOre, open)
+    const owners = yield* aviOwners(open.map((a) => a.id))
+    return { p, payer, allocations, owners }
+  })
+
+/** "Koppla": where a waiting payment will go if matched to the party, before confirming. */
+export const previewAssignment = (input: AssignPaymentInput) =>
+  Effect.gen(function* () {
+    yield* requirePermission(book)
+    const { allocations, owners } = yield* planAssignment(input)
+    return allocations.map((a) => ({
+      ...a,
+      number: a.invoiceId ? (owners.get(a.invoiceId)?.number ?? 0) : undefined,
+    }))
+  })
+
 /**
- * Matches a payment that needs attention to an open avi by hand: what is still unallocated of
- * it settles the avi. More than is owed leaves the avi overpaid, to be paid back.
+ * Matches a waiting payment to a party by hand: what is unallocated of it settles their open
+ * avier, oldest first, and the rest goes to their credit balance.
  */
 export const assignPayment = (input: AssignPaymentInput) =>
   Effect.gen(function* () {
     yield* requirePermission(book)
-    const p = yield* getPayment(input.paymentId)
-    if (p.status === 'matched') {
-      return yield* new Conflict({ message: 'Betalningen är redan kopplad till en avi' })
-    }
-    const inv = yield* orgQuery((db, organizationId) =>
-      db.query.invoice.findFirst({
-        where: and(eq(invoice.id, input.invoiceId), eq(invoice.organizationId, organizationId)),
-      }),
-    )
-    if (!inv) return yield* new NotFound({ entity: 'invoice', id: input.invoiceId })
-    if (inv.voidedAt) return yield* new Conflict({ message: `Avi ${inv.number} är makulerad` })
-    const money = (yield* invoiceMoneyFor([inv.id])).get(inv.id) as InvoiceMoney
-    if (money.owedOre <= 0) {
-      return yield* new Conflict({
-        message:
-          money.paidOre > 0
-            ? `Avi ${inv.number} är redan betald`
-            : `Avi ${inv.number} är krediterad`,
-      })
-    }
-    const { unallocatedOre } = (yield* paymentAllocations([p])).get(p.id) ?? {
-      unallocatedOre: p.amountOre,
-    }
-    if (unallocatedOre <= 0)
-      return yield* new Conflict({ message: 'Betalningen är redan fördelad' })
-
-    yield* orgQuery((db, organizationId) =>
-      db.batch([
+    const { p, payer, allocations, owners } = yield* planAssignment(input)
+    const agreementId = [...owners.values()][0]?.agreementId ?? null
+    yield* orgQuery((db, organizationId) => {
+      const [first, ...rest] = [
         db
           .update(payment)
-          .set({
-            status: 'matched',
-            note:
-              unallocatedOre === money.owedOre
-                ? 'Kopplad manuellt'
-                : `Kopplad manuellt (${p.note ?? 'avvikande belopp'})`,
-          })
+          .set({ status: 'matched', note: 'Kopplad manuellt' })
           .where(and(eq(payment.id, p.id), eq(payment.organizationId, organizationId))),
-        ...postingStatements(
-          db,
-          organizationId,
-          {
-            date: p.bookingDate,
-            kind: 'allocation',
-            description: `Betalning av avi ${inv.number}`,
-            invoiceId: inv.id,
-            paymentId: p.id,
-          },
-          allocationEntries(p.id, inv.id, unallocatedOre),
-          inv,
-        ),
-      ]),
-    )
+        ...allocationStatements(db, organizationId, p, allocations, owners, {
+          partyId: payer.id,
+          agreementId,
+        }),
+      ]
+      return db.batch([first, ...rest])
+    })
   })
 
 /** For payments that are not rent, e.g. a deposit or a refund handled elsewhere. */
@@ -413,6 +467,42 @@ export const ignorePayment = (paymentId: string) =>
     yield* setPayment(p.id, { status: 'ignored' })
   })
 
+/**
+ * The statements that undo payments' allocations and put them back for handling. What a payment
+ * put on a credit balance must still be there: credit already used on an avi or paid back can't
+ * be taken back.
+ */
+export const undoPaymentStatements = (paymentIds: readonly string[], on: string) =>
+  Effect.gen(function* () {
+    const live = yield* livePostings({ kinds: ['allocation'], paymentIds })
+    const toCredit = new Map<string, number>()
+    for (const { entries } of live) {
+      for (const e of entries) {
+        if (e.account === 'receivable' && !e.invoiceId && e.partyId) {
+          toCredit.set(e.partyId, (toCredit.get(e.partyId) ?? 0) - e.amountOre)
+        }
+      }
+    }
+    const balances = yield* creditBalances([...toCredit.keys()])
+    for (const [partyId, amountOre] of toCredit) {
+      const balance = balances.get(partyId) ?? 0
+      if (balance < amountOre) {
+        return yield* new Conflict({
+          message: `Betalningen gav ${formatSek(amountOre)} tillgodo, men ${formatSek(amountOre - balance)} av det har redan räknats av på en avi eller betalats tillbaka. Det kan inte ångras.`,
+        })
+      }
+    }
+    return (db: Db, organizationId: string) => [
+      db
+        .update(payment)
+        .set({ status: 'unmatched', note: null })
+        .where(
+          and(eq(payment.organizationId, organizationId), inArray(payment.id, [...paymentIds])),
+        ),
+      ...reversalStatements(db, organizationId, live, on, () => 'Ångrad koppling av inbetalning'),
+    ]
+  })
+
 /** Puts a matched or ignored payment back for handling; reverses what it settled. */
 export const undoPayment = (paymentId: string) =>
   Effect.gen(function* () {
@@ -421,15 +511,9 @@ export const undoPayment = (paymentId: string) =>
     if (p.status !== 'matched' && p.status !== 'ignored') {
       return yield* new Conflict({ message: 'Betalningen är inte hanterad' })
     }
-    const live = yield* livePostings({ kinds: ['allocation'], paymentIds: [p.id] })
-    const on = yield* today
-    yield* orgQuery((db, organizationId) =>
-      db.batch([
-        db
-          .update(payment)
-          .set({ status: 'unmatched', note: null })
-          .where(and(eq(payment.id, p.id), eq(payment.organizationId, organizationId))),
-        ...reversalStatements(db, organizationId, live, on, () => 'Ångrad koppling av inbetalning'),
-      ]),
-    )
+    const statements = yield* undoPaymentStatements([p.id], yield* today)
+    yield* orgQuery((db, organizationId) => {
+      const [first, ...rest] = statements(db, organizationId)
+      return db.batch([first, ...rest])
+    })
   })

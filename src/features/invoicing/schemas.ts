@@ -39,10 +39,3 @@ export const CreateCreditNoteInput = Schema.Struct({
 export type CreateCreditNoteInput = typeof CreateCreditNoteInput.Type
 
 export const CreditNoteIdInput = Schema.Struct({ creditNoteId: Schema.String })
-
-/** Records that what an avi was overpaid by has been paid back, on `refundedOn`. */
-export const RefundInvoiceInput = Schema.Struct({
-  invoiceId: Schema.String,
-  refundedOn: IsoDate,
-})
-export type RefundInvoiceInput = typeof RefundInvoiceInput.Type

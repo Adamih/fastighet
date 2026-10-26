@@ -3,9 +3,16 @@ import { alias } from 'drizzle-orm/sqlite-core'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { invoice, ledgerEntry, posting } from '#/db/schema'
+import type { OpenAvi } from '#/features/payments/matching'
 import { orgQuery } from '#/server/scoped'
 import type { PostingKind } from './kinds'
-import { type EntryDraft, type InvoiceMoney, invoiceMoney, reversal } from './postings'
+import {
+  creditBalance,
+  type EntryDraft,
+  type InvoiceMoney,
+  invoiceMoney,
+  reversal,
+} from './postings'
 
 // Server helpers for the receivables ledger. Programs build postings with the pure rules in
 // `postings.ts` and write them with `postingStatements`, in the same batch as the document or
@@ -41,15 +48,16 @@ export interface PostingDraft {
 }
 
 /**
- * The statements that write one posting and its entries. Entries on an avi (`invoiceId`) get
- * its party and agreement, so a party's balance can be summed.
+ * The statements that write one posting and its entries. Receivable entries (on an avi, or on
+ * the party's credit balance) and other entries on an avi get the owner's party and agreement,
+ * so a party's balance can be summed.
  */
 export function postingStatements(
   db: Db,
   organizationId: string,
   draft: PostingDraft,
   entries: readonly EntryDraft[],
-  owner: { partyId: string; agreementId: string } | null = null,
+  owner: { partyId: string; agreementId: string | null } | null = null,
 ) {
   const id = draft.id ?? crypto.randomUUID()
   return [
@@ -59,8 +67,9 @@ export function postingStatements(
         ...e,
         organizationId,
         postingId: id,
-        partyId: e.invoiceId ? (owner?.partyId ?? null) : null,
-        agreementId: e.invoiceId ? (owner?.agreementId ?? null) : null,
+        partyId: e.invoiceId || e.account === 'receivable' ? (owner?.partyId ?? null) : null,
+        agreementId:
+          e.invoiceId || e.account === 'receivable' ? (owner?.agreementId ?? null) : null,
       })),
     ),
   ] as const
@@ -210,14 +219,15 @@ export function reversalStatements(
  */
 export const paymentAllocations = (payments: readonly { id: string; amountOre: number }[]) =>
   Effect.gen(function* () {
-    const allocations = new Map<string, { invoiceId: string; amountOre: number }[]>()
+    const allocations = new Map<string, { invoiceId: string | null; amountOre: number }[]>()
     for (const batch of chunks(payments.map((p) => p.id))) {
       for (const { posting: p, entries } of yield* livePostings({
         kinds: ['allocation'],
         paymentIds: batch,
       })) {
+        // To an avi, or (no avi) to the party's credit balance.
         const receivable = entries.find((e) => e.account === 'receivable')
-        if (!p.paymentId || !receivable?.invoiceId) continue
+        if (!p.paymentId || !receivable) continue
         const list = allocations.get(p.paymentId) ?? []
         list.push({ invoiceId: receivable.invoiceId, amountOre: -receivable.amountOre })
         allocations.set(p.paymentId, list)
@@ -240,3 +250,62 @@ export const invoiceOwner = (invoiceId: string) =>
       .from(invoice)
       .where(and(eq(invoice.id, invoiceId), eq(invoice.organizationId, organizationId))),
   ).pipe(Effect.map(([row]) => row ?? null))
+
+/** Each party's credit balance (tillgodo): their receivable entries that aren't on an avi. */
+export const creditBalances = (partyIds: readonly string[]) =>
+  Effect.gen(function* () {
+    const rows: { partyId: string | null; amountOre: number }[] = []
+    for (const ids of chunks([...new Set(partyIds)])) {
+      rows.push(
+        ...(yield* orgQuery((db, organizationId) =>
+          db
+            .select({ partyId: ledgerEntry.partyId, amountOre: ledgerEntry.amountOre })
+            .from(ledgerEntry)
+            .where(
+              and(
+                eq(ledgerEntry.organizationId, organizationId),
+                eq(ledgerEntry.account, 'receivable'),
+                isNull(ledgerEntry.invoiceId),
+                inArray(ledgerEntry.partyId, ids),
+              ),
+            ),
+        )),
+      )
+    }
+    const byParty = groupBy(rows, (r) => r.partyId ?? '')
+    return new Map(partyIds.map((id) => [id, creditBalance(byParty.get(id) ?? [])]))
+  })
+
+/** Each party's avier with something still owed (not voided), for splitting payments. */
+export const openAvierFor = (partyIds: readonly string[]) =>
+  Effect.gen(function* () {
+    const rows: { id: string; number: number; dueDate: string; partyId: string }[] = []
+    for (const ids of chunks([...new Set(partyIds)])) {
+      rows.push(
+        ...(yield* orgQuery((db, organizationId) =>
+          db
+            .select({
+              id: invoice.id,
+              number: invoice.number,
+              dueDate: invoice.dueDate,
+              partyId: invoice.partyId,
+            })
+            .from(invoice)
+            .where(
+              and(
+                eq(invoice.organizationId, organizationId),
+                inArray(invoice.partyId, ids),
+                isNull(invoice.voidedAt),
+              ),
+            ),
+        )),
+      )
+    }
+    const money = yield* invoiceMoneyFor(rows.map((r) => r.id))
+    const result = new Map<string, OpenAvi[]>(partyIds.map((id) => [id, []]))
+    for (const r of rows) {
+      const owedOre = money.get(r.id)?.owedOre ?? 0
+      if (owedOre > 0) result.get(r.partyId)?.push({ ...r, owedOre })
+    }
+    return result
+  })

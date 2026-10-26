@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { inForce, refundProblem, reissueProblem, voidProblem } from './correction'
+import { inForce, reissueProblem, voidProblem } from './correction'
 
 const avi = (overrides: Partial<Parameters<typeof inForce>[0]> = {}) => ({
   voidedAt: null,
@@ -13,13 +13,6 @@ test('voided and fully credited avier no longer count for their period', () => {
   expect(inForce(avi({ creditedOre: 200000 }))).toBe(true)
   expect(inForce(avi({ creditedOre: 845000 }))).toBe(false)
   expect(inForce(avi({ voidedAt: new Date(0) }))).toBe(false)
-})
-
-test('a refund pays back what the avi was overpaid by, up to today', () => {
-  const today = '2026-10-24'
-  expect(refundProblem({ refundDueOre: 150_000 }, '2026-10-20', today)).toBeNull()
-  expect(refundProblem({ refundDueOre: 150_000 }, '2026-10-25', today)).toBe('future')
-  expect(refundProblem({ refundDueOre: 0 }, '2026-10-20', today)).toBe('nothing_due')
 })
 
 test('a corrected avi replaces a voided or fully credited one, once', () => {

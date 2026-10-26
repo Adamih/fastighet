@@ -3,7 +3,6 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   AlertCircle,
   Ban,
-  Banknote,
   BellRing,
   Check,
   CircleCheck,
@@ -51,7 +50,6 @@ import {
   voidInvoiceFn,
 } from '#/features/invoicing/functions'
 import type { InvoiceView } from '#/features/invoicing/program'
-import { RefundPanel } from '#/features/invoicing/refund-panel'
 import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
@@ -254,12 +252,6 @@ function InvoicePage() {
             )}
             {error && <p className="text-destructive text-sm">{error.message}</p>}
             <AmountPanel invoice={invoice} today={today} canManage={canManage} onDone={onDone} />
-            {(invoice.refundDueOre > 0 || invoice.refundedOre > 0) && (
-              <RefundPanel
-                invoice={invoice}
-                canRefund={can({ invoice: ['manage'], payment: ['manage'] })}
-              />
-            )}
             {(invoice.replaces || invoice.replacedBy.length > 0) && (
               <nav aria-label={m.invoice_reissue()} className="grid gap-1.5 text-[13px]">
                 {invoice.replaces && (
@@ -288,7 +280,6 @@ function InvoicePage() {
                     paidOn: invoice.paidOn,
                     voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
                     creditNotes: invoice.creditNotes,
-                    refunds: invoice.refunds,
                     reminders: invoice.reminders,
                     replacedBy: invoice.replacedBy,
                   },
@@ -397,7 +388,6 @@ const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
   paid: [CircleCheck, 'good'],
   voided: [Ban, 'neutral'],
   credited: [ReceiptText, 'neutral'],
-  refunded: [Banknote, 'neutral'],
   reminded: [BellRing, 'warn'],
   replaced: [FilePen, 'neutral'],
 }
@@ -414,7 +404,6 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
       amount: formatSekShort(e.creditNote?.totalOre ?? 0),
       number: e.creditNote?.number ?? 0,
     }),
-    refunded: m.invoice_event_refunded({ amount: formatSekShort(e.amountOre ?? 0) }),
     reminded: e.amountOre
       ? m.invoice_event_reminded_fee({
           sequence: e.sequence ?? 0,
@@ -423,11 +412,7 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
       : m.invoice_event_reminded({ sequence: e.sequence ?? 0 }),
     replaced: m.invoice_event_replaced({ number: e.invoiceNumber ?? 0 }),
   }[e.kind]
-  const id =
-    e.creditNote?.number ??
-    e.invoiceNumber ??
-    e.sequence ??
-    (e.kind === 'refunded' ? e.date : undefined)
+  const id = e.creditNote?.number ?? e.invoiceNumber ?? e.sequence
   const key = id === undefined ? e.kind : `${e.kind}-${id}`
   return { key, icon, tone, text, date: e.date }
 }
@@ -507,21 +492,19 @@ function AmountPanel({
             })}
           </span>
         )}
+        {invoice.creditUsedOre > 0 && (
+          <span className="text-[13px] text-muted-foreground">
+            {m.invoice_credit_used({ amount: formatSekShort(invoice.creditUsedOre) })}
+          </span>
+        )}
         {invoice.creditedOre > 0 && (
-          <span
-            className={cn(
-              'text-[13px] text-muted-foreground',
-              invoice.refundDueOre > 0 && 'font-medium text-amber-700 dark:text-amber-300',
-            )}
-          >
-            {invoice.refundDueOre > 0
-              ? m.invoice_refund_due({ amount: formatSekShort(invoice.refundDueOre) })
-              : invoice.refundedOre > 0
-                ? m.invoice_refunded({ amount: formatSekShort(invoice.refundedOre) })
-                : m.invoice_amount_after_credit({
-                    total: formatSekShort(invoice.totalOre),
-                    credited: formatSekShort(invoice.creditedOre),
-                  })}
+          <span className="text-[13px] text-muted-foreground">
+            {invoice.toCreditOre > 0
+              ? m.invoice_to_credit({ amount: formatSekShort(invoice.toCreditOre) })
+              : m.invoice_amount_after_credit({
+                  total: formatSekShort(invoice.totalOre),
+                  credited: formatSekShort(invoice.creditedOre),
+                })}
           </span>
         )}
         <span className="flex items-center gap-1.5 text-[13px] text-muted-foreground">
@@ -570,6 +553,8 @@ function AmountPanel({
 function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
   const { seller } = invoice
   const hasVat = invoice.vatOre > 0
+  // Credit used when the avi was issued lowers what the tenant pays.
+  const toPay = invoice.totalOre - invoice.creditUsedOre
   const period = periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })
 
   return (
@@ -644,11 +629,25 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
               </tr>
             </>
           )}
+          {invoice.creditUsedOre > 0 && (
+            <>
+              <tr>
+                <td className="pt-2" colSpan={hasVat ? 2 : 1}>
+                  Summa
+                </td>
+                <td className="pt-2 text-right tabular-nums">{formatSek(invoice.totalOre)}</td>
+              </tr>
+              <tr>
+                <td colSpan={hasVat ? 2 : 1}>Avgår tillgodo</td>
+                <td className="text-right tabular-nums">{formatSek(-invoice.creditUsedOre)}</td>
+              </tr>
+            </>
+          )}
           <tr className="font-semibold">
             <td className="pt-2" colSpan={hasVat ? 2 : 1}>
               Att betala
             </td>
-            <td className="pt-2 text-right tabular-nums">{formatSek(invoice.totalOre)}</td>
+            <td className="pt-2 text-right tabular-nums">{formatSek(toPay)}</td>
           </tr>
         </tfoot>
       </table>
@@ -657,7 +656,7 @@ function PrintableInvoice({ invoice }: { invoice: InvoiceView }) {
         <PaymentField label="Bankgiro" value={seller.bankgiro ?? '–'} />
         <PaymentField label="OCR-nummer" value={invoice.ocr} />
         <PaymentField label="Förfallodag" value={invoice.dueDate} />
-        <PaymentField label="Belopp" value={formatSek(invoice.totalOre)} />
+        <PaymentField label="Belopp" value={formatSek(toPay)} />
       </section>
 
       <footer className="text-muted-foreground text-xs">

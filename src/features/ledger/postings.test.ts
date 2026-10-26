@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import {
   allocationEntries,
+  creditAllocationEntries,
+  creditBalance,
   creditNoteEntries,
+  creditTransferEntries,
+  creditUseEntries,
   invoiceEntries,
   invoiceMoney,
   manualPaymentEntries,
@@ -42,7 +46,10 @@ describe('postings', () => {
       paymentEntries('p1', 500_000),
       allocationEntries('p1', 'i1', 500_000),
       manualPaymentEntries('i1', 500_000),
-      refundEntries('i1', 100_000),
+      refundEntries(100_000),
+      creditAllocationEntries('p1', 50_000),
+      creditUseEntries('i1', 50_000),
+      creditTransferEntries('i1', 50_000),
       reminderFeeEntries('i1', 6_000),
     ]) {
       expect(sum(entries)).toBe(0)
@@ -70,18 +77,33 @@ describe('invoice money', () => {
     expect(statusFromMoney(due, invoiceMoney(paid), today)).toBe('paid')
   })
 
-  test('credited in full before payment, or credited after payment and paid back', () => {
+  test('credited in full before payment, or credited after payment into the credit balance', () => {
     const credited = [e('invoice', 900_000), e('credit_note', -900_000)]
     expect(statusFromMoney(due, invoiceMoney(credited), today)).toBe('credited')
     const overpaid = [
       e('invoice', 900_000),
       e('manual_payment', -900_000),
       e('credit_note', -100_000),
+      e('credit_transfer', 100_000),
     ]
-    expect(invoiceMoney(overpaid)).toMatchObject({ owedOre: -100_000, refundDueOre: 100_000 })
+    expect(invoiceMoney(overpaid)).toMatchObject({ owedOre: 0, toCreditOre: 100_000 })
     expect(statusFromMoney(due, invoiceMoney(overpaid), today)).toBe('paid')
-    const refunded = [...overpaid, e('refund', 100_000)]
-    expect(invoiceMoney(refunded)).toMatchObject({ refundDueOre: 0, refundedOre: 100_000 })
+  })
+
+  test('credit used on an avi pays it like a payment', () => {
+    const withCredit = [e('invoice', 900_000), e('credit_use', -50_000)]
+    expect(invoiceMoney(withCredit)).toMatchObject({ owedOre: 850_000, creditUsedOre: 50_000 })
+    const settled = [e('invoice', 50_000), e('credit_use', -50_000, '2026-10-02')]
+    expect(invoiceMoney(settled)).toMatchObject({ paidOre: 0, paidOn: '2026-10-02' })
+    expect(statusFromMoney(due, invoiceMoney(settled), today)).toBe('paid')
+  })
+
+  test("a party's credit balance is what their entries without an avi add up to", () => {
+    const entries = [
+      ...creditAllocationEntries('p1', 50_000),
+      ...creditUseEntries('i1', 20_000),
+    ].filter((x) => x.account === 'receivable' && !x.invoiceId)
+    expect(creditBalance(entries)).toBe(30_000)
   })
 
   test('a voided avi is void whatever it owes', () => {

@@ -1,5 +1,5 @@
-// Pure rules for what follows a correction: paying credited amounts back on paid invoices, and
-// corrected avier that replace a voided or fully credited one. Shared by the server and the UI.
+// Pure rules for what follows a correction: voiding, and corrected avier that replace a voided
+// or fully credited one. Shared by the server and the UI.
 
 interface InvoiceAmounts {
   readonly voidedAt: Date | null
@@ -31,22 +31,6 @@ export function voidProblem(invoice: {
   if (invoice.paidOre > 0) return 'paid'
   if (invoice.creditedOre > 0) return 'credited'
   if (invoice.sentAt) return 'sent'
-  return null
-}
-
-export type RefundProblem = 'nothing_due' | 'future'
-
-/**
- * Why a refund can't be recorded on `refundedOn`, or null. What is paid back is what the avi
- * was overpaid by (e.g. a credit note after payment), from the ledger.
- */
-export function refundProblem(
-  invoice: { readonly refundDueOre: number },
-  refundedOn: string,
-  today: string,
-): RefundProblem | null {
-  if (invoice.refundDueOre <= 0) return 'nothing_due'
-  if (refundedOn > today) return 'future'
   return null
 }
 

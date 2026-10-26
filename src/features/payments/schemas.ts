@@ -19,8 +19,9 @@ export const ListPaymentsInput = Schema.Struct({ filter: Schema.Literals(payment
 
 export const PaymentIdInput = Schema.Struct({ paymentId: Schema.String })
 
+/** Matching a waiting payment by hand: to whom. The split follows from their open avier. */
 export const AssignPaymentInput = Schema.Struct({
   paymentId: Schema.String,
-  invoiceId: Schema.String,
+  partyId: Schema.String,
 })
 export type AssignPaymentInput = typeof AssignPaymentInput.Type

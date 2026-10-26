@@ -6,9 +6,10 @@ import {
   assignPayment,
   ignorePayment,
   importPayments,
-  listOpenInvoices,
+  listPayers,
   listPaymentImports,
   listPayments,
+  previewAssignment,
   undoPayment,
 } from './program'
 import {
@@ -33,9 +34,11 @@ export const listPaymentImportsFn = createServerFn({ method: 'GET' }).handler(()
   runApp(listPaymentImports),
 )
 
-export const listOpenInvoicesFn = createServerFn({ method: 'GET' }).handler(() =>
-  runApp(listOpenInvoices),
-)
+export const listPayersFn = createServerFn({ method: 'GET' }).handler(() => runApp(listPayers))
+
+export const previewAssignmentFn = createServerFn({ method: 'GET' })
+  .validator(std(AssignPaymentInput))
+  .handler(({ data }) => runApp(previewAssignment(data)))
 
 export const assignPaymentFn = createServerFn({ method: 'POST' })
   .validator(std(AssignPaymentInput))
@@ -58,5 +61,11 @@ export const paymentsQuery = (filter: PaymentFilter) =>
 export const paymentImportsQuery = () =>
   queryOptions({ queryKey: ['payments', 'imports'], queryFn: () => listPaymentImportsFn() })
 
-export const openInvoicesQuery = () =>
-  queryOptions({ queryKey: ['invoices', 'open'], queryFn: () => listOpenInvoicesFn() })
+export const payersQuery = () =>
+  queryOptions({ queryKey: ['payments', 'payers'], queryFn: () => listPayersFn() })
+
+export const assignmentPreviewQuery = (input: { paymentId: string; partyId: string }) =>
+  queryOptions({
+    queryKey: ['payments', 'assignment', input.paymentId, input.partyId],
+    queryFn: () => previewAssignmentFn({ data: input }),
+  })

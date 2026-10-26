@@ -11,7 +11,6 @@ import { periodLabel } from '#/features/invoicing/rules'
 import { sellerDetails } from '#/features/settings/seller'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek, formatSekShort } from '#/lib/money'
-import { rich } from '#/lib/rich'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/credit-notes/$creditNoteId')({
@@ -99,23 +98,9 @@ function CreditNotePage() {
                 {formatSekShort(-note.totalOre)}
               </span>
               <span className="text-[13px] text-muted-foreground">
-                {note.refund ? m.credit_note_refund_hint() : m.credit_note_reduce_hint()}
+                {note.toCredit ? m.credit_note_to_credit_hint() : m.credit_note_reduce_hint()}
               </span>
             </section>
-            {note.refund && (
-              <p className="rounded-xl border bg-card p-4 text-[13px]">
-                {rich(
-                  (invoice) => m.credit_note_refund_on_invoice({ invoice }),
-                  <Link
-                    to="/invoices/$invoiceId"
-                    params={{ invoiceId: note.invoice.id }}
-                    className="font-medium underline-offset-4 hover:underline"
-                  >
-                    {m.invoice_number({ number: note.invoice.number })}
-                  </Link>,
-                )}
-              </p>
-            )}
             <Panel title={m.credit_note_details()}>
               <FactList
                 facts={[
@@ -231,8 +216,8 @@ function PrintableCreditNote({ note }: { note: CreditNoteView }) {
       </table>
 
       <p className="text-sm">
-        {note.refund
-          ? 'Fakturan är betald. Det krediterade beloppet betalas tillbaka.'
+        {note.toCredit
+          ? 'Fakturan är betald. Det krediterade beloppet står till godo och dras av på nästa faktura, eller betalas tillbaka på begäran.'
           : 'Det krediterade beloppet dras av från det som ska betalas på fakturan.'}
       </p>
 

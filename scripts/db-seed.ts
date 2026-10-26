@@ -35,7 +35,10 @@ import {
 import { earliestMoveOutDate, effectiveEndDate, type LeaseTerms } from '#/features/leases/terms'
 import {
   allocationEntries,
+  creditAllocationEntries,
   creditNoteEntries,
+  creditTransferEntries,
+  creditUseEntries,
   type EntryDraft,
   invoiceEntries,
   paymentEntries,
@@ -51,9 +54,15 @@ import {
   reminderFee,
 } from '#/features/reminders/rules'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
-import { addDays, addMonths, endOfMonth, stockholmDate, weekdayOnOrAfter } from '#/lib/dates'
+import {
+  addDays,
+  addMonths,
+  endOfMonth,
+  lastWeekdayBefore,
+  stockholmDate,
+  weekdayOnOrAfter,
+} from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
-import { formatSek } from '#/lib/money'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
 
 /** Seed records are built up step by step, so their fields stay writable. */
@@ -166,7 +175,7 @@ function seedLedger(organizationId: string) {
   const post = (
     draft: Omit<typeof schema.posting.$inferInsert, 'id' | 'organizationId'>,
     drafts: readonly EntryDraft[],
-    owner: { partyId: string; agreementId: string } | null = null,
+    owner: { partyId: string; agreementId: string | null } | null = null,
   ) => {
     const postingId = id()
     postings.push({ ...draft, id: postingId, organizationId })
@@ -176,8 +185,9 @@ function seedLedger(organizationId: string) {
         id: id(),
         organizationId,
         postingId,
-        partyId: e.invoiceId ? (owner?.partyId ?? null) : null,
-        agreementId: e.invoiceId ? (owner?.agreementId ?? null) : null,
+        partyId: e.invoiceId || e.account === 'receivable' ? (owner?.partyId ?? null) : null,
+        agreementId:
+          e.invoiceId || e.account === 'receivable' ? (owner?.agreementId ?? null) : null,
       })),
     )
     return postingId
@@ -827,6 +837,8 @@ async function seed() {
     credits: { issueDate: string; totalOre: number }[]
     /** When a payment settled it; the ledger records the payment itself. */
     paidOn?: string
+    /** The party's credit balance used on it when it was issued. */
+    creditUsedOre?: number
   }
   const invoices: Invoice[] = []
   const billedOnce = new Set<string>()
@@ -929,7 +941,9 @@ async function seed() {
   // still owed on its invoice.
   const creditNotes: (typeof schema.creditNote.$inferInsert & {
     lines: ReturnType<typeof draftCreditNote> & { ok: true }
-    /** When a credit on a paid avi was paid back; the ledger records the refund. */
+    /** A credit on a paid avi: it becomes the party's credit balance (tillgodo). */
+    toCredit?: boolean
+    /** When that credit balance was paid back; the ledger records the refund. */
     refundedOn?: string
   })[] = []
   const credit = (invoice: Invoice, request: CreditRequest, reason: string, issueDate: string) => {
@@ -969,7 +983,8 @@ async function seed() {
   }
   const latest = (key: string, monthsBack = 0) =>
     invoices.filter((i) => i.lease.key === key).at(-1 - monthsBack)
-  // 1. Emma had no hot water for a week; credited after she had paid, and paid back a week later.
+  // 1. Emma had no hot water for a week; credited after she had paid, so it became credit, which
+  // was paid back to her a week later.
   const emma = latest('emma', 4)
   const emmaCredit =
     emma &&
@@ -979,17 +994,22 @@ async function seed() {
       'Ersättning för avstängt varmvatten',
       addDays(emma.dueDate as string, 18),
     )
-  if (emmaCredit) emmaCredit.refundedOn = bankDay(addDays(emmaCredit.issueDate, 7))
-  // 2. The office rent was raised too early; three months back is refunded (already paid).
+  if (emmaCredit) {
+    emmaCredit.toCredit = true
+    emmaCredit.refundedOn = bankDay(addDays(emmaCredit.issueDate, 7))
+  }
+  // 2. The office rent was raised too early; three months back is credited (already paid). The
+  // credit stays to their credit and their next avi uses it.
   const office = latest('redovisning', 3)
-  if (office) {
+  const officeCredit =
+    office &&
     credit(
       office,
       { kind: 'amount', netOre: 150_000 },
       'Hyran höjdes en månad för tidigt',
       addDays(office.dueDate as string, 12),
     )
-  }
+  if (officeCredit) officeCredit.toCredit = true
   // 3. Oskar's last avi, for the month after he moved out. Credited the day the earlier
   // move-out was agreed, before the avi fell due, so he never paid it.
   if (oskarCredited) {
@@ -1013,6 +1033,27 @@ async function seed() {
 
   // --- Payments, as the bank reported them. Each tenant pays in their own way.
   const yesterday = addDays(today, -1)
+  // Each party's credit balance as it builds up over time: credits on paid avier and payments
+  // beyond what was owed. A later avi uses it when issued, as an invoice run would.
+  const creditEvents: { partyId: string; date: string; amountOre: number }[] = creditNotes
+    .filter((n) => n.toCredit && !n.refundedOn)
+    .map((n) => ({
+      partyId: (invoices.find((i) => i.id === n.invoiceId) as Invoice).partyId,
+      date: n.issueDate,
+      amountOre: n.totalOre,
+    }))
+  const applyCredit = (invoice: Invoice, owed: number) => {
+    let used = 0
+    for (const event of creditEvents) {
+      if (event.partyId !== invoice.partyId || event.date > invoice.issueDate) continue
+      const part = Math.min(event.amountOre, owed - used)
+      if (part <= 0) break
+      event.amountOre -= part
+      used += part
+    }
+    if (used > 0) invoice.creditUsedOre = used
+    return used
+  }
   interface SeedPayment {
     id: string
     bookingDate: string
@@ -1023,6 +1064,10 @@ async function seed() {
     status: (typeof schema.payment.$inferInsert)['status']
     note: string | null
     marksInvoicePaid: boolean
+    /** A payment for an avi that was already paid: all of it becomes credit. */
+    toCredit?: boolean
+    /** Paid on top of what the avi owed; it becomes credit. */
+    extraOre?: number
   }
   const payments: SeedPayment[] = []
   const pay = (invoice: Invoice, bookingDate: string, extra: Partial<SeedPayment> = {}) => {
@@ -1031,7 +1076,7 @@ async function seed() {
     const creditedBefore = invoice.credits
       .filter((c) => c.issueDate <= date)
       .reduce((sum, c) => sum + c.totalOre, 0)
-    const due = invoice.totalOre - creditedBefore
+    const due = invoice.totalOre - creditedBefore - (invoice.creditUsedOre ?? 0)
     const payment: SeedPayment = {
       id: id(),
       bookingDate: date,
@@ -1049,21 +1094,38 @@ async function seed() {
     }
     payments.push(payment)
     if (payment.marksInvoicePaid) invoice.paidOn = date
+    if (payment.toCredit) {
+      creditEvents.push({ partyId: invoice.partyId, date, amountOre: payment.amountOre })
+    }
+    if (payment.extraOre) {
+      payment.amountOre += payment.extraOre
+      creditEvents.push({ partyId: invoice.partyId, date, amountOre: payment.extraOre })
+    }
   }
   // Elin's newest avi that has fallen due: her payment for it is still waiting for a person.
   const elinWaiting = invoices
     .filter((i) => i.lease.key === 'elin' && (i.dueDate as string) <= yesterday)
     .at(-1)
+  // Ahmed paid his newest avi early, on the last bank day, rounded up to 7 800 kr: the rest is to his credit
+  // until the next run uses it.
+  const ahmedRounded = latest('ahmed')
   for (const invoice of invoices) {
     const due = invoice.dueDate as string
     const lease = invoice.lease
-    const owed = invoice.totalOre - (invoice.creditedOre ?? 0)
-    if (owed <= 0 || invoice.voidedAt) continue
+    const credited = invoice.totalOre - (invoice.creditedOre ?? 0)
+    if (credited <= 0 || invoice.voidedAt) continue
+    const owed = credited - applyCredit(invoice, credited)
+    if (owed <= 0) {
+      invoice.paidOn = invoice.issueDate
+      continue
+    }
     // Anna's newest avi is left unpaid so it shows as overdue.
     if (lease.key === 'anna' && invoice === annaNow) continue
     switch (lease.payer) {
       case 'punctual':
-        pay(invoice, addDays(due, -between(0, 5)))
+        if (invoice === ahmedRounded) {
+          pay(invoice, lastWeekdayBefore(today), { extraOre: 780_000 - owed })
+        } else pay(invoice, addDays(due, -between(0, 5)))
         break
       case 'late':
         // Usually a week or two late.
@@ -1087,25 +1149,17 @@ async function seed() {
         // The salon paid only part of last quarter and the rest is still open.
         if (invoice === latest('salong', 1)) {
           const part = Math.round((owed * 0.6) / 100) * 100
-          pay(invoice, addDays(due, 2), {
-            amountOre: part,
-            status: 'review',
-            marksInvoicePaid: false,
-            note: `Delbetalning: ${formatSek(part)} av ${formatSek(owed)} på avi ${invoice.number}`,
-          })
+          pay(invoice, addDays(due, 2), { amountOre: part, marksInvoicePaid: false })
         } else {
           pay(invoice, addDays(due, -between(1, 4)))
         }
         break
       case 'twice':
         pay(invoice, addDays(due, -between(1, 3)))
-        // Mikael's standing order paid one month twice; the bank file flagged it for review.
+        // Mikael's standing order paid one month twice. The avi was already paid, so the second
+        // payment became credit, which his next avi used.
         if (invoice === latest('mikael', 2)) {
-          pay(invoice, addDays(due, 1), {
-            status: 'review',
-            marksInvoicePaid: false,
-            note: `Avi ${invoice.number} är redan betald (${invoice.paidOn})`,
-          })
+          pay(invoice, addDays(due, 1), { marksInvoicePaid: false, toCredit: true })
         }
         break
     }
@@ -1175,7 +1229,7 @@ async function seed() {
       .set({ creditedOre: invoice.creditedOre })
       .where(eq(schema.invoice.id, invoice.id))
   }
-  for (const { lines, refundedOn: _, ...note } of creditNotes) {
+  for (const { lines, refundedOn: _, toCredit: __, ...note } of creditNotes) {
     await db.insert(schema.creditNote).values(note)
     await insertAll(
       schema.creditNoteLine,
@@ -1229,25 +1283,59 @@ async function seed() {
       creditNoteEntries(invoice.id, note.lines.draft),
       owner,
     )
-    if (note.refundedOn) {
+    if (note.toCredit) {
       ledger.post(
         {
-          date: note.refundedOn,
-          kind: 'refund',
-          description: `Återbetalning, avi ${invoice.number}`,
+          date: note.issueDate,
+          kind: 'credit_transfer',
+          description: `Kreditfaktura ${note.number} till tillgodo`,
           invoiceId: invoice.id,
+          creditNoteId: note.id,
         },
-        refundEntries(invoice.id, note.totalOre),
+        creditTransferEntries(invoice.id, note.totalOre),
         owner,
       )
     }
+    if (note.refundedOn) {
+      ledger.post(
+        { date: note.refundedOn, kind: 'refund', description: 'Återbetalning av tillgodo' },
+        refundEntries(note.totalOre),
+        owner,
+      )
+    }
+  }
+  for (const invoice of invoices) {
+    if (!invoice.creditUsedOre) continue
+    ledger.post(
+      {
+        date: invoice.issueDate,
+        kind: 'credit_use',
+        description: `Tillgodo avräknat på avi ${invoice.number}`,
+        invoiceId: invoice.id,
+      },
+      creditUseEntries(invoice.id, invoice.creditUsedOre),
+      { partyId: invoice.partyId, agreementId: invoice.agreementId },
+    )
   }
   for (const p of payments) {
     ledger.post(
       { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: p.id },
       paymentEntries(p.id, p.amountOre),
     )
-    if (p.status === 'matched' && p.invoice) {
+    if (p.status === 'matched' && p.invoice && p.toCredit) {
+      ledger.post(
+        {
+          date: p.bookingDate,
+          kind: 'allocation',
+          description: 'Inbetalning till tillgodo',
+          paymentId: p.id,
+        },
+        creditAllocationEntries(p.id, p.amountOre),
+        { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId },
+      )
+    } else if (p.status === 'matched' && p.invoice) {
+      const owner = { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId }
+      const extra = p.extraOre ?? 0
       ledger.post(
         {
           date: p.bookingDate,
@@ -1256,9 +1344,21 @@ async function seed() {
           invoiceId: p.invoice.id,
           paymentId: p.id,
         },
-        allocationEntries(p.id, p.invoice.id, p.amountOre),
-        { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId },
+        allocationEntries(p.id, p.invoice.id, p.amountOre - extra),
+        owner,
       )
+      if (extra > 0) {
+        ledger.post(
+          {
+            date: p.bookingDate,
+            kind: 'allocation',
+            description: 'Inbetalning till tillgodo',
+            paymentId: p.id,
+          },
+          creditAllocationEntries(p.id, extra),
+          owner,
+        )
+      }
     }
   }
   const reminders = seedReminders(
@@ -1270,7 +1370,7 @@ async function seed() {
         ...i,
         dueDate: i.dueDate as string,
         recipientEmail: i.recipientEmail ?? null,
-        owedOre: i.totalOre - (i.creditedOre ?? 0),
+        owedOre: i.totalOre - (i.creditedOre ?? 0) - (i.creditUsedOre ?? 0),
       })),
     { reminderFeeOre: 6_000, reminderIntervalDays: 10, reminderDueDays: 10 },
     today,

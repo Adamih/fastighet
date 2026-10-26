@@ -14,6 +14,10 @@ export type Props = {
   /** Null when the rent carries no VAT. */
   vat: string | null
   total: string
+  /** Credit balance (tillgodo) used on the avi, or null. */
+  creditUsed: string | null
+  /** What to pay: the total less credit used. */
+  toPay: string
   dueDate: string
   bankgiro: string
   ocr: string
@@ -42,7 +46,7 @@ function AmountRow({ label, value, strong }: { label: string; value: string; str
 
 export default function RentInvoice(props: Props) {
   return (
-    <EmailLayout preview={`Att betala ${props.total} senast ${props.dueDate}. OCR ${props.ocr}.`}>
+    <EmailLayout preview={`Att betala ${props.toPay} senast ${props.dueDate}. OCR ${props.ocr}.`}>
       <EmailHeading>
         {props.documentName} {props.periodLabel}
       </EmailHeading>
@@ -60,7 +64,7 @@ export default function RentInvoice(props: Props) {
           margin: '0 0 16px',
         }}
       >
-        <AmountRow label="Att betala" value={props.total} strong />
+        <AmountRow label="Att betala" value={props.toPay} strong />
         <AmountRow label="Förfallodag" value={props.dueDate} />
         <AmountRow label="Bankgiro" value={props.bankgiro} />
         <AmountRow label="OCR-nummer" value={props.ocr} />
@@ -77,6 +81,12 @@ export default function RentInvoice(props: Props) {
           </>
         )}
         <AmountRow label="Totalt" value={props.total} strong />
+        {props.creditUsed && (
+          <>
+            <AmountRow label="Avgår tillgodo" value={props.creditUsed} />
+            <AmountRow label="Att betala" value={props.toPay} strong />
+          </>
+        )}
       </Section>
 
       <Text style={muted}>Fakturanummer {props.invoiceNumber}</Text>
@@ -104,6 +114,8 @@ RentInvoice.PreviewProps = {
   net: '30 000,00 kr',
   vat: '7 500,00 kr',
   total: '37 500,00 kr',
+  creditUsed: null,
+  toPay: '37 500,00 kr',
   dueDate: '2026-12-31',
   bankgiro: '5050-1055',
   ocr: '10424',

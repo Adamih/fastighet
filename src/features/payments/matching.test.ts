@@ -1,94 +1,109 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test'
-import { formatSek } from '#/lib/money'
 import type { ParsedPayment } from './camt054'
-import { type InvoiceForMatching, matchPayments } from './matching'
+import { allocate, allocationSummary, matchPayments, type OpenAvi } from './matching'
 
-const invoice = (
-  number: number,
-  ocr: string,
-  owedOre: number,
-  extra: Partial<InvoiceForMatching> = {},
-): InvoiceForMatching => ({
+const avi = (number: number, dueDate: string, owedOre: number): OpenAvi => ({
   id: `inv-${number}`,
   number,
-  ocr,
+  dueDate,
   owedOre,
-  status: 'open',
-  paidOn: null,
-  ...extra,
 })
-const byOcr = (...invoices: InvoiceForMatching[]) => new Map(invoices.map((i) => [i.ocr, i]))
+const oct = avi(1, '2026-09-30', 845_000)
+const nov = avi(2, '2026-10-30', 845_000)
 const payment = (amountOre: number, reference: string | null): ParsedPayment => ({
   bankReference: `ref-${amountOre}-${reference}`,
-  bookingDate: '2026-11-30',
+  bookingDate: '2026-11-05',
   amountOre,
   reference,
   payerName: null,
 })
 
-describe('matchPayments', () => {
-  test('exact OCR and amount marks the invoice paid', () => {
-    expect(matchPayments([payment(845000, '18')], byOcr(invoice(1, '18', 845000)))).toEqual([
-      { status: 'matched', invoiceId: 'inv-1', allocates: true, note: null },
+describe('allocate', () => {
+  test('the named avi first, then the oldest, then credit', () => {
+    expect(allocate(845_000, [oct, nov], nov.id)).toEqual([
+      { invoiceId: nov.id, amountOre: 845_000 },
+    ])
+    expect(allocate(1_690_000, [nov, oct], nov.id)).toEqual([
+      { invoiceId: nov.id, amountOre: 845_000 },
+      { invoiceId: oct.id, amountOre: 845_000 },
+    ])
+    expect(allocate(1_000_000, [nov, oct])).toEqual([
+      { invoiceId: oct.id, amountOre: 845_000 },
+      { invoiceId: nov.id, amountOre: 155_000 },
+    ])
+    expect(allocate(900_000, [oct], oct.id)).toEqual([
+      { invoiceId: oct.id, amountOre: 845_000 },
+      { invoiceId: null, amountOre: 55_000 },
     ])
   })
 
-  test('OCR with spaces still matches', () => {
-    expect(matchPayments([payment(845000, '1 8')], byOcr(invoice(1, '18', 845000)))[0].status).toBe(
-      'matched',
-    )
+  test('a part payment lowers what the avi owes; with nothing open it is all credit', () => {
+    expect(allocate(400_000, [oct], oct.id)).toEqual([{ invoiceId: oct.id, amountOre: 400_000 }])
+    expect(allocate(50_000, [])).toEqual([{ invoiceId: null, amountOre: 50_000 }])
+  })
+})
+
+describe('matchPayments', () => {
+  const byOcr = new Map([
+    ['18', { id: oct.id, partyId: 'anna' }],
+    ['26', { id: nov.id, partyId: 'anna' }],
+    ['34', { id: 'inv-paid', partyId: 'anna' }],
+  ])
+  const open = new Map([['anna', [oct, nov]]])
+
+  test('an OCR names the party; the amount is split by the rule', () => {
+    const [both] = matchPayments([payment(1_690_000, '1 8')], byOcr, open)
+    expect(both).toEqual({
+      status: 'matched',
+      partyId: 'anna',
+      allocations: [
+        { invoiceId: oct.id, amountOre: 845_000 },
+        { invoiceId: nov.id, amountOre: 845_000 },
+      ],
+    })
   })
 
-  test('unknown or missing OCR is unmatched', () => {
+  test("an old avi's OCR still finds the party's oldest open avi", () => {
+    const [result] = matchPayments([payment(845_000, '34')], byOcr, open)
+    expect(result.allocations).toEqual([{ invoiceId: oct.id, amountOre: 845_000 }])
+  })
+
+  test('two payments for one avi in a file: the second goes on', () => {
+    const [first, second] = matchPayments(
+      [payment(845_000, '18'), payment(845_000, '18')],
+      byOcr,
+      open,
+    )
+    expect(first.allocations).toEqual([{ invoiceId: oct.id, amountOre: 845_000 }])
+    expect(second.allocations).toEqual([{ invoiceId: nov.id, amountOre: 845_000 }])
+  })
+
+  test('unknown or missing OCR waits for a person', () => {
     const results = matchPayments(
       [payment(100, '99'), payment(100, null), payment(100, 'Hyra')],
-      byOcr(invoice(1, '18', 100)),
+      byOcr,
+      open,
     )
     expect(results.map((r) => r.status)).toEqual(['unmatched', 'unmatched', 'unmatched'])
   })
+})
 
-  test('wrong amount goes to review with the likely invoice', () => {
-    const [short, over] = matchPayments(
-      [payment(800000, '18'), payment(900000, '26')],
-      byOcr(invoice(1, '18', 845000), invoice(2, '26', 845000)),
-    )
-    expect(short).toMatchObject({ status: 'review', invoiceId: 'inv-1', allocates: false })
-    expect(short.note?.replace(/\s/g, ' ')).toBe(
-      'Delbetalning: 8 000,00 kr av 8 450,00 kr på avi 1',
-    )
-    expect(over.note).toStartWith('Överbetalning')
-  })
-
-  test('paid, voided and doubly paid invoices go to review', () => {
-    const results = matchPayments(
-      [payment(100, '18'), payment(100, '26'), payment(100, '34'), payment(100, '34')],
-      byOcr(
-        invoice(1, '18', 0, { status: 'paid', paidOn: '2026-11-01' }),
-        invoice(2, '26', 100, { status: 'void' }),
-        invoice(3, '34', 100),
-      ),
-    )
-    expect(results.map((r) => r.status)).toEqual(['review', 'review', 'matched', 'review'])
-    expect(results[0].note).toContain('redan betald')
-    expect(results[1].note).toContain('makulerad')
-    expect(results[3].note).toContain('två gånger')
-  })
-
-  test('an invoice expects what is still owed after credits and earlier payments', () => {
-    const partly = invoice(1, '18', 645000)
-    expect(matchPayments([payment(645000, '18')], byOcr(partly))[0].status).toBe('matched')
-    expect(matchPayments([payment(845000, '18')], byOcr(partly))[0]).toMatchObject({
-      status: 'review',
-      note: `Överbetalning: ${formatSek(845000)} av ${formatSek(645000)} på avi 1`,
-    })
-  })
-
-  test('a fully credited invoice is not paid automatically', () => {
-    const credited = invoice(1, '18', 0, { status: 'credited' })
-    expect(matchPayments([payment(845000, '18')], byOcr(credited))[0]).toMatchObject({
-      status: 'review',
-      note: 'Avi 1 är krediterad',
-    })
-  })
+test('where a payment went, in words', () => {
+  const nbsp = (s: string) => s.replace(/\s/g, ' ')
+  expect(
+    allocationSummary([
+      { invoiceId: 'a', amountOre: 1, number: 1042 },
+      { invoiceId: 'b', amountOre: 1, number: 1043 },
+    ]),
+  ).toBe('Betalade avi 1042 och 1043')
+  expect(
+    nbsp(
+      allocationSummary([
+        { invoiceId: 'a', amountOre: 800_000, number: 1042 },
+        { invoiceId: null, amountOre: 50_000 },
+      ]),
+    ),
+  ).toBe('8 000,00 kr på avi 1042, 500,00 kr tillgodo')
+  expect(allocationSummary([{ invoiceId: null, amountOre: 50_000 }])).toBe('Tillgodo')
 })
