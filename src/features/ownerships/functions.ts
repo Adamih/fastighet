@@ -11,11 +11,13 @@ import {
   deleteOwnership,
   getOwnership,
   listOwnerships,
+  ownershipExtract,
   transferOwnership,
   updateOwnership,
 } from './program'
 import {
   CreateOwnershipInput,
+  OwnershipExtractInput,
   OwnershipIdInput,
   TransferOwnershipInput,
   UpdateOwnershipInput,
@@ -68,6 +70,24 @@ export const transferOwnershipFn = createServerFn({ method: 'POST' })
 export const deleteOwnershipFn = createServerFn({ method: 'POST' })
   .validator(validate(OwnershipIdInput))
   .handler(({ data }) => runApp(deleteOwnership(data.ownershipId), audit('ownership.delete', null)))
+
+/**
+ * Produces an extract, so it is audited although it only reads. The page fetches it from the
+ * component (not a route loader), so hovering a link doesn't produce one.
+ */
+export const ownershipExtractFn = createServerFn({ method: 'GET' })
+  .validator(validate(OwnershipExtractInput))
+  .handler(({ data }) =>
+    runApp(ownershipExtract(data), audit('ownership.extract', data.ownershipId)),
+  )
+
+export const ownershipExtractQuery = (input: OwnershipExtractInput) =>
+  queryOptions({
+    queryKey: ['ownerships', input.ownershipId, 'extract', input.onDate, input.includeReleased],
+    queryFn: () => ownershipExtractFn({ data: input }),
+    // An extract is a document as of a date; refetching would only add audit entries.
+    staleTime: Number.POSITIVE_INFINITY,
+  })
 
 export const ownershipsQuery = () =>
   queryOptions({ queryKey: ['ownerships'], queryFn: () => listOwnershipsFn() })

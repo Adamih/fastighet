@@ -35,6 +35,7 @@ import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index
 import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
 import { Route as AppUnitsUnitIdRouteImport } from './routes/_app/units/$unitId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -167,6 +168,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppOwnershipsOwnershipIdExtractRoute =
+  AppOwnershipsOwnershipIdExtractRouteImport.update({
+    id: '/ownerships/$ownershipId_/extract',
+    path: '/ownerships/$ownershipId/extract',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -194,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/leases/': typeof AppLeasesIndexRoute
   '/ownerships/': typeof AppOwnershipsIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
+  '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -221,6 +229,7 @@ export interface FileRoutesByTo {
   '/leases': typeof AppLeasesIndexRoute
   '/ownerships': typeof AppOwnershipsIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
+  '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -250,6 +259,7 @@ export interface FileRoutesById {
   '/_app/leases/': typeof AppLeasesIndexRoute
   '/_app/ownerships/': typeof AppOwnershipsIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
+  '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/leases/'
     | '/ownerships/'
     | '/tenants/'
+    | '/ownerships/$ownershipId/extract'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/leases'
     | '/ownerships'
     | '/tenants'
+    | '/ownerships/$ownershipId/extract'
   id:
     | '__root__'
     | '/_app'
@@ -334,6 +346,7 @@ export interface FileRouteTypes {
     | '/_app/leases/'
     | '/_app/ownerships/'
     | '/_app/tenants/'
+    | '/_app/ownerships/$ownershipId_/extract'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -530,6 +543,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/ownerships/$ownershipId_/extract': {
+      id: '/_app/ownerships/$ownershipId_/extract'
+      path: '/ownerships/$ownershipId/extract'
+      fullPath: '/ownerships/$ownershipId/extract'
+      preLoaderRoute: typeof AppOwnershipsOwnershipIdExtractRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -553,6 +573,7 @@ interface AppRouteChildren {
   AppLeasesIndexRoute: typeof AppLeasesIndexRoute
   AppOwnershipsIndexRoute: typeof AppOwnershipsIndexRoute
   AppTenantsIndexRoute: typeof AppTenantsIndexRoute
+  AppOwnershipsOwnershipIdExtractRoute: typeof AppOwnershipsOwnershipIdExtractRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -575,6 +596,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLeasesIndexRoute: AppLeasesIndexRoute,
   AppOwnershipsIndexRoute: AppOwnershipsIndexRoute,
   AppTenantsIndexRoute: AppTenantsIndexRoute,
+  AppOwnershipsOwnershipIdExtractRoute: AppOwnershipsOwnershipIdExtractRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

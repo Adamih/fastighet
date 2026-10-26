@@ -1,7 +1,15 @@
 import { expect, test } from 'bun:test'
 import { changeBaseCharge } from '#/features/agreements/program'
+import { registerPledge, releasePledge } from '#/features/pledges/program'
+import { grantPresets } from '#/lib/managed-access'
 import { fail, harness } from '#/test/harness'
-import { createOwnership, deleteOwnership, getOwnership, transferOwnership } from './program'
+import {
+  createOwnership,
+  deleteOwnership,
+  getOwnership,
+  ownershipExtract,
+  transferOwnership,
+} from './program'
 
 const ownership = {
   owners: [
@@ -112,4 +120,132 @@ test('a new fee from a date ends the old one and makes up already billed days', 
   expect(after.charges.find((c) => c.kind === 'one_off')?.description).toBe(
     'Retroaktiv justering av avgift 2026-11-01 – 2026-11-30',
   )
+})
+
+test('an extract shows the register as of its date: holders, pledges in force and history', async () => {
+  const { run, sqlite } = harness()
+  sqlite.exec(`
+    UPDATE organization_settings SET organization_number = '769900-0002' WHERE organization_id = 'org';
+    UPDATE property SET street_address = 'Lindvägen 4', postal_code = '75320', city = 'Uppsala';
+    UPDATE unit SET area_sqm = 64, rooms = 2 WHERE id = 'u1';
+  `)
+  const { id } = await run(createOwnership(ownership))
+  const notice = (creditorName: string, notifiedOn: string) => ({
+    ownershipId: id,
+    creditorName,
+    creditorOrganizationNumber: '',
+    reference: '',
+    notifiedOn,
+    note: '',
+  })
+  const { id: first } = await run(
+    registerPledge({ ...notice('Första banken', '2021-01-10'), reference: 'A-1' }),
+  )
+  await run(registerPledge(notice('Andra banken', '2023-05-01')))
+  await run(releasePledge({ pledgeId: first, releasedOn: '2024-02-01', note: 'Lånet löst' }))
+  await run(
+    transferOwnership({
+      ownershipId: id,
+      transferDate: '2025-01-01',
+      owners: [{ partyId: 'maja', sharePercent: 100 }],
+      invoiceRecipientId: null,
+    }),
+  )
+
+  // Before the release: both pledges in force, the first one first.
+  const early = await run(
+    ownershipExtract({ ownershipId: id, onDate: '2023-06-01', includeReleased: true }),
+  )
+  expect(early).toMatchObject({
+    association: { name: 'Test', organizationNumber: '769900-0002' },
+    apartment: {
+      label: '1001',
+      designation: 'Uppsala 1:1',
+      streetAddress: 'Lindvägen 4',
+      areaSqm: 64,
+      rooms: 2,
+      shareRatio: 2.145,
+      depositOre: 35_000_000,
+      grantedOn: '2004-05-01',
+    },
+    otherUnits: [{ label: 'F1', kind: 'storage' }],
+    holders: [
+      { name: 'Anna', sharePercent: 50 },
+      { name: 'Erik', sharePercent: 50 },
+    ],
+    released: [],
+    producedBy: { name: 'u', on: null },
+  })
+  expect(early.pledges.map((p) => [p.priority, p.creditorName, p.reference])).toEqual([
+    [1, 'Första banken', 'A-1'],
+    [2, 'Andra banken', null],
+  ])
+
+  // After it: the second bank is first; the released pledge only with the history.
+  const later = await run(
+    ownershipExtract({ ownershipId: id, onDate: '2024-12-31', includeReleased: false }),
+  )
+  expect(later.pledges.map((p) => [p.priority, p.creditorName])).toEqual([[1, 'Andra banken']])
+  expect(later.released).toBeNull()
+  const withHistory = await run(
+    ownershipExtract({ ownershipId: id, onDate: '2024-12-31', includeReleased: true }),
+  )
+  expect(withHistory.released).toEqual([
+    {
+      creditorName: 'Första banken',
+      reference: 'A-1',
+      notifiedOn: '2021-01-10',
+      releasedOn: '2024-02-01',
+    },
+  ])
+  // Before the second notice arrived, only the first exists.
+  const beforeSecond = await run(
+    ownershipExtract({ ownershipId: id, onDate: '2022-01-01', includeReleased: true }),
+  )
+  expect(beforeSecond.pledges.map((p) => p.creditorName)).toEqual(['Första banken'])
+})
+
+test('an extract is for a day the right was held, never the future; a manager is named', async () => {
+  const { run, runAs } = harness()
+  const { id } = await run(createOwnership(ownership))
+  expect(
+    await fail(
+      run(ownershipExtract({ ownershipId: id, onDate: '2020-04-30', includeReleased: false })),
+    ),
+  ).toContain('gäller från 2020-05-01')
+  expect(
+    await fail(
+      run(ownershipExtract({ ownershipId: id, onDate: '2999-01-01', includeReleased: false })),
+    ),
+  ).toContain('framtiden')
+  const { id: buyer } = await run(
+    transferOwnership({
+      ownershipId: id,
+      transferDate: '2025-01-01',
+      owners: [{ partyId: 'maja', sharePercent: 100 }],
+      invoiceRecipientId: null,
+    }),
+  )
+  expect(
+    await fail(
+      run(ownershipExtract({ ownershipId: id, onDate: '2025-01-01', includeReleased: false })),
+    ),
+  ).toContain('gällde 2020-05-01 – 2024-12-31')
+  const extract = await run(
+    ownershipExtract({ ownershipId: buyer, onDate: '2025-01-01', includeReleased: false }),
+  )
+  expect(extract.holders).toEqual([{ name: 'Maja', sharePercent: 100 }])
+
+  const manager = runAs({
+    user: 'frida',
+    home: { id: 'mgr', name: 'Förvaltning', role: 'owner' },
+    organization: { id: 'org', name: 'Test', role: 'owner', grant: grantPresets.readOnly },
+  })
+  expect(
+    (
+      await manager(
+        ownershipExtract({ ownershipId: buyer, onDate: '2025-01-01', includeReleased: false }),
+      )
+    ).producedBy,
+  ).toEqual({ name: 'frida', on: 'Förvaltning' })
 })

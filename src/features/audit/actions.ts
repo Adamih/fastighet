@@ -56,6 +56,7 @@ export const auditActions = {
   'ownership.create': action(m.audit_ownership_create, 'agreement'),
   'ownership.update': action(m.audit_ownership_update, 'agreement'),
   'ownership.transfer': action(m.audit_ownership_transfer, 'agreement'),
+  'ownership.extract': action(m.audit_ownership_extract, 'agreement'),
   'ownership.delete': action(m.audit_ownership_delete),
   'pledge.register': action(m.audit_pledge_register, 'pledge'),
   'pledge.release': action(m.audit_pledge_release, 'pledge'),

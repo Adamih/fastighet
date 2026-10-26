@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
-import { Effect } from 'effect'
+import { Clock, Effect } from 'effect'
 import type { Db } from '#/db'
 import {
   agreement,
@@ -36,11 +36,13 @@ import {
   pledgesFor,
   releaseStatements,
 } from '#/features/pledges/program'
+import { loadSettings } from '#/features/settings/program'
+import { stockholmDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
-import { CurrentUser } from '#/server/services'
+import { CurrentOrganization, CurrentUser, HomeOrganization } from '#/server/services'
 import { today } from '#/server/today'
 import { sellersLastDay, type TransferProblem, transferProblem } from './rules'
 import type { CreateOwnershipInput, TransferOwnershipInput, UpdateOwnershipInput } from './schemas'
@@ -60,7 +62,15 @@ const withOwnershipDetails = {
     with: {
       unit: {
         with: {
-          property: { columns: { id: true, designation: true } },
+          property: {
+            columns: {
+              id: true,
+              designation: true,
+              streetAddress: true,
+              postalCode: true,
+              city: true,
+            },
+          },
           brfApartment: true,
         },
       },
@@ -77,7 +87,13 @@ type OwnershipRow = typeof agreement.$inferSelect & {
   })[]
   units: (typeof agreementUnit.$inferSelect & {
     unit: typeof unit.$inferSelect & {
-      property: { id: string; designation: string }
+      property: {
+        id: string
+        designation: string
+        streetAddress: string | null
+        postalCode: string | null
+        city: string | null
+      }
       brfApartment: typeof brfApartment.$inferSelect | null
     }
   })[]
@@ -524,4 +540,96 @@ export const deleteOwnership = (ownershipId: string) =>
       ])
     })
     return { previousId: previous?.id ?? null }
+  })
+
+/**
+ * An extract from the apartment register (lägenhetsförteckningen) for one bostadsrätt as it stood
+ * on `onDate`: the förening, the apartment, the holders then, and the pledges in force then in
+ * priority order (with released ones if asked for). The extract isn't stored; producing one is
+ * recorded in the audit log by its server function.
+ */
+export const ownershipExtract = (input: {
+  ownershipId: string
+  onDate: string
+  includeReleased: boolean
+}) =>
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const on = yield* today
+    if (input.onDate > on) {
+      return yield* new Conflict({ message: 'Utdraget kan inte avse en dag i framtiden' })
+    }
+    const row = yield* orgQuery((db, organizationId) =>
+      db.query.agreement.findFirst({
+        where: and(eq(agreement.id, input.ownershipId), isOwnership(organizationId)),
+        with: withOwnershipDetails,
+      }),
+    )
+    if (!row) return yield* new NotFound({ entity: 'ownership', id: input.ownershipId })
+    if (input.onDate < row.startDate || (row.endDate !== null && input.onDate > row.endDate)) {
+      return yield* new Conflict({
+        message: row.endDate
+          ? `Bostadsrätten gällde ${row.startDate} – ${row.endDate}. Välj en dag då.`
+          : `Bostadsrätten gäller från ${row.startDate}. Välj en dag från då.`,
+      })
+    }
+    const view = toView(row, input.onDate)
+    const pledges = (yield* pledgesFor([view.id], input.onDate)).get(view.id) ?? []
+    const apartment = row.units.find((u) => u.unit.kind === 'apartment')?.unit ?? null
+    const seller = yield* loadSettings
+    const me = yield* CurrentUser
+    const home = yield* HomeOrganization
+    const company = yield* CurrentOrganization
+    const producedAt = yield* Clock.currentTimeMillis
+
+    return {
+      onDate: input.onDate,
+      association: {
+        name: seller.organizationName,
+        organizationNumber: seller.organizationNumber,
+      },
+      ownership: { id: view.id, number: view.number, startDate: view.startDate },
+      apartment: apartment && {
+        label: apartment.label,
+        designation: apartment.property.designation,
+        streetAddress: apartment.property.streetAddress,
+        postalCode: apartment.property.postalCode,
+        city: apartment.property.city,
+        areaSqm: apartment.areaSqm,
+        rooms: apartment.rooms,
+        shareRatio: apartment.brfApartment?.shareRatio ?? null,
+        depositOre: apartment.brfApartment?.depositOre ?? null,
+        grantedOn: apartment.brfApartment?.grantedOn ?? null,
+      },
+      /** Storage and parking that go with the apartment. */
+      otherUnits: view.units
+        .filter((u) => u.kind !== 'apartment')
+        .map((u) => ({ label: u.label, kind: u.kind })),
+      holders: view.owners.map((o) => ({ name: o.name, sharePercent: o.sharePercent })),
+      pledges: pledges
+        .filter((p) => p.active)
+        .map((p) => ({
+          priority: p.priority as number,
+          creditorName: p.creditorName,
+          creditorOrganizationNumber: p.creditorOrganizationNumber,
+          reference: p.reference,
+          notifiedOn: p.notifiedOn,
+        })),
+      released: input.includeReleased
+        ? pledges
+            .filter((p) => !p.active)
+            .map((p) => ({
+              creditorName: p.creditorName,
+              reference: p.reference,
+              notifiedOn: p.notifiedOn,
+              releasedOn: p.releasedOn as string,
+            }))
+        : null,
+      producedBy: {
+        name: me.name,
+        /** The manager's company, when someone from a managing company produced it. */
+        on: company.grant ? home.name : null,
+      },
+      producedOn: stockholmDate(producedAt),
+    }
   })

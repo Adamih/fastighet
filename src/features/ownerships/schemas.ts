@@ -46,3 +46,11 @@ export const TransferOwnershipInput = Schema.Struct({
   releasePledgeIds: Schema.optional(Schema.Array(Schema.String)),
 })
 export type TransferOwnershipInput = typeof TransferOwnershipInput.Type
+
+/** An extract from the apartment register for a bostadsrätt, as of a date. */
+export const OwnershipExtractInput = Schema.Struct({
+  ownershipId: Schema.String,
+  onDate: IsoDate,
+  includeReleased: Schema.Boolean,
+})
+export type OwnershipExtractInput = typeof OwnershipExtractInput.Type

@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowRightLeft, Banknote, Mail, Pencil, Phone } from 'lucide-react'
+import { ArrowRightLeft, Banknote, FileText, Mail, Pencil, Phone } from 'lucide-react'
 import {
   DetailColumns,
   DetailHeader,
@@ -72,26 +72,38 @@ function OwnershipPage() {
         }
         meta={[title, units.designations, units.labels.join(', ')].filter(Boolean).join(' · ')}
         actions={
-          canManage && (
-            <>
-              <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
-                <Pencil aria-hidden="true" />
-                {m.ownership_edit()}
-              </Button>
-              {!ownership.endDate && (
-                <Button variant="outline" className="flex-1 sm:flex-none" onClick={changeFee.open}>
-                  <Banknote aria-hidden="true" />
-                  {changeFee.label}
+          <>
+            {canManage && (
+              <>
+                <Button variant="outline" className="flex-1 sm:flex-none" onClick={edit.open}>
+                  <Pencil aria-hidden="true" />
+                  {m.ownership_edit()}
                 </Button>
-              )}
-              {!ownership.endDate && (
-                <Button variant="outline" className="flex-1 sm:flex-none" onClick={transfer.open}>
-                  <ArrowRightLeft aria-hidden="true" />
-                  {m.ownership_transfer()}
-                </Button>
-              )}
-            </>
-          )
+                {!ownership.endDate && (
+                  <Button
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    onClick={changeFee.open}
+                  >
+                    <Banknote aria-hidden="true" />
+                    {changeFee.label}
+                  </Button>
+                )}
+                {!ownership.endDate && (
+                  <Button variant="outline" className="flex-1 sm:flex-none" onClick={transfer.open}>
+                    <ArrowRightLeft aria-hidden="true" />
+                    {m.ownership_transfer()}
+                  </Button>
+                )}
+              </>
+            )}
+            <Button asChild variant="outline" className="flex-1 sm:flex-none">
+              <Link to="/ownerships/$ownershipId/extract" params={{ ownershipId: ownership.id }}>
+                <FileText aria-hidden="true" />
+                {m.extract_open()}
+              </Link>
+            </Button>
+          </>
         }
       />
 

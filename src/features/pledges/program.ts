@@ -39,10 +39,11 @@ const columns = {
 }
 
 /**
- * The pledges of the given bostadsrätter, in priority order per bostadsrätt. Callers check read
- * access (the bostadsrätt's own).
+ * The pledges of the given bostadsrätter, in priority order per bostadsrätt, as the register
+ * stood on `asOf` (today by default): later notices are left out and releases after it don't
+ * count yet. Callers check read access (the bostadsrätt's own).
  */
-export const pledgesFor = (agreementIds: readonly string[]) =>
+export const pledgesFor = (agreementIds: readonly string[], asOf?: string) =>
   Effect.gen(function* () {
     if (agreementIds.length === 0) return new Map<string, PledgeView[]>()
     const rows = yield* orgQuery((db, organizationId) =>
@@ -56,12 +57,17 @@ export const pledgesFor = (agreementIds: readonly string[]) =>
           ),
         ),
     )
-    const on = yield* today
+    const on = asOf ?? (yield* today)
     const byAgreement = new Map<string, PledgeView[]>()
     for (const id of agreementIds) {
       const own = rows
-        .filter((r) => r.agreementId === id)
-        .map((r) => ({ ...r, createdAt: r.createdAt.getTime() }))
+        .filter((r) => r.agreementId === id && r.notifiedOn <= on)
+        .map((r) => ({
+          ...r,
+          createdAt: r.createdAt.getTime(),
+          // A release after `asOf` hadn't happened yet.
+          ...(r.releasedOn && r.releasedOn > on ? { releasedOn: null, releaseNote: null } : {}),
+        }))
       byAgreement.set(id, inPriorityOrder(own, on))
     }
     return byAgreement
