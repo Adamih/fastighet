@@ -8,7 +8,7 @@ import * as schema from '#/db/schema'
 import { CurrentOrganization, CurrentUser, Database, PermissionChecker } from '#/server/services'
 
 // Test helper: runs programs against an in-memory SQLite database with every migration applied
-// and a small fixture company ('org'): one property, an apartment (u1), a storage unit (f1), a
+// and a small fixture company ('org', with a bankgiro, and its user 'user'): one property, an apartment (u1), a storage unit (f1), a
 // parking space (p1) and three people (anna, erik, maja). Bun's SQLite driver has no `batch`,
 // so a batch runs in one transaction, which is what D1 does.
 
@@ -53,6 +53,9 @@ export function harness() {
   const now = Date.now()
   sqlite.exec(`
     INSERT INTO organization (id, name, slug, created_at) VALUES ('org', 'Test', 'test', ${now});
+    INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
+      VALUES ('user', 'u', 'u@example.test', 1, ${now}, ${now});
+    INSERT INTO organization_settings (organization_id, bankgiro) VALUES ('org', '990-0002');
     INSERT INTO property (id, organization_id, designation) VALUES ('p', 'org', 'Uppsala 1:1');
     INSERT INTO unit (id, organization_id, property_id, kind, label) VALUES
       ('u1', 'org', 'p', 'apartment', '1001'), ('f1', 'org', 'p', 'storage', 'F1'),

@@ -5,8 +5,9 @@ import type { Charge } from '#/features/agreements/charges'
 import { rentFields } from '#/features/agreements/current'
 import type { PartyRole } from '#/features/agreements/kinds'
 import { agreementTerms } from '#/features/agreements/terms'
-import { invoiceStatus } from '#/features/invoicing/rules'
 import { leaseStatus } from '#/features/leases/terms'
+import { type InvoiceMoney, statusFromMoney } from '#/features/ledger/postings'
+import { invoiceMoneyFor } from '#/features/ledger/program'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -118,7 +119,6 @@ export const getTenant = (tenantId: string) =>
               dueDate: true,
               totalOre: true,
               creditedOre: true,
-              paidOn: true,
               voidedAt: true,
             },
             // Every avi on their agreements, and any addressed to them.
@@ -139,10 +139,14 @@ export const getTenant = (tenantId: string) =>
         )
       : []
     const on = yield* today
+    const money = yield* invoiceMoneyFor(invoices.map((i) => i.id))
     return {
       ...found,
       leases: showLeases ? found.leases : [],
-      invoices: invoices.map((i) => ({ ...i, status: invoiceStatus(i, on) })),
+      invoices: invoices.map((i) => {
+        const m = money.get(i.id) as InvoiceMoney
+        return { ...i, ...m, status: statusFromMoney(i, m, on) }
+      }),
     }
   })
 

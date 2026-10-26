@@ -81,9 +81,8 @@ test('refunds and corrected avier follow the credit note', () => {
       ...base,
       status: 'paid',
       paidOn: '2026-09-28',
-      creditNotes: [
-        { number: 4, issueDate: '2026-10-05', totalOre: 845000, refundedOn: '2026-10-12' },
-      ],
+      creditNotes: [{ number: 4, issueDate: '2026-10-05', totalOre: 845000 }],
+      refunds: [{ date: '2026-10-12', amountOre: 845000 }],
       replacedBy: [{ number: 1050, issueDate: '2026-10-05' }],
     }),
   ).toEqual([

@@ -311,7 +311,7 @@ function AssignPanel({ payment, actions }: { payment: PaymentRowData; actions: P
   return (
     <AssignToInvoice
       paymentId={payment.id}
-      suggestedInvoiceId={payment.invoiceId}
+      suggestedInvoiceId={payment.invoice?.id}
       onDone={async () => {
         actions.setAssigning(false)
         await actions.refresh()
@@ -408,7 +408,7 @@ function AssignToInvoice({
               {m.payment_invoice_option({
                 number: i.number,
                 recipient: i.recipientName,
-                amount: formatSek(i.totalOre - i.creditedOre),
+                amount: formatSek(i.owedOre),
                 ocr: i.ocr,
               })}
             </SelectItem>

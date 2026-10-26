@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { inForce, refundProblem, refunds, reissueProblem, voidProblem } from './correction'
+import { inForce, refundProblem, reissueProblem, voidProblem } from './correction'
 
 const avi = (overrides: Partial<Parameters<typeof inForce>[0]> = {}) => ({
   voidedAt: null,
@@ -15,28 +15,11 @@ test('voided and fully credited avier no longer count for their period', () => {
   expect(inForce(avi({ voidedAt: new Date(0) }))).toBe(false)
 })
 
-test('refunds counts only credit notes on paid invoices', () => {
-  expect(
-    refunds([
-      { totalOre: 100000, refund: false, refundedOn: null },
-      { totalOre: 150000, refund: true, refundedOn: null },
-      { totalOre: 50000, refund: true, refundedOn: '2026-10-01' },
-    ]),
-  ).toEqual({ refundDueOre: 150000, refundedOre: 50000 })
-  expect(refunds([])).toEqual({ refundDueOre: 0, refundedOre: 0 })
-})
-
-test('a refund is recorded once, between the credit note and today', () => {
-  const note = { totalOre: 150000, refund: true, refundedOn: null, issueDate: '2026-10-10' }
+test('a refund pays back what the avi was overpaid by, up to today', () => {
   const today = '2026-10-24'
-  expect(refundProblem(note, '2026-10-20', today)).toBeNull()
-  expect(refundProblem(note, '2026-10-10', today)).toBeNull()
-  expect(refundProblem(note, '2026-10-25', today)).toBe('future')
-  expect(refundProblem(note, '2026-10-09', today)).toBe('before_credit')
-  expect(refundProblem({ ...note, refund: false }, '2026-10-20', today)).toBe('not_refund')
-  expect(refundProblem({ ...note, refundedOn: '2026-10-12' }, '2026-10-20', today)).toBe(
-    'already_refunded',
-  )
+  expect(refundProblem({ refundDueOre: 150_000 }, '2026-10-20', today)).toBeNull()
+  expect(refundProblem({ refundDueOre: 150_000 }, '2026-10-25', today)).toBe('future')
+  expect(refundProblem({ refundDueOre: 0 }, '2026-10-20', today)).toBe('nothing_due')
 })
 
 test('a corrected avi replaces a voided or fully credited one, once', () => {
@@ -49,10 +32,10 @@ test('a corrected avi replaces a voided or fully credited one, once', () => {
 })
 
 test('only an unsent, unpaid avi without credit notes can be voided', () => {
-  const unsent = { voidedAt: null, paidOn: null, creditedOre: 0, sentAt: null }
+  const unsent = { voidedAt: null, paidOre: 0, creditedOre: 0, sentAt: null }
   expect(voidProblem(unsent)).toBeNull()
   expect(voidProblem({ ...unsent, sentAt: new Date(0) })).toBe('sent')
   expect(voidProblem({ ...unsent, creditedOre: 100000 })).toBe('credited')
-  expect(voidProblem({ ...unsent, paidOn: '2026-10-01' })).toBe('paid')
+  expect(voidProblem({ ...unsent, paidOre: 100_000 })).toBe('paid')
   expect(voidProblem({ ...unsent, voidedAt: new Date(0) })).toBe('void')
 })

@@ -16,6 +16,7 @@ import {
   partyRoles,
 } from '#/features/agreements/kinds'
 import { invoiceIntervals, tenantKinds } from '#/features/leases/options'
+import { ledgerAccounts, postingKinds } from '#/features/ledger/kinds'
 import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
 import { companyKinds } from '#/features/settings/company-kinds'
@@ -344,10 +345,10 @@ export const invoice = sqliteTable(
     vatOre: integer('vat_ore').notNull(),
     totalOre: integer('total_ore').notNull(),
     sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
-    paidOn: text('paid_on'),
     voidedAt: integer('voided_at', { mode: 'timestamp_ms' }),
-    // Sum of the credit notes issued against this invoice (incl. VAT). Updated in the same batch
-    // that creates a credit note; what is still owed is totalOre - creditedOre.
+    // Sum of the credit notes issued against this invoice (incl. VAT), cached in the same batch
+    // that creates one; the one-avi-per-period index needs it. What is owed and paid comes from
+    // the ledger (`ledgerEntry`), not from fields on the avi.
     creditedOre: integer('credited_ore').notNull().default(0),
     // A corrected avi issued for the same lease and period after this one was voided or credited
     // in full points back to the avi it replaces.
@@ -393,7 +394,7 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   agreement: one(agreement, { fields: [invoice.agreementId], references: [agreement.id] }),
   party: one(party, { fields: [invoice.partyId], references: [party.id] }),
   lines: many(invoiceLine),
-  payments: many(payment),
+  ledgerEntries: many(ledgerEntry),
   creditNotes: many(creditNote),
   replaces: one(invoice, {
     fields: [invoice.replacesInvoiceId],
@@ -430,10 +431,6 @@ export const creditNote = sqliteTable(
     netOre: integer('net_ore').notNull(),
     vatOre: integer('vat_ore').notNull(),
     totalOre: integer('total_ore').notNull(),
-    // True when the invoice was already paid when it was credited: the amount is paid back to the
-    // tenant instead of lowering what is owed. `refundedOn` records when that was done.
-    refund: integer('refund', { mode: 'boolean' }).notNull().default(false),
-    refundedOn: text('refunded_on'),
     sentAt: integer('sent_at', { mode: 'timestamp_ms' }),
     createdAt: createdAt(),
   },
@@ -510,15 +507,12 @@ export const payment = sqliteTable(
     payerName: text('payer_name'),
     status: text('status', { enum: paymentStatuses }).notNull(),
     note: text('note'),
-    invoiceId: text('invoice_id').references(() => invoice.id),
-    // True when this payment is what marked the invoice paid, so undoing it can reopen the invoice.
-    marksInvoicePaid: integer('marks_invoice_paid', { mode: 'boolean' }).notNull().default(false),
     createdAt: createdAt(),
   },
+  // Which avier a payment settled is in the ledger: its allocation postings.
   (t) => [
     uniqueIndex('payment_org_bank_reference_uq').on(t.organizationId, t.bankReference),
     index('payment_org_status_idx').on(t.organizationId, t.status),
-    index('payment_invoice_idx').on(t.invoiceId),
   ],
 )
 
@@ -528,7 +522,72 @@ export const paymentImportRelations = relations(paymentImport, ({ many }) => ({
 
 export const paymentRelations = relations(payment, ({ one }) => ({
   import: one(paymentImport, { fields: [payment.importId], references: [paymentImport.id] }),
-  invoice: one(invoice, { fields: [payment.invoiceId], references: [invoice.id] }),
+}))
+
+// The receivables ledger (kundreskontra): what is owed, paid, credited and paid back, as
+// postings (verifikationer) of entries that always balance. Nothing is updated or deleted; an
+// undo or a void is a reversing posting. Rules in `features/ledger/postings.ts`.
+export const posting = sqliteTable(
+  'posting',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    // Bokföringsdatum.
+    date: text('date').notNull(),
+    kind: text('kind', { enum: postingKinds }).notNull(),
+    description: text('description').notNull(),
+    // The document or payment it records.
+    invoiceId: text('invoice_id').references(() => invoice.id),
+    creditNoteId: text('credit_note_id').references(() => creditNote.id),
+    paymentId: text('payment_id').references(() => payment.id),
+    // Set on a reversal; a posting is reversed at most once.
+    reversesPostingId: text('reverses_posting_id').references((): AnySQLiteColumn => posting.id),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index('posting_org_date_idx').on(t.organizationId, t.date),
+    uniqueIndex('posting_reverses_uq')
+      .on(t.reversesPostingId)
+      .where(sql`${t.reversesPostingId} is not null`),
+  ],
+)
+
+export const ledgerEntry = sqliteTable(
+  'ledger_entry',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    postingId: text('posting_id')
+      .notNull()
+      .references(() => posting.id),
+    account: text('account', { enum: ledgerAccounts }).notNull(),
+    // Debit positive, credit negative.
+    amountOre: integer('amount_ore').notNull(),
+    // Whose receivable, and which open item: an avi, or none for a party's credit balance.
+    partyId: text('party_id').references(() => party.id),
+    agreementId: text('agreement_id').references(() => agreement.id),
+    invoiceId: text('invoice_id').references(() => invoice.id),
+    paymentId: text('payment_id').references(() => payment.id),
+    // For income and VAT: what it is for, so bookkeeping can choose accounts.
+    chargeKind: text('charge_kind', { enum: chargeKinds }),
+    vatRatePercent: integer('vat_rate_percent'),
+  },
+  (t) => [
+    index('ledger_entry_posting_idx').on(t.postingId),
+    index('ledger_entry_org_invoice_idx').on(t.organizationId, t.invoiceId),
+    index('ledger_entry_org_payment_idx').on(t.organizationId, t.paymentId),
+    index('ledger_entry_org_party_idx').on(t.organizationId, t.partyId),
+  ],
+)
+
+export const postingRelations = relations(posting, ({ many }) => ({
+  entries: many(ledgerEntry),
+}))
+
+export const ledgerEntryRelations = relations(ledgerEntry, ({ one }) => ({
+  posting: one(posting, { fields: [ledgerEntry.postingId], references: [posting.id] }),
+  invoice: one(invoice, { fields: [ledgerEntry.invoiceId], references: [invoice.id] }),
+  payment: one(payment, { fields: [ledgerEntry.paymentId], references: [payment.id] }),
 }))
 
 /** A claimed request is never executed twice, including after a worker/network failure. */

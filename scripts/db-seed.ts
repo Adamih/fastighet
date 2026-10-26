@@ -26,6 +26,15 @@ import {
   type Period,
 } from '#/features/invoicing/rules'
 import { earliestMoveOutDate, effectiveEndDate, type LeaseTerms } from '#/features/leases/terms'
+import {
+  allocationEntries,
+  creditNoteEntries,
+  type EntryDraft,
+  invoiceEntries,
+  paymentEntries,
+  refundEntries,
+  reversal,
+} from '#/features/ledger/postings'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
 import { addDays, addMonths, stockholmDate } from '#/lib/dates'
@@ -72,6 +81,39 @@ async function insertAll<T extends Record<string, unknown>>(
     // biome-ignore lint/suspicious/noExplicitAny: one helper for every table's insert type
     await db.insert(table).values(rows.slice(i, i + perStatement) as any)
   }
+}
+
+/**
+ * Ledger rows for a seeded company, built with the app's posting rules so the seed's money adds
+ * up the same way the app's does. Call `write` once everything is posted.
+ */
+function seedLedger(organizationId: string) {
+  const postings: (typeof schema.posting.$inferInsert)[] = []
+  const entries: (typeof schema.ledgerEntry.$inferInsert)[] = []
+  const post = (
+    draft: Omit<typeof schema.posting.$inferInsert, 'id' | 'organizationId'>,
+    drafts: readonly EntryDraft[],
+    owner: { partyId: string; agreementId: string } | null = null,
+  ) => {
+    const postingId = id()
+    postings.push({ ...draft, id: postingId, organizationId })
+    entries.push(
+      ...drafts.map((e) => ({
+        ...e,
+        id: id(),
+        organizationId,
+        postingId,
+        partyId: e.invoiceId ? (owner?.partyId ?? null) : null,
+        agreementId: e.invoiceId ? (owner?.agreementId ?? null) : null,
+      })),
+    )
+    return postingId
+  }
+  const write = async () => {
+    await insertAll(schema.posting, postings)
+    await insertAll(schema.ledgerEntry, entries)
+  }
+  return { post, write }
 }
 
 try {
@@ -638,6 +680,8 @@ async function seed() {
     lines: InvoiceLineDraft[]
     /** Credit notes against it, so a payment only subtracts those issued before it was made. */
     credits: { issueDate: string; totalOre: number }[]
+    /** When a payment settled it; the ledger records the payment itself. */
+    paidOn?: string
   }
   const invoices: Invoice[] = []
   const billedOnce = new Set<string>()
@@ -722,7 +766,7 @@ async function seed() {
   }
   await insertAll(
     schema.invoice,
-    invoices.map(({ lease: _, lines: __, credits: ___, ...i }) => i),
+    invoices.map(({ lease: _, lines: __, credits: ___, paidOn: ____, ...i }) => i),
   )
   await insertAll(
     schema.invoiceLine,
@@ -740,6 +784,8 @@ async function seed() {
   // still owed on its invoice.
   const creditNotes: (typeof schema.creditNote.$inferInsert & {
     lines: ReturnType<typeof draftCreditNote> & { ok: true }
+    /** When a credit on a paid avi was paid back; the ledger records the refund. */
+    refundedOn?: string
   })[] = []
   const credit = (invoice: Invoice, request: CreditRequest, reason: string, issueDate: string) => {
     const result = draftCreditNote(
@@ -823,6 +869,7 @@ async function seed() {
   // --- Payments, as the bank reported them. Each tenant pays in their own way.
   const yesterday = addDays(today, -1)
   interface SeedPayment {
+    id: string
     bookingDate: string
     amountOre: number
     reference: string | null
@@ -841,6 +888,7 @@ async function seed() {
       .reduce((sum, c) => sum + c.totalOre, 0)
     const due = invoice.totalOre - creditedBefore
     const payment: SeedPayment = {
+      id: id(),
       bookingDate: date,
       amountOre: due,
       reference: invoice.ocr,
@@ -921,6 +969,7 @@ async function seed() {
   const mariaLease = leases.find((l) => l.key === 'maria')
   if (mariaLease) {
     payments.push({
+      id: id(),
       bookingDate: bankDay(addDays(mariaLease.terms.startDate, -12)),
       amountOre: 1_460_000,
       reference: null,
@@ -958,7 +1007,7 @@ async function seed() {
     await insertAll(
       schema.payment,
       batch.map((p) => ({
-        id: id(),
+        id: p.id,
         organizationId: orgId,
         importId,
         bankReference: `${p.bookingDate.replaceAll('-', '')}${String(++bankSequence).padStart(6, '0')}`,
@@ -968,26 +1017,21 @@ async function seed() {
         payerName: p.payerName,
         status: p.status,
         note: p.note,
-        invoiceId: p.invoice?.id ?? null,
-        marksInvoicePaid: p.marksInvoicePaid,
         createdAt: new Date(`${importedOn}T08:00:00Z`),
       })),
     )
   }
 
-  // Paid dates and credited totals were settled above; write them onto the invoices.
+  // Credited totals were settled above; write the cache onto the invoices.
   for (const invoice of invoices) {
-    if (!invoice.paidOn && !invoice.creditedOre) continue
+    if (!invoice.creditedOre) continue
     await db
       .update(schema.invoice)
-      .set({ paidOn: invoice.paidOn ?? null, creditedOre: invoice.creditedOre ?? 0 })
+      .set({ creditedOre: invoice.creditedOre })
       .where(eq(schema.invoice.id, invoice.id))
   }
-  for (const { lines, ...note } of creditNotes) {
-    // Credited after it was paid: the amount goes back to the tenant.
-    const paidOn = invoices.find((i) => i.id === note.invoiceId)?.paidOn
-    const refund = !!paidOn && paidOn <= note.issueDate
-    await db.insert(schema.creditNote).values({ ...note, refund })
+  for (const { lines, refundedOn: _, ...note } of creditNotes) {
+    await db.insert(schema.creditNote).values(note)
     await insertAll(
       schema.creditNoteLine,
       lines.draft.lines.map((line, index) => ({
@@ -998,6 +1042,81 @@ async function seed() {
       })),
     )
   }
+
+  // --- The ledger: every avi, void, credit note, payment, match and refund above as postings.
+  const ledger = seedLedger(orgId)
+  for (const invoice of invoices) {
+    const owner = { partyId: invoice.partyId, agreementId: invoice.agreementId }
+    ledger.post(
+      {
+        date: invoice.issueDate,
+        kind: 'invoice',
+        description: `Avi ${invoice.number}`,
+        invoiceId: invoice.id,
+      },
+      invoiceEntries({ ...invoice, lines: invoice.lines }),
+      owner,
+    )
+    if (invoice.voidedAt) {
+      ledger.post(
+        {
+          date: stockholmDate(invoice.voidedAt.getTime()),
+          kind: 'void',
+          description: `Makulering av avi ${invoice.number}`,
+          invoiceId: invoice.id,
+        },
+        reversal(invoiceEntries({ ...invoice, lines: invoice.lines })),
+        owner,
+      )
+    }
+  }
+  for (const note of creditNotes) {
+    const invoice = invoices.find((i) => i.id === note.invoiceId) as Invoice
+    const owner = { partyId: invoice.partyId, agreementId: invoice.agreementId }
+    ledger.post(
+      {
+        date: note.issueDate,
+        kind: 'credit_note',
+        description: `Kreditfaktura ${note.number}`,
+        invoiceId: invoice.id,
+        creditNoteId: note.id,
+      },
+      creditNoteEntries(invoice.id, note.lines.draft),
+      owner,
+    )
+    if (note.refundedOn) {
+      ledger.post(
+        {
+          date: note.refundedOn,
+          kind: 'refund',
+          description: `Återbetalning, avi ${invoice.number}`,
+          invoiceId: invoice.id,
+        },
+        refundEntries(invoice.id, note.totalOre),
+        owner,
+      )
+    }
+  }
+  for (const p of payments) {
+    ledger.post(
+      { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: p.id },
+      paymentEntries(p.id, p.amountOre),
+    )
+    if (p.status === 'matched' && p.invoice) {
+      ledger.post(
+        {
+          date: p.bookingDate,
+          kind: 'allocation',
+          description: `Betalning av avi ${p.invoice.number}`,
+          invoiceId: p.invoice.id,
+          paymentId: p.id,
+        },
+        allocationEntries(p.id, p.invoice.id, p.amountOre),
+        { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId },
+      )
+    }
+  }
+  await ledger.write()
 
   const open = invoices.filter((i) => !i.paidOn && !i.voidedAt && i.totalOre > (i.creditedOre ?? 0))
   console.log(`Seeded ${org.name}:
@@ -1373,6 +1492,7 @@ async function seedBrf() {
   const invoices: (typeof schema.invoice.$inferInsert & {
     id: string
     lines: InvoiceLineDraft[]
+    paidOn?: string
   })[] = []
   for (let offset = -4; offset <= 1; offset++) {
     const monthStart = addMonths(thisMonth, offset)
@@ -1423,7 +1543,10 @@ async function seedBrf() {
   const jonasLate = invoices
     .filter((i) => i.agreementId === jonas?.id && (i.dueDate as string) <= yesterday)
     .at(-1)
-  const payments: (typeof schema.payment.$inferInsert)[] = []
+  const payments: (typeof schema.payment.$inferInsert & {
+    id: string
+    invoice: (typeof invoices)[number]
+  })[] = []
   const importId = id()
   for (const invoice of invoices) {
     if (invoice === jonasLate) continue
@@ -1431,6 +1554,7 @@ async function seedBrf() {
     if (bookingDate > yesterday) continue
     invoice.paidOn = bookingDate
     payments.push({
+      invoice,
       id: id(),
       organizationId: orgId,
       importId,
@@ -1440,14 +1564,12 @@ async function seedBrf() {
       reference: invoice.ocr,
       payerName: invoice.recipientName.split(' och ')[0].toUpperCase(),
       status: 'matched',
-      invoiceId: invoice.id,
-      marksInvoicePaid: true,
       createdAt: new Date(`${yesterday}T08:00:00Z`),
     })
   }
   await insertAll(
     schema.invoice,
-    invoices.map(({ lines: _, ...i }) => i),
+    invoices.map(({ lines: _, paidOn: __, ...i }) => i),
   )
   await insertAll(
     schema.invoiceLine,
@@ -1471,7 +1593,42 @@ async function seedBrf() {
     totalOre: payments.reduce((sum, p) => sum + p.amountOre, 0),
     createdAt: new Date(`${yesterday}T08:00:00Z`),
   })
-  await insertAll(schema.payment, payments)
+  await insertAll(
+    schema.payment,
+    payments.map(({ invoice: _, ...p }) => p),
+  )
+  // The ledger: every avi, and each payment matched to the avi it pays.
+  const ledger = seedLedger(orgId)
+  for (const invoice of invoices) {
+    ledger.post(
+      {
+        date: invoice.issueDate,
+        kind: 'invoice',
+        description: `Avi ${invoice.number}`,
+        invoiceId: invoice.id,
+      },
+      invoiceEntries(invoice),
+      { partyId: invoice.partyId, agreementId: invoice.agreementId },
+    )
+  }
+  for (const p of payments) {
+    ledger.post(
+      { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: p.id },
+      paymentEntries(p.id, p.amountOre),
+    )
+    ledger.post(
+      {
+        date: p.bookingDate,
+        kind: 'allocation',
+        description: `Betalning av avi ${p.invoice.number}`,
+        invoiceId: p.invoice.id,
+        paymentId: p.id,
+      },
+      allocationEntries(p.id, p.invoice.id, p.amountOre),
+      { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId },
+    )
+  }
+  await ledger.write()
 
   console.log(`Seeded ${org.name} (BRF):
   login      ${board.email} (owner)

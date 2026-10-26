@@ -4,7 +4,6 @@ import {
   dueDate,
   formatBankgiro,
   invoicePeriod,
-  invoiceStatus,
   isValidBankgiro,
   ocrFor,
   periodLabel,
@@ -13,37 +12,6 @@ import {
   vatFor,
   vatNumberFor,
 } from './rules'
-
-test('invoiceStatus', () => {
-  const open = {
-    voidedAt: null,
-    paidOn: null,
-    dueDate: '2026-11-30',
-    totalOre: 100,
-    creditedOre: 0,
-  }
-  expect(invoiceStatus(open, '2026-11-30')).toBe('unpaid')
-  expect(invoiceStatus(open, '2026-12-01')).toBe('overdue')
-  expect(invoiceStatus({ ...open, paidOn: '2026-12-05' }, '2027-01-01')).toBe('paid')
-  expect(invoiceStatus({ ...open, voidedAt: new Date() }, '2027-01-01')).toBe('void')
-})
-
-test('invoiceStatus with credit notes', () => {
-  const open = {
-    voidedAt: null,
-    paidOn: null,
-    dueDate: '2026-11-30',
-    totalOre: 100,
-    creditedOre: 0,
-  }
-  // Partly credited: still owes the rest.
-  expect(invoiceStatus({ ...open, creditedOre: 40 }, '2026-12-01')).toBe('overdue')
-  expect(invoiceStatus({ ...open, creditedOre: 100 }, '2026-12-01')).toBe('credited')
-  // Paid first, credited afterwards: stays paid (the credit is owed back to the tenant).
-  expect(invoiceStatus({ ...open, paidOn: '2026-11-20', creditedOre: 100 }, '2026-12-01')).toBe(
-    'paid',
-  )
-})
 
 const periodOf = (month: string, interval: 'monthly' | 'quarterly') => {
   const period = invoicePeriod(month, interval)

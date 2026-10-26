@@ -16,7 +16,9 @@ export interface InvoiceEvent {
   readonly kind: InvoiceEventKind
   /** ISO date. */
   readonly date: string
-  /** For `credited` and `refunded`: the credit note. */
+  /** For `refunded`: the amount paid back. */
+  readonly amountOre?: number
+  /** For `credited`: the credit note. */
   readonly creditNote?: { readonly number: number; readonly totalOre: number }
   /** For `replaced`: the corrected avi. */
   readonly invoiceNumber?: number
@@ -36,8 +38,9 @@ export function invoiceEvents(
       number: number
       issueDate: string
       totalOre: number
-      refundedOn?: string | null
     }[]
+    /** Amounts paid back (after a credit note on a paid avi). */
+    refunds?: readonly { date: string; amountOre: number }[]
     /** Corrected avier issued in its place. */
     replacedBy?: readonly { number: number; issueDate: string }[]
   },
@@ -68,17 +71,11 @@ export function invoiceEvents(
       date: note.issueDate,
       creditNote: { number: note.number, totalOre: note.totalOre },
     })),
-    ...(invoice.creditNotes ?? []).flatMap((note) =>
-      note.refundedOn
-        ? [
-            {
-              kind: 'refunded' as const,
-              date: note.refundedOn,
-              creditNote: { number: note.number, totalOre: note.totalOre },
-            },
-          ]
-        : [],
-    ),
+    ...(invoice.refunds ?? []).map((refund) => ({
+      kind: 'refunded' as const,
+      date: refund.date,
+      amountOre: refund.amountOre,
+    })),
     ...(invoice.replacedBy ?? []).map((replacement) => ({
       kind: 'replaced' as const,
       date: replacement.issueDate,

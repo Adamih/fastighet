@@ -15,9 +15,9 @@ import {
   markInvoicePaid,
   previewInvoiceRun,
   previewReissue,
-  refundCreditNote,
+  refundInvoice,
   reissueInvoice,
-  undoCreditNoteRefund,
+  undoInvoiceRefund,
   unmarkInvoicePaid,
   voidInvoice,
 } from './program'
@@ -30,7 +30,7 @@ import {
   type ListInvoicesInput,
   ListInvoicesInput as ListInvoicesSchema,
   MarkPaidInput,
-  RefundCreditNoteInput,
+  RefundInvoiceInput,
 } from './schemas'
 
 const std = validate
@@ -104,13 +104,13 @@ export const emailCreditNoteFn = createServerFn({ method: 'POST' })
   .validator(std(CreditNoteIdInput))
   .handler(({ data }) => runApp(emailCreditNote(data.creditNoteId)))
 
-export const refundCreditNoteFn = createServerFn({ method: 'POST' })
-  .validator(std(RefundCreditNoteInput))
-  .handler(({ data }) => runApp(refundCreditNote(data)))
+export const refundInvoiceFn = createServerFn({ method: 'POST' })
+  .validator(std(RefundInvoiceInput))
+  .handler(({ data }) => runApp(refundInvoice(data)))
 
-export const undoCreditNoteRefundFn = createServerFn({ method: 'POST' })
-  .validator(std(CreditNoteIdInput))
-  .handler(({ data }) => runApp(undoCreditNoteRefund(data.creditNoteId)))
+export const undoInvoiceRefundFn = createServerFn({ method: 'POST' })
+  .validator(std(InvoiceIdInput))
+  .handler(({ data }) => runApp(undoInvoiceRefund(data.invoiceId)))
 
 export const previewReissueFn = createServerFn({ method: 'GET' })
   .validator(std(InvoiceIdInput))

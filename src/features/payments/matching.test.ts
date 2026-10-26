@@ -7,16 +7,15 @@ import { type InvoiceForMatching, matchPayments } from './matching'
 const invoice = (
   number: number,
   ocr: string,
-  totalOre: number,
+  owedOre: number,
   extra: Partial<InvoiceForMatching> = {},
 ): InvoiceForMatching => ({
   id: `inv-${number}`,
   number,
   ocr,
-  totalOre,
-  creditedOre: 0,
+  owedOre,
+  status: 'open',
   paidOn: null,
-  voided: false,
   ...extra,
 })
 const byOcr = (...invoices: InvoiceForMatching[]) => new Map(invoices.map((i) => [i.ocr, i]))
@@ -31,7 +30,7 @@ const payment = (amountOre: number, reference: string | null): ParsedPayment => 
 describe('matchPayments', () => {
   test('exact OCR and amount marks the invoice paid', () => {
     expect(matchPayments([payment(845000, '18')], byOcr(invoice(1, '18', 845000)))).toEqual([
-      { status: 'matched', invoiceId: 'inv-1', marksInvoicePaid: true, note: null },
+      { status: 'matched', invoiceId: 'inv-1', allocates: true, note: null },
     ])
   })
 
@@ -54,7 +53,7 @@ describe('matchPayments', () => {
       [payment(800000, '18'), payment(900000, '26')],
       byOcr(invoice(1, '18', 845000), invoice(2, '26', 845000)),
     )
-    expect(short).toMatchObject({ status: 'review', invoiceId: 'inv-1', marksInvoicePaid: false })
+    expect(short).toMatchObject({ status: 'review', invoiceId: 'inv-1', allocates: false })
     expect(short.note?.replace(/\s/g, ' ')).toBe(
       'Delbetalning: 8 000,00 kr av 8 450,00 kr på avi 1',
     )
@@ -65,8 +64,8 @@ describe('matchPayments', () => {
     const results = matchPayments(
       [payment(100, '18'), payment(100, '26'), payment(100, '34'), payment(100, '34')],
       byOcr(
-        invoice(1, '18', 100, { paidOn: '2026-11-01' }),
-        invoice(2, '26', 100, { voided: true }),
+        invoice(1, '18', 0, { status: 'paid', paidOn: '2026-11-01' }),
+        invoice(2, '26', 100, { status: 'void' }),
         invoice(3, '34', 100),
       ),
     )
@@ -76,17 +75,17 @@ describe('matchPayments', () => {
     expect(results[3].note).toContain('två gånger')
   })
 
-  test('a partly credited invoice expects what is still owed', () => {
-    const credited = invoice(1, '18', 845000, { creditedOre: 200000 })
-    expect(matchPayments([payment(645000, '18')], byOcr(credited))[0].status).toBe('matched')
-    expect(matchPayments([payment(845000, '18')], byOcr(credited))[0]).toMatchObject({
+  test('an invoice expects what is still owed after credits and earlier payments', () => {
+    const partly = invoice(1, '18', 645000)
+    expect(matchPayments([payment(645000, '18')], byOcr(partly))[0].status).toBe('matched')
+    expect(matchPayments([payment(845000, '18')], byOcr(partly))[0]).toMatchObject({
       status: 'review',
       note: `Överbetalning: ${formatSek(845000)} av ${formatSek(645000)} på avi 1`,
     })
   })
 
   test('a fully credited invoice is not paid automatically', () => {
-    const credited = invoice(1, '18', 845000, { creditedOre: 845000 })
+    const credited = invoice(1, '18', 0, { status: 'credited' })
     expect(matchPayments([payment(845000, '18')], byOcr(credited))[0]).toMatchObject({
       status: 'review',
       note: 'Avi 1 är krediterad',

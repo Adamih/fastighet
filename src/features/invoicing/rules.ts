@@ -108,23 +108,6 @@ export const vatNumberFor = (organizationNumber: string) =>
 
 export type InvoiceStatus = 'void' | 'paid' | 'credited' | 'overdue' | 'unpaid'
 
-export function invoiceStatus(
-  invoice: {
-    voidedAt: Date | null
-    paidOn: string | null
-    dueDate: string
-    totalOre: number
-    creditedOre: number
-  },
-  today: string,
-): InvoiceStatus {
-  if (invoice.voidedAt) return 'void'
-  if (invoice.paidOn) return 'paid'
-  // Fully credited before it was paid: nothing is owed any more.
-  if (invoice.creditedOre >= invoice.totalOre) return 'credited'
-  return invoice.dueDate < today ? 'overdue' : 'unpaid'
-}
-
 export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   get unpaid() {
     return m.invoice_status_unpaid()

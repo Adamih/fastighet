@@ -50,6 +50,7 @@ import {
   voidInvoiceFn,
 } from '#/features/invoicing/functions'
 import type { InvoiceView } from '#/features/invoicing/program'
+import { RefundPanel } from '#/features/invoicing/refund-panel'
 import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
@@ -150,7 +151,7 @@ function InvoicePage() {
                 {invoice.sentAt ? m.invoice_resend() : m.invoice_send_email()}
               </Button>
             )}
-            {canManage && (open || invoice.status === 'paid' || canCredit || canReissue) && (
+            {canManage && (open || invoice.paidOre > 0 || canCredit || canReissue) && (
               <MoreActions label={m.invoice_more_actions({ number: invoice.number })}>
                 {canReissue && (
                   <DropdownMenuItem onSelect={reissue.open}>
@@ -164,7 +165,7 @@ function InvoicePage() {
                     {m.invoice_credit()}
                   </DropdownMenuItem>
                 )}
-                {invoice.status === 'paid' && (
+                {invoice.paidOre > 0 && (
                   <DropdownMenuItem
                     disabled={unpay.isPending}
                     onSelect={() => unpay.mutate({ data })}
@@ -235,6 +236,12 @@ function InvoicePage() {
             )}
             {error && <p className="text-destructive text-sm">{error.message}</p>}
             <AmountPanel invoice={invoice} today={today} canManage={canManage} onDone={onDone} />
+            {(invoice.refundDueOre > 0 || invoice.refundedOre > 0) && (
+              <RefundPanel
+                invoice={invoice}
+                canRefund={can({ invoice: ['manage'], payment: ['manage'] })}
+              />
+            )}
             {(invoice.replaces || invoice.replacedBy.length > 0) && (
               <nav aria-label={m.invoice_reissue()} className="grid gap-1.5 text-[13px]">
                 {invoice.replaces && (
@@ -263,6 +270,7 @@ function InvoicePage() {
                     paidOn: invoice.paidOn,
                     voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
                     creditNotes: invoice.creditNotes,
+                    refunds: invoice.refunds,
                     replacedBy: invoice.replacedBy,
                   },
                   today,
@@ -285,20 +293,6 @@ function InvoicePage() {
                         <span className="truncate text-muted-foreground">
                           {note.issueDate} · {note.reason}
                         </span>
-                        {note.refund && (
-                          <span
-                            className={cn(
-                              'text-xs',
-                              note.refundedOn
-                                ? 'text-emerald-700 dark:text-emerald-300'
-                                : 'font-medium text-amber-700 dark:text-amber-300',
-                            )}
-                          >
-                            {note.refundedOn
-                              ? m.credit_note_refunded_on({ date: note.refundedOn })
-                              : m.credit_note_refund_due()}
-                          </span>
-                        )}
                       </span>
                       <span className="shrink-0 font-semibold tabular-nums">
                         {formatSekShort(-note.totalOre)}
@@ -332,10 +326,10 @@ function InvoicePage() {
                             {formatSekShort(p.amountOre)}
                           </span>
                           <span className="truncate text-muted-foreground">
-                            {p.bookingDate} · {p.payerName}
+                            {p.date} · {p.payerName ?? m.invoice_paid_by_hand()}
                           </span>
                         </span>
-                        <PaymentStatusBadge status={p.status} />
+                        {p.status && <PaymentStatusBadge status={p.status} />}
                       </PanelRow>
                     ))}
                   </div>
@@ -372,10 +366,7 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
       amount: formatSekShort(e.creditNote?.totalOre ?? 0),
       number: e.creditNote?.number ?? 0,
     }),
-    refunded: m.invoice_event_refunded({
-      amount: formatSekShort(e.creditNote?.totalOre ?? 0),
-      number: e.creditNote?.number ?? 0,
-    }),
+    refunded: m.invoice_event_refunded({ amount: formatSekShort(e.amountOre ?? 0) }),
     replaced: m.invoice_event_replaced({ number: e.invoiceNumber ?? 0 }),
   }[e.kind]
   const id = e.creditNote?.number ?? e.invoiceNumber
@@ -448,8 +439,16 @@ function AmountPanel({
             invoice.status === 'void' && 'text-muted-foreground line-through',
           )}
         >
-          {formatSekShort(open ? remainingOre(invoice) : invoice.totalOre)}
+          {formatSekShort(open ? invoice.owedOre : invoice.totalOre)}
         </span>
+        {open && invoice.paidOre > 0 && (
+          <span className="text-[13px] text-muted-foreground">
+            {m.invoice_partly_paid({
+              paid: formatSekShort(invoice.paidOre),
+              total: formatSekShort(invoice.totalOre - invoice.creditedOre),
+            })}
+          </span>
+        )}
         {invoice.creditedOre > 0 && (
           <span
             className={cn(

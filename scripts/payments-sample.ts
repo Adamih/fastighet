@@ -5,7 +5,7 @@
 // also has a payment with an OCR that matches no invoice and one with only free text.
 
 import { writeFileSync } from 'node:fs'
-import { and, asc, eq, isNull } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
@@ -24,14 +24,32 @@ try {
     console.error('No company with a bankgiro found. Run `bun run db:reset` first.')
     process.exitCode = 1
   } else {
-    const open = await db.query.invoice.findMany({
-      where: and(
-        eq(schema.invoice.organizationId, settings.organizationId),
-        isNull(schema.invoice.paidOn),
-        isNull(schema.invoice.voidedAt),
-      ),
-      orderBy: asc(schema.invoice.number),
-    })
+    // Open avier: not voided, with something still owed in the ledger.
+    const owed = await db
+      .select({
+        invoiceId: schema.ledgerEntry.invoiceId,
+        owedOre: sql<number>`sum(${schema.ledgerEntry.amountOre})`,
+      })
+      .from(schema.ledgerEntry)
+      .where(
+        and(
+          eq(schema.ledgerEntry.organizationId, settings.organizationId),
+          eq(schema.ledgerEntry.account, 'receivable'),
+        ),
+      )
+      .groupBy(schema.ledgerEntry.invoiceId)
+    const owedBy = new Map(owed.map((o) => [o.invoiceId, o.owedOre]))
+    const open = (
+      await db.query.invoice.findMany({
+        where: and(
+          eq(schema.invoice.organizationId, settings.organizationId),
+          isNull(schema.invoice.voidedAt),
+        ),
+        orderBy: asc(schema.invoice.number),
+      })
+    )
+      .map((inv) => ({ ...inv, totalOre: owedBy.get(inv.id) ?? 0 }))
+      .filter((inv) => inv.totalOre > 0)
     const today = stockholmDate(Date.now())
     const stamp = Date.now()
     const payments: SamplePayment[] = open.map((inv, i) => ({
