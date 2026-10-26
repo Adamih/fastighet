@@ -6,7 +6,7 @@ import { decodeSubmissionResult, encodeSubmissionResult } from '#/lib/submission
 import { requirePermission } from './authorize'
 import { Conflict, UncertainSubmission } from './errors'
 import { orgQuery } from './scoped'
-import { type AppServices, CurrentUser } from './services'
+import { type AppServices, CurrentUser, SubmissionReplay } from './services'
 
 /**
  * Claim before executing. A stored result is replayable; an unfinished claim requires review.
@@ -52,7 +52,10 @@ export function once<A, E, Input extends { requestId?: string }>(
           message: 'Begäran har ändrats. Kontrollera resultatet innan du försöker igen.',
         })
       }
-      if (previous.result === null) return yield* new UncertainSubmission()
+      if (previous.result === null)
+        return yield* new UncertainSubmission()
+        // Nothing was written this time; the first request already recorded the write.
+      ;(yield* SubmissionReplay).mark()
       return decodeSubmissionResult<A>(previous.result)
     }
     const result = yield* program.pipe(

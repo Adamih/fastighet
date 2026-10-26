@@ -24,6 +24,7 @@ import {
   HomeOrganization,
   KpiSource,
   PermissionChecker,
+  SubmissionReplay,
 } from './services'
 
 const getSession = Effect.tryPromise({
@@ -119,7 +120,13 @@ export async function runApp<A, E>(
 ): Promise<A> {
   const exit = await Effect.gen(function* () {
     const context = yield* loadRequestContext
+    let replayed = false
     const result = yield* program.pipe(
+      Effect.provideService(SubmissionReplay, {
+        mark: () => {
+          replayed = true
+        },
+      }),
       Effect.provideService(CurrentUser, context.user),
       Effect.provideService(CurrentOrganization, context.organization),
       Effect.provideService(HomeOrganization, context.home),
@@ -133,7 +140,7 @@ export async function runApp<A, E>(
         },
       }),
     )
-    if (audit) {
+    if (audit && !replayed) {
       yield* recordAudit(
         {
           organizationId: context.organization.id,

@@ -44,6 +44,15 @@ export class KpiSource extends Context.Service<
   { readonly fetch: () => Promise<readonly { month: string; valueHundredths: number }[]> }
 >()('app/KpiSource') {}
 
+/**
+ * Told by `once()` when a request only replays the stored result of an earlier one, so `runApp`
+ * doesn't record the write in the audit log again. Outside `runApp` it does nothing.
+ */
+export const SubmissionReplay = Context.Reference<{ readonly mark: () => void }>(
+  'app/SubmissionReplay',
+  { defaultValue: () => ({ mark: () => {} }) },
+)
+
 export type AppServices =
   | Database
   | CurrentUser

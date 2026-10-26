@@ -6,7 +6,13 @@ import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import type { Permissions } from '#/lib/permissions'
 import { Conflict, DatabaseError } from './errors'
-import { CurrentOrganization, CurrentUser, Database, PermissionChecker } from './services'
+import {
+  CurrentOrganization,
+  CurrentUser,
+  Database,
+  PermissionChecker,
+  SubmissionReplay,
+} from './services'
 import { once } from './submission'
 
 const databases: Sqlite[] = []
@@ -63,6 +69,22 @@ describe('durable submissions', () => {
     expect(await run(command)).toEqual(first)
     expect(writes).toBe(1)
     expect(first.createdAt).toBeInstanceOf(Date)
+  })
+
+  test('tells runApp about a replay, so the audit log records the write once', async () => {
+    const { run } = harness()
+    let replays = 0
+    const command = once('create', input, permission, Effect.succeed({ id: 1 })).pipe(
+      Effect.provideService(SubmissionReplay, {
+        mark: () => {
+          replays += 1
+        },
+      }),
+    )
+    await run(command)
+    expect(replays).toBe(0)
+    await run(command)
+    expect(replays).toBe(1)
   })
 
   test('a lost response is recovered with the same key', async () => {
