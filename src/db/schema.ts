@@ -913,6 +913,11 @@ export const auditEvent = sqliteTable(
     /** An `AuditAction`, e.g. "invoice.void". */
     action: text('action').notNull(),
     entityId: text('entity_id'),
+    /**
+     * JSON of plain values (never text in a language), for what the id alone doesn't say:
+     * e.g. a team change's {"name":"Anna","role":"admin","previousRole":"member"}.
+     */
+    details: text('details'),
     createdAt: createdAt(),
   },
   (t) => [

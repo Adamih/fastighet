@@ -10,7 +10,7 @@ import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { CurrentOrganization, PermissionChecker } from '#/server/services'
-import { createAuth } from './auth-config'
+import { createAuth, type TeamEvent } from './auth-config'
 import type { Permissions } from './permissions'
 
 const connections: Sqlite[] = []
@@ -69,10 +69,14 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
       updatedAt: now,
     })
     .run()
+  const events: TeamEvent[] = []
   const auth = createAuth(db as unknown as Db, {
     secret,
     baseURL: 'http://localhost:3000',
     deliverEmail: () => {},
+    recordTeamEvent: async (event) => {
+      events.push(event)
+    },
   })
   const headers = new Headers({
     cookie: `better-auth.session_token=${encodeURIComponent(`${token}.${await makeSignature(token, secret)}`)}`,
@@ -110,7 +114,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
         }),
       ),
     )
-  return { db, auth, headers, post, target, permissions }
+  return { db, auth, headers, post, target, permissions, events }
 }
 
 describe('Better Auth member endpoints', () => {
@@ -192,6 +196,49 @@ describe('Better Auth member endpoints', () => {
     expect(
       f.db.query.member.findFirst({ where: eq(schema.member.id, 'self') }).sync(),
     ).toBeDefined()
+  })
+})
+
+describe('Team changes for the audit log', () => {
+  test('role changes and removals name the acting user from the request', async () => {
+    const f = await fixture()
+    await f.post('update-member-role', { memberId: 'target', role: 'admin' })
+    await f.post('remove-member', { memberIdOrEmail: 'target' })
+    expect(f.events).toEqual([
+      {
+        organization: { id: 'company', name: 'company' },
+        actor: { id: 'actor', name: 'actor' },
+        action: 'team.change_role',
+        entityId: 'target',
+        details: { name: 'target', role: 'admin', previousRole: 'member' },
+      },
+      {
+        organization: { id: 'company', name: 'company' },
+        actor: { id: 'actor', name: 'actor' },
+        action: 'team.remove',
+        entityId: 'target',
+        details: { name: 'target', role: 'admin' },
+      },
+    ])
+  })
+
+  test('invitations and their withdrawal are recorded with the email and role', async () => {
+    const f = await fixture()
+    const invited = await f.post('invite-member', { email: 'ny@example.se', role: 'member' })
+    expect(invited.status).toBe(200)
+    const { id } = (await invited.json()) as { id: string }
+    await f.post('cancel-invitation', { invitationId: id })
+    expect(f.events.map((e) => [e.action, e.actor?.id, e.entityId, e.details])).toEqual([
+      ['team.invite', 'actor', id, { email: 'ny@example.se', role: 'member' }],
+      ['team.cancel_invitation', 'actor', id, { email: 'ny@example.se' }],
+    ])
+  })
+
+  test('refused changes record nothing', async () => {
+    const f = await fixture('member')
+    await f.post('update-member-role', { memberId: 'target', role: 'admin' })
+    await f.post('remove-member', { memberIdOrEmail: 'target' })
+    expect(f.events).toEqual([])
   })
 })
 

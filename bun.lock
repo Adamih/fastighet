@@ -5,6 +5,7 @@
     "": {
       "name": "fastighet",
       "dependencies": {
+        "@better-auth/core": "1.7.12",
         "@react-email/components": "^1.0.12",
         "@tailwindcss/vite": "^4.1.18",
         "@tanstack/match-sorter-utils": "9.2.6",

@@ -12,6 +12,9 @@ export type AuditEntity =
   | 'invoice'
   | 'creditNote'
   | 'payment'
+  /** A user: the one invited, joining, changed or removed. */
+  | 'user'
+  | 'invitation'
   | null
 
 /** Labels are messages, read when shown, so the log follows the UI language. */
@@ -70,6 +73,13 @@ export const auditActions = {
   'tenant.create': action(m.audit_tenant_create, 'party'),
   'tenant.update': action(m.audit_tenant_update, 'party'),
   'tenant.delete': action(m.audit_tenant_delete),
+  // Team changes, recorded by Better Auth's organization hooks (`src/lib/auth-config.ts`).
+  'team.invite': action(m.audit_team_invite, 'invitation'),
+  'team.cancel_invitation': action(m.audit_team_cancel_invitation, 'invitation'),
+  'team.join': action(m.audit_team_join, 'user'),
+  'team.reject_invitation': action(m.audit_team_reject_invitation, 'invitation'),
+  'team.change_role': action(m.audit_team_change_role, 'user'),
+  'team.remove': action(m.audit_team_remove, 'user'),
 } as const
 
 export type AuditAction = keyof typeof auditActions
@@ -82,7 +92,11 @@ export interface Audit {
   readonly action: AuditAction
   /** Omitted for creates: the id of the result is used. */
   readonly entityId?: string | null
+  /** Plain values the id alone doesn't say (names, role keys, emails), never text. */
+  readonly details?: Readonly<Record<string, string>>
 }
+
+export type TeamAction = Extract<AuditAction, `team.${string}`>
 
 export const audit = (action: AuditAction, entityId?: string | null): Audit => ({
   action,
