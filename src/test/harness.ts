@@ -5,6 +5,8 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
+import { Mailer } from '#/server/mail/mailer'
+import { makeMockMailer } from '#/server/mail/mock'
 import { CurrentOrganization, CurrentUser, Database, PermissionChecker } from '#/server/services'
 
 // Test helper: runs programs against an in-memory SQLite database with every migration applied
@@ -41,6 +43,8 @@ export function harness() {
     batch: async (statements: { run: () => unknown }[]) =>
       sqlite.transaction(() => statements.map((s) => s.run()))(),
   })
+  // Sent emails land in `outbox` instead of being delivered.
+  const { mailer, outbox } = makeMockMailer({ from: 'Test <no-reply@example.test>' })
   const run = <A, E, R>(program: Effect.Effect<A, E, R>) =>
     Effect.runPromise(
       program.pipe(
@@ -48,6 +52,7 @@ export function harness() {
         Effect.provideService(CurrentOrganization, { id: 'org', name: 'Test', role: 'owner' }),
         Effect.provideService(CurrentUser, { id: 'user', name: 'u', email: 'u@example.test' }),
         Effect.provideService(PermissionChecker, { check: async () => true }),
+        Effect.provideService(Mailer, mailer),
       ) as Effect.Effect<A, E, never>,
     )
   const now = Date.now()
@@ -64,7 +69,7 @@ export function harness() {
       ('anna', 'org', 'person', 'Anna'), ('erik', 'org', 'person', 'Erik'),
       ('maja', 'org', 'person', 'Maja');
   `)
-  return { run, sqlite }
+  return { run, sqlite, outbox }
 }
 
 /** The failure message of a program that should fail. */

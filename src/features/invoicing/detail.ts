@@ -10,14 +10,17 @@ export type InvoiceEventKind =
   | 'voided'
   | 'credited'
   | 'refunded'
+  | 'reminded'
   | 'replaced'
 
 export interface InvoiceEvent {
   readonly kind: InvoiceEventKind
   /** ISO date. */
   readonly date: string
-  /** For `refunded`: the amount paid back. */
+  /** For `refunded`: the amount paid back; for `reminded`, the fee charged. */
   readonly amountOre?: number
+  /** For `reminded`: 1 for the first reminder, 2 for the second, … */
+  readonly sequence?: number
   /** For `credited`: the credit note. */
   readonly creditNote?: { readonly number: number; readonly totalOre: number }
   /** For `replaced`: the corrected avi. */
@@ -39,6 +42,8 @@ export function invoiceEvents(
       issueDate: string
       totalOre: number
     }[]
+    /** Payment reminders sent. */
+    reminders?: readonly { sequence: number; sentOn: string; feeOre: number }[]
     /** Amounts paid back (after a credit note on a paid avi). */
     refunds?: readonly { date: string; amountOre: number }[]
     /** Corrected avier issued in its place. */
@@ -76,6 +81,12 @@ export function invoiceEvents(
       date: refund.date,
       amountOre: refund.amountOre,
     })),
+    ...(invoice.reminders ?? []).map((reminder) => ({
+      kind: 'reminded' as const,
+      date: reminder.sentOn,
+      sequence: reminder.sequence,
+      amountOre: reminder.feeOre,
+    })),
     ...(invoice.replacedBy ?? []).map((replacement) => ({
       kind: 'replaced' as const,
       date: replacement.issueDate,
@@ -91,10 +102,11 @@ export function invoiceEvents(
 const order: Record<InvoiceEventKind, number> = {
   replaced: 0,
   refunded: 1,
-  voided: 2,
-  credited: 3,
-  paid: 4,
-  fellDue: 5,
-  sent: 6,
-  created: 7,
+  reminded: 2,
+  voided: 3,
+  credited: 4,
+  paid: 5,
+  fellDue: 6,
+  sent: 7,
+  created: 8,
 }

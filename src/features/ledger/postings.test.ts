@@ -8,6 +8,7 @@ import {
   paymentEntries,
   type ReceivableEntry,
   refundEntries,
+  reminderFeeEntries,
   reversal,
   statusFromMoney,
 } from './postings'
@@ -42,6 +43,7 @@ describe('postings', () => {
       allocationEntries('p1', 'i1', 500_000),
       manualPaymentEntries('i1', 500_000),
       refundEntries('i1', 100_000),
+      reminderFeeEntries('i1', 6_000),
     ]) {
       expect(sum(entries)).toBe(0)
       expect(sum([...entries, ...reversal(entries)])).toBe(0)
@@ -85,6 +87,12 @@ describe('invoice money', () => {
   test('a voided avi is void whatever it owes', () => {
     const voided = { voidedAt: new Date(0), dueDate: '2026-10-30' }
     expect(statusFromMoney(voided, invoiceMoney([e('invoice', 900_000)]), today)).toBe('void')
+  })
+
+  test('a reminder fee is owed on top, and keeps the avi overdue until paid', () => {
+    const reminded = [e('invoice', 900_000), e('reminder', 6_000), e('allocation', -900_000)]
+    expect(invoiceMoney(reminded)).toMatchObject({ owedOre: 6_000, paidOre: 900_000 })
+    expect(statusFromMoney(due, invoiceMoney(reminded), today)).toBe('overdue')
   })
 
   test('an undone payment reopens the avi', () => {

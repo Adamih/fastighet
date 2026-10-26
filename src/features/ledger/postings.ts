@@ -95,6 +95,19 @@ export const refundEntries = (invoiceId: string, amountOre: number): EntryDraft[
     { account: 'bank', amountOre: -amountOre },
   ])
 
+/** A reminder's fee (påminnelseavgift): added to what the avi owes, booked as its own income. */
+export const reminderFeeEntries = (invoiceId: string, feeOre: number): EntryDraft[] =>
+  balanced([
+    { account: 'receivable', amountOre: feeOre, invoiceId },
+    {
+      account: 'income',
+      amountOre: -feeOre,
+      invoiceId,
+      chargeKind: 'reminder_fee',
+      vatRatePercent: 0,
+    },
+  ])
+
 /** Reverses a posting: the same entries, negated. Used for undo and void. */
 export const reversal = (entries: readonly EntryDraft[]): EntryDraft[] =>
   balanced(entries.map((e) => ({ ...e, amountOre: -e.amountOre })))

@@ -18,6 +18,7 @@ const kindLabels: Record<ChargeKind, () => string> = {
   index: m.charges_kind_index,
   one_off: m.charges_kind_one_off,
   other: m.charges_kind_other,
+  reminder_fee: m.charges_kind_reminder_fee,
 }
 
 interface PanelCharge {

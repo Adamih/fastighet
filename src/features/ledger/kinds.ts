@@ -23,5 +23,7 @@ export const postingKinds = [
   'allocation',
   'manual_payment',
   'refund',
+  // A reminder's fee, added to the reminded avi's receivable.
+  'reminder',
 ] as const
 export type PostingKind = (typeof postingKinds)[number]

@@ -1,0 +1,39 @@
+import { queryOptions } from '@tanstack/react-query'
+import { createServerFn } from '@tanstack/react-start'
+import { Schema } from 'effect'
+import { runApp } from '#/server/run'
+import { once } from '#/server/submission'
+import { validate } from '#/server/validate'
+import { reminderCandidates, sendReminder, sendReminders } from './program'
+
+const requestId = Schema.optional(Schema.String.check(Schema.isMaxLength(100)))
+
+export const reminderCandidatesFn = createServerFn({ method: 'GET' }).handler(() =>
+  runApp(reminderCandidates),
+)
+
+// Sending emails and records fees, so a retried request must not repeat it.
+export const sendReminderFn = createServerFn({ method: 'POST' })
+  .validator(validate(Schema.Struct({ invoiceId: Schema.String, requestId })))
+  .handler(({ data }) =>
+    runApp(once('sendReminder', data, { invoice: ['manage'] }, sendReminder(data.invoiceId))),
+  )
+
+export const sendRemindersFn = createServerFn({ method: 'POST' })
+  .validator(
+    validate(
+      Schema.Struct({
+        invoiceIds: Schema.Array(Schema.String).check(Schema.isMinLength(1)),
+        requestId,
+      }),
+    ),
+  )
+  .handler(({ data }) =>
+    runApp(once('sendReminders', data, { invoice: ['manage'] }, sendReminders(data.invoiceIds))),
+  )
+
+export const reminderCandidatesQuery = () =>
+  queryOptions({
+    queryKey: ['invoices', 'reminders'],
+    queryFn: () => reminderCandidatesFn(),
+  })

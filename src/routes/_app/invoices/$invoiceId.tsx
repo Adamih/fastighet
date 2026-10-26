@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Ban,
   Banknote,
+  BellRing,
   Check,
   CircleCheck,
   Copy,
@@ -55,6 +56,7 @@ import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
 import { PaymentStatusBadge } from '#/features/payments/components'
+import { sendReminderFn } from '#/features/reminders/functions'
 import { documentTerms } from '#/features/settings/terminology'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek, formatSekShort } from '#/lib/money'
@@ -94,6 +96,13 @@ function InvoicePage() {
       await onDone()
     },
   })
+  const remind = useMutation({
+    mutationFn: sendReminderFn,
+    onSuccess: async () => {
+      setNotice(m.invoice_reminder_sent({ email: invoice.recipientEmail ?? '' }))
+      await onDone()
+    },
+  })
   const unpay = useMutation({ mutationFn: unmarkInvoicePaidFn, onSuccess: onDone })
   const voidIt = useMutation({
     mutationFn: voidInvoiceFn,
@@ -102,7 +111,7 @@ function InvoicePage() {
       await onDone()
     },
   })
-  const error = email.error ?? unpay.error ?? voidIt.error
+  const error = email.error ?? remind.error ?? unpay.error ?? voidIt.error
   const data = { invoiceId: invoice.id }
   const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
   const period = periodLabel({ start: invoice.periodStart, end: invoice.periodEnd })
@@ -153,6 +162,15 @@ function InvoicePage() {
             )}
             {canManage && (open || invoice.paidOre > 0 || canCredit || canReissue) && (
               <MoreActions label={m.invoice_more_actions({ number: invoice.number })}>
+                {invoice.status === 'overdue' && invoice.recipientEmail && (
+                  <DropdownMenuItem
+                    disabled={remind.isPending}
+                    onSelect={() => remind.mutate({ data: { invoiceId: invoice.id } })}
+                  >
+                    <BellRing aria-hidden="true" />
+                    {m.invoice_send_reminder()}
+                  </DropdownMenuItem>
+                )}
                 {canReissue && (
                   <DropdownMenuItem onSelect={reissue.open}>
                     <FilePen aria-hidden="true" />
@@ -271,12 +289,41 @@ function InvoicePage() {
                     voidedOn: invoice.voidedAt ? stockholmDate(invoice.voidedAt.getTime()) : null,
                     creditNotes: invoice.creditNotes,
                     refunds: invoice.refunds,
+                    reminders: invoice.reminders,
                     replacedBy: invoice.replacedBy,
                   },
                   today,
                 ).map((e) => eventView(e, invoice.recipientEmail))}
               />
             </Panel>
+            {invoice.reminders.length > 0 && (
+              <Panel title={m.invoice_reminders()}>
+                <div>
+                  {invoice.reminders.map((r) => (
+                    <PanelRow key={r.id}>
+                      <span className="grid min-w-0 gap-0.5">
+                        <span className="font-semibold">
+                          {m.invoice_reminder_title({ sequence: r.sequence })}
+                        </span>
+                        <span className="truncate text-muted-foreground">
+                          {m.invoice_reminder_meta({ date: r.sentOn, due: r.dueDate })}
+                        </span>
+                      </span>
+                      <span className="grid shrink-0 justify-items-end gap-0.5">
+                        <span className="font-semibold tabular-nums">
+                          {formatSekShort(r.owedOre)}
+                        </span>
+                        {r.feeOre > 0 && (
+                          <span className="text-muted-foreground text-xs">
+                            {m.invoice_reminder_fee({ fee: formatSekShort(r.feeOre) })}
+                          </span>
+                        )}
+                      </span>
+                    </PanelRow>
+                  ))}
+                </div>
+              </Panel>
+            )}
             {invoice.creditNotes.length > 0 && (
               <Panel title={m.invoice_credit_notes()}>
                 <div>
@@ -351,6 +398,7 @@ const eventIcons: Record<InvoiceEventKind, [LucideIcon, EventTone]> = {
   voided: [Ban, 'neutral'],
   credited: [ReceiptText, 'neutral'],
   refunded: [Banknote, 'neutral'],
+  reminded: [BellRing, 'warn'],
   replaced: [FilePen, 'neutral'],
 }
 
@@ -367,9 +415,19 @@ function eventView(e: InvoiceEvent, email: string | null): DetailEvent {
       number: e.creditNote?.number ?? 0,
     }),
     refunded: m.invoice_event_refunded({ amount: formatSekShort(e.amountOre ?? 0) }),
+    reminded: e.amountOre
+      ? m.invoice_event_reminded_fee({
+          sequence: e.sequence ?? 0,
+          fee: formatSekShort(e.amountOre),
+        })
+      : m.invoice_event_reminded({ sequence: e.sequence ?? 0 }),
     replaced: m.invoice_event_replaced({ number: e.invoiceNumber ?? 0 }),
   }[e.kind]
-  const id = e.creditNote?.number ?? e.invoiceNumber
+  const id =
+    e.creditNote?.number ??
+    e.invoiceNumber ??
+    e.sequence ??
+    (e.kind === 'refunded' ? e.date : undefined)
   const key = id === undefined ? e.kind : `${e.kind}-${id}`
   return { key, icon, tone, text, date: e.date }
 }

@@ -44,6 +44,7 @@
   "charges_kind_one_off": "Engångsbelopp",
   "charges_kind_other": "Övrigt",
   "charges_kind_parking": "Parkering",
+  "charges_kind_reminder_fee": "Påminnelseavgift",
   "charges_kind_rent": "Hyra",
   "charges_kind_storage": "Förråd",
   "charges_kind_utility": "Förbrukning",
@@ -265,6 +266,8 @@
   "invoice_event_credited": "Krediterad {amount} (kreditfaktura {number})",
   "invoice_event_fell_due": "Förföll obetald",
   "invoice_event_refunded": "Återbetalt {amount}",
+  "invoice_event_reminded": "Påminnelse {sequence} skickad",
+  "invoice_event_reminded_fee": "Påminnelse {sequence} skickad, avgift {fee}",
   "invoice_event_replaced": "Ersatt av avi {number}",
   "invoice_fell_due_on": "Förföll {date}",
   "invoice_filter_label": "Filtrera avier",
@@ -279,6 +282,7 @@
   "invoice_list_no_match": "Inga avier matchar.",
   "invoice_list_outstanding": "Utestående i listan: {amount}",
   "invoice_list_refund_due": "Återbetalas {amount}",
+  "invoice_list_reminded": "Påmind {date}",
   "invoice_list_showing": [
     {
       "declarations": [
@@ -349,6 +353,11 @@
   "invoice_refunded": "Krediterat {amount} – återbetalt",
   "invoice_register_payment": "Registrera betalning",
   "invoice_reissue": "Ny avi för perioden",
+  "invoice_reminder_fee": "varav avgift {fee}",
+  "invoice_reminder_meta": "{date} · betala senast {due}",
+  "invoice_reminder_sent": "Påminnelse skickad till {email}",
+  "invoice_reminder_title": "Påminnelse {sequence}",
+  "invoice_reminders": "Påminnelser",
   "invoice_replaced_by": "Ersatt av avi {number}",
   "invoice_replaces": "Ersätter avi {number}",
   "invoice_resend": "Skicka igen",
@@ -445,6 +454,7 @@
     }
   ],
   "invoice_send_email": "Skicka e-post",
+  "invoice_send_reminder": "Skicka påminnelse",
   "invoice_sent": "Skickad",
   "invoice_sent_email": "Skickad ✓ via e-post",
   "invoice_sent_inline": "skickad",
@@ -930,6 +940,61 @@
   "reissue_recipient_email": "E-post",
   "reissue_submit": "Skapa avi",
   "reissue_title": "Ny avi för perioden",
+  "reminders_close": "Stäng",
+  "reminders_description": "Förfallna avier som kan påminnas i dag. En avgift tas bara ut med avins första påminnelse.",
+  "reminders_done": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} påminnelse skickad.",
+        "countPlural=other": "{count} påminnelser skickade."
+      }
+    }
+  ],
+  "reminders_failed": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "{count} kunde inte skickas.",
+        "countPlural=other": "{count} kunde inte skickas."
+      }
+    }
+  ],
+  "reminders_next_on": "Kan påminnas {date}",
+  "reminders_no_email": "Ingen e-postadress",
+  "reminders_none": "Inga avier kan påminnas i dag.",
+  "reminders_ready": "Kan påminnas nu",
+  "reminders_send": "Skicka påminnelser",
+  "reminders_submit": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural"
+      ],
+      "selectors": [
+        "countPlural"
+      ],
+      "match": {
+        "countPlural=one": "Skicka {count} påminnelse",
+        "countPlural=other": "Skicka {count} påminnelser"
+      }
+    }
+  ],
+  "reminders_title": "Skicka påminnelser",
+  "reminders_total_fee": "Avgifter totalt {amount}",
+  "reminders_waiting": "Väntar",
   "rent_interval_monthly": "per månad",
   "rent_interval_yearly": "per år",
   "rent_unit_with_vat": "{interval} + moms",
@@ -971,6 +1036,13 @@
   "settings_readiness_label": "Uppgifter för avier",
   "settings_readiness_progress": "{done} av {total} uppgifter för avier är klara",
   "settings_ready": "Avierna har alla uppgifter de behöver",
+  "settings_reminder_due": "Betaltid för påminnelser (dagar)",
+  "settings_reminder_fee": "Påminnelseavgift (kr)",
+  "settings_reminder_fee_hint": "Högst 60 kr enligt lag, och bara om avgiften har avtalats med hyresgästen i förväg. Tas ut en gång per avi. Lämna tomt för ingen avgift.",
+  "settings_reminder_interval": "Dagar mellan påminnelser",
+  "settings_reminder_interval_hint": "Efter förfallodagen och efter förra påminnelsen.",
+  "settings_reminders": "Påminnelser",
+  "settings_reminders_description": "När och hur förfallna avier påminns.",
   "settings_saved": "Sparat. Nya avier får de nya uppgifterna.",
   "settings_subtitle": "{organization} · uppgifterna skrivs ut på varje hyresavi",
   "settings_vat_footer_hint": "Momsreg.nr skrivs bara ut på avier med moms.",

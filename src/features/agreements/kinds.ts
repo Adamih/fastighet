@@ -27,6 +27,8 @@ export const chargeKinds = [
   'index',
   'one_off',
   'other',
+  // A payment reminder's fee (påminnelseavgift); only ever posted by a reminder.
+  'reminder_fee',
 ] as const
 export type ChargeKind = (typeof chargeKinds)[number]
 

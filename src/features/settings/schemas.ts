@@ -1,6 +1,8 @@
 import { Schema } from 'effect'
 import { isValidBankgiro } from '#/features/invoicing/rules'
+import { MAX_REMINDER_FEE_ORE } from '#/features/reminders/rules'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
+import { parseSek } from '#/lib/money'
 import { Email, OptionalText, PostalCode } from '#/lib/schemas'
 import { companyKinds } from './company-kinds'
 
@@ -22,6 +24,27 @@ export const UpdateSettingsInput = Schema.Struct({
   phone: OptionalText,
   fSkatt: Schema.Boolean,
   kind: Schema.Literals(companyKinds),
+  /** Kronor as typed; blank means no reminder fee is agreed. */
+  reminderFee: Schema.String.check(
+    Schema.makeFilter(
+      (s: string) => {
+        if (!s.trim()) return true
+        const ore = parseSek(s)
+        return ore !== null && ore > 0 && ore <= MAX_REMINDER_FEE_ORE
+      },
+      { message: 'Ange högst 60 kr, eller lämna tomt för ingen avgift' },
+    ),
+  ),
+  reminderIntervalDays: Schema.String.check(
+    Schema.makeFilter((s: string) => /^\d+$/.test(s.trim()) && Number(s) >= 1 && Number(s) <= 90, {
+      message: 'Ange 1–90 dagar',
+    }),
+  ),
+  reminderDueDays: Schema.String.check(
+    Schema.makeFilter((s: string) => /^\d+$/.test(s.trim()) && Number(s) >= 1 && Number(s) <= 60, {
+      message: 'Ange 1–60 dagar',
+    }),
+  ),
 })
 export type UpdateSettingsInput = typeof UpdateSettingsInput.Type
 

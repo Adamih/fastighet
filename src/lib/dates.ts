@@ -58,6 +58,12 @@ export function lastWeekdayBefore(date: string): string {
   }
 }
 
+/** `date` itself on a weekday, otherwise the Monday after (banks book on weekdays). */
+export function weekdayOnOrAfter(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay()
+  return day === 6 ? addDays(date, 2) : day === 0 ? addDays(date, 1) : date
+}
+
 export const maxDate = (a: string, b: string) => (a > b ? a : b)
 export const minDate = (a: string, b: string) => (a < b ? a : b)
 

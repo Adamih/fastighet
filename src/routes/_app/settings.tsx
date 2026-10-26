@@ -19,6 +19,7 @@ import { UpdateSettingsInput } from '#/features/settings/schemas'
 import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { useFormMutation } from '#/lib/form-mutation'
+import { oreToInput } from '#/lib/money'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
@@ -41,6 +42,9 @@ const toValues = (s: Settings) => ({
   phone: s.phone ?? '',
   fSkatt: s.fSkatt,
   kind: s.kind as CompanyKind,
+  reminderFee: s.reminderFeeOre === null ? '' : oreToInput(s.reminderFeeOre),
+  reminderIntervalDays: String(s.reminderIntervalDays),
+  reminderDueDays: String(s.reminderDueDays),
 })
 type Values = ReturnType<typeof toValues>
 
@@ -165,6 +169,35 @@ function SettingsPage() {
                 />
               )}
             </form.AppField>
+          </Section>
+
+          <Section title={m.settings_reminders()} description={m.settings_reminders_description()}>
+            <form.AppField name="reminderFee">
+              {(field) => (
+                <field.TextField
+                  label={<Optional>{m.settings_reminder_fee()}</Optional>}
+                  placeholder="60"
+                  inputMode="decimal"
+                  hint={m.settings_reminder_fee_hint()}
+                />
+              )}
+            </form.AppField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <form.AppField name="reminderIntervalDays">
+                {(field) => (
+                  <field.TextField
+                    label={m.settings_reminder_interval()}
+                    inputMode="numeric"
+                    hint={m.settings_reminder_interval_hint()}
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="reminderDueDays">
+                {(field) => (
+                  <field.TextField label={m.settings_reminder_due()} inputMode="numeric" />
+                )}
+              </form.AppField>
+            </div>
           </Section>
 
           <Section title={m.settings_contact()} description={m.settings_contact_description()}>

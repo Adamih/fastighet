@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { Check, Plus } from 'lucide-react'
+import { BellRing, Check, Plus } from 'lucide-react'
 import {
   FilterChips,
   filterChipClass,
@@ -23,6 +23,7 @@ import {
 import { periodLabel } from '#/features/invoicing/rules'
 import { type InvoiceFilter, invoiceFilters } from '#/features/invoicing/schemas'
 import { unitSummary } from '#/features/leases/overview'
+import { useSendRemindersDrawer } from '#/features/reminders/send-reminders-form'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { rich } from '#/lib/rich'
@@ -68,6 +69,7 @@ function InvoicesPage() {
   const canCreate = can({ invoice: ['manage'], lease: ['read'] })
   const canManage = can({ invoice: ['manage'] })
   const createRun = useCreateInvoiceRunDrawer()
+  const sendReminders = useSendRemindersDrawer()
   const search = Route.useSearch()
   const filter = search.filter ?? 'all'
   const navigate = useNavigate({ from: Route.fullPath })
@@ -146,6 +148,19 @@ function InvoicesPage() {
           {formatSekShort(overview.paid.totalOre)}
         </StatCard>
       </section>
+
+      {canManage && filter === 'overdue' && overview.counts.overdue > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            className="h-11 w-full sm:h-9 sm:w-auto"
+            onClick={sendReminders.open}
+          >
+            <BellRing aria-hidden="true" />
+            {m.reminders_send()}
+          </Button>
+        </div>
+      )}
 
       {invoices.length === 0 ? (
         <p className="text-muted-foreground">{m.invoice_list_empty()}</p>
@@ -363,6 +378,11 @@ function InvoiceRow({ invoice, today, canManage, busy, markPaid }: RowProps) {
               {note}
             </span>
           )}
+          {overdue && invoice.lastRemindedOn && (
+            <span className="whitespace-nowrap text-muted-foreground text-xs">
+              {m.invoice_list_reminded({ date: invoice.lastRemindedOn })}
+            </span>
+          )}
         </div>
       </td>
       <td className={cn(td, 'text-right tabular-nums')}>
@@ -441,7 +461,11 @@ function InvoiceCard({ invoice, canManage, busy, markPaid }: Omit<RowProps, 'tod
                 : m.invoice_due_on({ date: invoice.dueDate })}
             </span>
             <span className="text-muted-foreground">
-              {invoice.sentAt ? m.invoice_sent_email() : m.invoice_not_sent()}
+              {overdue && invoice.lastRemindedOn
+                ? m.invoice_list_reminded({ date: invoice.lastRemindedOn })
+                : invoice.sentAt
+                  ? m.invoice_sent_email()
+                  : m.invoice_not_sent()}
             </span>
           </span>
           <span className="grid shrink-0 justify-items-end gap-0.5">

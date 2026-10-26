@@ -33,11 +33,18 @@ import {
   invoiceEntries,
   paymentEntries,
   refundEntries,
+  reminderFeeEntries,
   reversal,
 } from '#/features/ledger/postings'
 import type { UnitKind } from '#/features/properties/unit-kinds'
+import {
+  nextReminderOn,
+  type ReminderSettings,
+  reminderDueDate,
+  reminderFee,
+} from '#/features/reminders/rules'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
-import { addDays, addMonths, stockholmDate } from '#/lib/dates'
+import { addDays, addMonths, stockholmDate, weekdayOnOrAfter } from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
 import { formatSek } from '#/lib/money'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
@@ -81,6 +88,65 @@ async function insertAll<T extends Record<string, unknown>>(
     // biome-ignore lint/suspicious/noExplicitAny: one helper for every table's insert type
     await db.insert(table).values(rows.slice(i, i + perStatement) as any)
   }
+}
+
+/**
+ * Reminders for avier still unpaid today: the first the interval after the due date (with the
+ * fee, if one is agreed) and a second one interval later, as "Skicka påminnelse" would.
+ */
+function seedReminders(
+  organizationId: string,
+  ledger: ReturnType<typeof seedLedger>,
+  invoices: readonly {
+    id: string
+    number: number
+    dueDate: string
+    owedOre: number
+    recipientEmail: string | null
+    partyId: string
+    agreementId: string
+  }[],
+  settings: ReminderSettings,
+  today: string,
+) {
+  const rows: (typeof schema.paymentReminder.$inferInsert)[] = []
+  for (const inv of invoices) {
+    if (!inv.recipientEmail || inv.owedOre <= 0) continue
+    const sent: { sentOn: string; feeOre: number }[] = []
+    let owed = inv.owedOre
+    // At most two: after that a landlord would hand it to debt collection (not modelled).
+    while (sent.length < 2) {
+      const on = weekdayOnOrAfter(nextReminderOn(inv.dueDate, sent, settings))
+      if (on > today) break
+      const feeOre = reminderFee(settings, sent)
+      owed += feeOre
+      sent.push({ sentOn: on, feeOre })
+      rows.push({
+        id: id(),
+        organizationId,
+        invoiceId: inv.id,
+        sequence: sent.length,
+        sentOn: on,
+        dueDate: reminderDueDate(on, settings),
+        owedOre: owed,
+        feeOre,
+        recipientEmail: inv.recipientEmail,
+      })
+      if (feeOre > 0) {
+        ledger.post(
+          {
+            date: on,
+            kind: 'reminder',
+            description: `Påminnelseavgift, avi ${inv.number}`,
+            invoiceId: inv.id,
+          },
+          reminderFeeEntries(inv.id, feeOre),
+          { partyId: inv.partyId, agreementId: inv.agreementId },
+        )
+      }
+    }
+  }
+  return rows
 }
 
 /**
@@ -176,6 +242,8 @@ async function seed() {
     email: 'hyra@fastighet.test',
     phone: '018-00 00 00',
     fSkatt: true,
+    // A 60 kr reminder fee is agreed in every lease.
+    reminderFeeOre: 6_000,
   })
   const orgId = org.id
 
@@ -1116,7 +1184,22 @@ async function seed() {
       )
     }
   }
+  const reminders = seedReminders(
+    orgId,
+    ledger,
+    invoices
+      .filter((i) => !i.paidOn && !i.voidedAt)
+      .map((i) => ({
+        ...i,
+        dueDate: i.dueDate as string,
+        recipientEmail: i.recipientEmail ?? null,
+        owedOre: i.totalOre - (i.creditedOre ?? 0),
+      })),
+    { reminderFeeOre: 6_000, reminderIntervalDays: 10, reminderDueDays: 10 },
+    today,
+  )
   await ledger.write()
+  await insertAll(schema.paymentReminder, reminders)
 
   const open = invoices.filter((i) => !i.paidOn && !i.voidedAt && i.totalOre > (i.creditedOre ?? 0))
   console.log(`Seeded ${org.name}:
@@ -1628,7 +1711,23 @@ async function seedBrf() {
       { partyId: p.invoice.partyId, agreementId: p.invoice.agreementId },
     )
   }
+  // The board has agreed no reminder fee; Jonas still gets his reminders.
+  const reminders = seedReminders(
+    orgId,
+    ledger,
+    invoices
+      .filter((i) => !i.paidOn)
+      .map((i) => ({
+        ...i,
+        dueDate: i.dueDate as string,
+        recipientEmail: i.recipientEmail ?? null,
+        owedOre: i.totalOre,
+      })),
+    { reminderFeeOre: null, reminderIntervalDays: 10, reminderDueDays: 10 },
+    today,
+  )
   await ledger.write()
+  await insertAll(schema.paymentReminder, reminders)
 
   console.log(`Seeded ${org.name} (BRF):
   login      ${board.email} (owner)

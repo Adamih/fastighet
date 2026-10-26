@@ -11,6 +11,7 @@ import {
   invoiceLine,
   type party,
   payment,
+  paymentReminder,
 } from '#/db/schema'
 import { billFor } from '#/features/agreements/billing'
 import { billedOnceChargeIds } from '#/features/agreements/program'
@@ -293,6 +294,7 @@ export const listInvoices = (input: ListInvoicesInput) =>
         ),
         orderBy: desc(invoice.number),
         with: {
+          reminders: { columns: { sentOn: true } },
           agreement: {
             columns: { id: true },
             with: {
@@ -311,8 +313,14 @@ export const listInvoices = (input: ListInvoicesInput) =>
     )
     const on = yield* today
     const moneyOf = yield* allInvoiceMoney
-    const views = rows.map(({ agreement: billed, ...row }) => ({
+    const views = rows.map(({ agreement: billed, reminders, ...row }) => ({
       ...toView(row, moneyOf(row.id), on),
+      /** The latest reminder sent for the avi, if any. */
+      lastRemindedOn:
+        reminders
+          .map((r) => r.sentOn)
+          .sort()
+          .at(-1) ?? null,
       units: showUnits
         ? billed.units.map(({ unit }) => ({
             kind: unit.kind,
@@ -343,6 +351,7 @@ export const getInvoice = (invoiceId: string) =>
             },
             orderBy: creditNote.number,
           },
+          reminders: { orderBy: paymentReminder.sequence },
           replaces: { columns: { id: true, number: true } },
           replacedBy: {
             columns: { id: true, number: true, issueDate: true },

@@ -93,3 +93,17 @@ test('refunds and corrected avier follow the credit note', () => {
     ['created', '2026-09-10'],
   ])
 })
+
+test('reminders come after the avi fell due', () => {
+  expect(
+    kinds({
+      ...base,
+      status: 'overdue',
+      reminders: [{ sequence: 1, sentOn: '2026-10-10', feeOre: 6_000 }],
+    }),
+  ).toEqual([
+    ['reminded', '2026-10-10'],
+    ['fellDue', '2026-09-30'],
+    ['created', '2026-09-10'],
+  ])
+})

@@ -2,7 +2,12 @@ import { eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { organizationSettings } from '#/db/schema'
 import { formatBankgiro } from '#/features/invoicing/rules'
+import {
+  DEFAULT_REMINDER_DUE_DAYS,
+  DEFAULT_REMINDER_INTERVAL_DAYS,
+} from '#/features/reminders/rules'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
+import { parseSek } from '#/lib/money'
 import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
 import { orgQuery } from '#/server/scoped'
@@ -32,6 +37,9 @@ export const loadSettings = Effect.gen(function* () {
     phone: row?.phone ?? null,
     fSkatt: row?.fSkatt ?? true,
     kind: row?.kind ?? 'landlord',
+    reminderFeeOre: row?.reminderFeeOre ?? null,
+    reminderIntervalDays: row?.reminderIntervalDays ?? DEFAULT_REMINDER_INTERVAL_DAYS,
+    reminderDueDays: row?.reminderDueDays ?? DEFAULT_REMINDER_DUE_DAYS,
   }
 })
 
@@ -56,6 +64,9 @@ export const updateSettings = (input: UpdateSettingsInput) =>
       phone: blankToNull(input.phone),
       fSkatt: input.fSkatt,
       kind: input.kind,
+      reminderFeeOre: input.reminderFee.trim() ? parseSek(input.reminderFee) : null,
+      reminderIntervalDays: Number(input.reminderIntervalDays),
+      reminderDueDays: Number(input.reminderDueDays),
     }
     yield* orgQuery((db, organizationId) =>
       db

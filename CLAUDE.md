@@ -51,6 +51,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Numbers run without gaps per company, and the OCR is the number plus a Luhn digit.
   - Recipient details are copied onto the invoice when it is issued.
   - Period, rent, VAT and due-date rules live in `src/features/invoicing/rules.ts` and are unit-tested. Change them there.
+- **Payment reminders** (`features/reminders`, rules in `rules.ts`, unit-tested) go to overdue avier with something owed, once the company's interval has passed since the due date or the last reminder. A reminder is recorded in `payment_reminder` and never deleted.
+  - The fee (påminnelseavgift) is opt-in in settings, at most 60 kr by law, only if agreed in advance, and charged with an avi's first reminder only. It is posted to the avi's receivable (`reminder` posting), so the avi owes it and the reminder asks for it with the same OCR.
+  - Sending goes through `once()`; the email is sent first, then the reminder and its fee posting are written in one batch.
 - **Payments** come from camt.054 bank files (`src/features/payments/camt054.ts`). Like invoices, they're never deleted:
   - Their status moves between matched, review, unmatched and ignored.
   - A bank reference is unique per company, which makes re-importing safe.

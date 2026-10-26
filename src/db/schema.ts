@@ -314,6 +314,12 @@ export const organizationSettings = sqliteTable('organization_settings', {
   fSkatt: integer('f_skatt', { mode: 'boolean' }).notNull().default(true),
   // A landlord or a BRF; decides the app's wording and defaults.
   kind: text('kind', { enum: companyKinds }).notNull().default('landlord'),
+  // Payment reminders: the fee with an avi's first reminder (null: no fee agreed), the days to
+  // wait after the due date or last reminder, and the days the payer gets. See
+  // `features/reminders/rules.ts`.
+  reminderFeeOre: integer('reminder_fee_ore'),
+  reminderIntervalDays: integer('reminder_interval_days').notNull().default(10),
+  reminderDueDays: integer('reminder_due_days').notNull().default(10),
 })
 
 // Issued invoices are accounting records: they are never deleted, only voided, and their
@@ -395,6 +401,7 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   party: one(party, { fields: [invoice.partyId], references: [party.id] }),
   lines: many(invoiceLine),
   ledgerEntries: many(ledgerEntry),
+  reminders: many(paymentReminder),
   creditNotes: many(creditNote),
   replaces: one(invoice, {
     fields: [invoice.replacesInvoiceId],
@@ -469,6 +476,34 @@ export const creditNoteLineRelations = relations(creditNoteLine, ({ one }) => ({
     fields: [creditNoteLine.creditNoteId],
     references: [creditNote.id],
   }),
+}))
+
+// A payment reminder (påminnelse) sent for an overdue avi. Like the avi it is never deleted. Its
+// fee, if any, is posted to the avi's receivable in the ledger in the same batch.
+export const paymentReminder = sqliteTable(
+  'payment_reminder',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    invoiceId: text('invoice_id')
+      .notNull()
+      .references(() => invoice.id),
+    // 1 for the first reminder of the avi, 2 for the second, …
+    sequence: integer('sequence').notNull(),
+    sentOn: text('sent_on').notNull(),
+    // The reminder's own due date.
+    dueDate: text('due_date').notNull(),
+    // What the reminder asked for, fee included, and the fee.
+    owedOre: integer('owed_ore').notNull(),
+    feeOre: integer('fee_ore').notNull().default(0),
+    recipientEmail: text('recipient_email').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('payment_reminder_invoice_sequence_uq').on(t.invoiceId, t.sequence)],
+)
+
+export const paymentReminderRelations = relations(paymentReminder, ({ one }) => ({
+  invoice: one(invoice, { fields: [paymentReminder.invoiceId], references: [invoice.id] }),
 }))
 
 /** One uploaded bank file (camt.054). */

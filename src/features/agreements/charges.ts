@@ -54,6 +54,7 @@ const lineLabels: Record<ChargeKind, string> = {
   index: 'Indextillägg',
   one_off: 'Engångsbelopp',
   other: 'Övrigt',
+  reminder_fee: 'Påminnelseavgift',
 }
 
 export interface LineUnit {
