@@ -1,7 +1,10 @@
 import { and, asc, eq, inArray, ne } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { agreementParty, agreementUnit, property, unit } from '#/db/schema'
+import type { Charge } from '#/features/agreements/charges'
+import { rentFields, shownRows, viewDate } from '#/features/agreements/current'
 import { joinNames, primaryParty } from '#/features/agreements/parties'
+import { inForce } from '#/features/agreements/periods'
 import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus, occupyingLease } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
@@ -56,7 +59,7 @@ export const getProperty = (propertyId: string) =>
     const units = rows.map(({ agreements, ...u }) => {
       if (!showOccupancy) return { ...u, occupancy: null }
       const occupant = occupyingLease(
-        agreements.map((a) => occupantView(a.agreement)),
+        agreements.map((a) => occupantView(a.agreement, on)),
         on,
       )
       return {
@@ -81,6 +84,7 @@ export const getProperty = (propertyId: string) =>
 /** An agreement on a unit: its parties' names, for occupancy and the unit's history. */
 const occupantDetails = {
   leaseTerms: true,
+  charges: true,
   parties: {
     orderBy: agreementParty.position,
     with: { party: { columns: { id: true, name: true, kind: true } } },
@@ -89,18 +93,24 @@ const occupantDetails = {
 
 const occupantView = <
   A extends Parameters<typeof agreementTerms>[0] & {
+    charges: Charge[]
     parties: {
       position: number
+      fromDate: string
+      toDate: string | null
       party: { id: string; name: string; kind: 'person' | 'company' }
     }[]
   },
 >(
   row: A,
+  on: string,
 ) => {
-  const { parties, leaseTerms: _, ...agreement } = row
+  const { parties: partyRows, leaseTerms: _, charges: __, ...agreement } = row
+  const parties = shownRows(inForce(partyRows, viewDate(row, on)), partyRows)
   return {
     ...agreement,
     ...agreementTerms(row),
+    ...rentFields(row, on),
     tenant: primaryParty(parties).party,
     tenantName: joinNames(parties.map((p) => p.party.name)),
   }
@@ -246,7 +256,7 @@ export const getUnitDetail = (unitId: string) =>
       hasLeases: agreements.length > 0,
       leases: showLeases
         ? agreements
-            .map(({ agreement }) => occupantView(agreement))
+            .map(({ agreement }) => occupantView(agreement, on))
             .map((lease) => ({ ...lease, status: leaseStatus(lease, on) }))
             .sort((a, b) => b.startDate.localeCompare(a.startDate))
         : [],

@@ -9,8 +9,13 @@ import {
   text,
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core'
-import { agreementKinds, partyRoles } from '#/features/agreements/kinds'
-import { invoiceIntervals, rentIntervals, tenantKinds } from '#/features/leases/options'
+import {
+  agreementKinds,
+  chargeIntervals,
+  chargeKinds,
+  partyRoles,
+} from '#/features/agreements/kinds'
+import { invoiceIntervals, tenantKinds } from '#/features/leases/options'
 import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
 import { companyKinds } from '#/features/settings/company-kinds'
@@ -115,19 +120,47 @@ export const agreement = sqliteTable(
     // The last day that is billed, or null while it runs until further notice. For a lease this
     // is derived from its terms (`effectiveEndDate`) and written with them; see `leaseTerms`.
     endDate: text('end_date'),
-    rentOre: integer('rent_ore').notNull(),
-    rentInterval: text('rent_interval', { enum: rentIntervals }).notNull(),
+    // What is billed is in `charge`; only how often is on the agreement.
     invoiceInterval: text('invoice_interval', { enum: invoiceIntervals }).notNull(),
-    // Rent is subject to VAT (frivillig skattskyldighet for commercial premises).
-    vat: integer('vat', { mode: 'boolean' }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex('agreement_org_number_uq').on(t.organizationId, t.number)],
 )
 
+// What an agreement bills, from a date: the base charge (rent or a bostadsrätt's fee), add-ons
+// such as parking, and one-off amounts. A change ends a charge the day before and starts a new
+// one, so history is kept. Rules in `features/agreements/charges.ts`.
+export const charge = sqliteTable(
+  'charge',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    agreementId: text('agreement_id')
+      .notNull()
+      .references(() => agreement.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: chargeKinds }).notNull(),
+    // The unit an add-on is for (e.g. a parking space); the rent line then leaves that unit out.
+    unitId: text('unit_id').references(() => unit.id),
+    // Shown on the avi; null uses the kind's standard text.
+    description: text('description'),
+    // Per interval; for a one-off charge the whole amount, negative for a reduction.
+    amountOre: integer('amount_ore').notNull(),
+    interval: text('interval', { enum: chargeIntervals }).notNull(),
+    // Subject to VAT (frivillig skattskyldighet for commercial premises).
+    vat: integer('vat', { mode: 'boolean' }).notNull().default(false),
+    // A one-off charge is billed on the first avi whose period covers this date.
+    fromDate: text('from_date').notNull(),
+    toDate: text('to_date'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('charge_agreement_idx').on(t.agreementId)],
+)
+
+// The units an agreement covers, from a date (e.g. a parking space added later).
 export const agreementUnit = sqliteTable(
   'agreement_unit',
   {
+    id: id(),
     agreementId: text('agreement_id')
       .notNull()
       .references(() => agreement.id, { onDelete: 'cascade' }),
@@ -135,18 +168,21 @@ export const agreementUnit = sqliteTable(
       .notNull()
       .references(() => unit.id),
     organizationId: organizationId(),
+    fromDate: text('from_date').notNull(),
+    toDate: text('to_date'),
   },
   (t) => [
-    primaryKey({ columns: [t.agreementId, t.unitId] }),
+    uniqueIndex('agreement_unit_from_uq').on(t.agreementId, t.unitId, t.fromDate),
     index('agreement_unit_unit_idx').on(t.unitId),
   ],
 )
 
-// The tenants (or owners) on an agreement. Exactly one receives the invoices; the invoice copies
-// the names of all of them and that party's address.
+// The tenants (or owners) on an agreement, from a date. Of those in force, one receives the
+// invoices; the invoice copies the names of all of them and that party's address.
 export const agreementParty = sqliteTable(
   'agreement_party',
   {
+    id: id(),
     agreementId: text('agreement_id')
       .notNull()
       .references(() => agreement.id, { onDelete: 'cascade' }),
@@ -160,9 +196,11 @@ export const agreementParty = sqliteTable(
     receivesInvoices: integer('receives_invoices', { mode: 'boolean' }).notNull().default(false),
     // Order on documents: the first party is named first.
     position: integer('position').notNull(),
+    fromDate: text('from_date').notNull(),
+    toDate: text('to_date'),
   },
   (t) => [
-    primaryKey({ columns: [t.agreementId, t.partyId] }),
+    uniqueIndex('agreement_party_from_uq').on(t.agreementId, t.partyId, t.fromDate),
     index('agreement_party_org_party_idx').on(t.organizationId, t.partyId),
   ],
 )
@@ -181,21 +219,33 @@ export const leaseTerms = sqliteTable('lease_terms', {
   moveOutDate: text('move_out_date'),
 })
 
-// A bostadsrätt's own details. Only the basics so far; the BRF registers come later.
+// A bostadsrätt's own details: who held it before. The apartment's facts (andelstal, insats) are
+// in the apartment register, `brfApartment`, since they don't change when it is sold.
 export const ownershipTerms = sqliteTable('ownership_terms', {
   agreementId: text('agreement_id')
     .primaryKey()
     .references(() => agreement.id, { onDelete: 'cascade' }),
   organizationId: organizationId(),
-  // Andelstal: the apartment's share of the association's fees.
-  shareRatio: real('share_ratio'),
-  // Insats paid when the right was first granted (upplåtelse).
-  depositOre: integer('deposit_ore'),
-  grantedOn: text('granted_on'),
   // The sellers' bostadsrätt when this one came from a transfer (överlåtelse).
   previousAgreementId: text('previous_agreement_id').references(
     (): AnySQLiteColumn => agreement.id,
   ),
+})
+
+// The BRF's apartment register (lägenhetsförteckning): one row per apartment upplåten med
+// bostadsrätt, keyed by its unit. It outlives every sale of the right.
+export const brfApartment = sqliteTable('brf_apartment', {
+  unitId: text('unit_id')
+    .primaryKey()
+    .references(() => unit.id, { onDelete: 'cascade' }),
+  organizationId: organizationId(),
+  // Andelstal, in percent of the association's total; fees are split by it.
+  shareRatio: real('share_ratio'),
+  // Insats and upplåtelseavgift paid when the right was first granted.
+  depositOre: integer('deposit_ore'),
+  grantFeeOre: integer('grant_fee_ore'),
+  // Upplåtelsedatum.
+  grantedOn: text('granted_on'),
 })
 
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
@@ -203,6 +253,15 @@ export const propertyRelations = relations(property, ({ many }) => ({ units: man
 export const unitRelations = relations(unit, ({ one, many }) => ({
   property: one(property, { fields: [unit.propertyId], references: [property.id] }),
   agreements: many(agreementUnit),
+  brfApartment: one(brfApartment),
+}))
+
+export const brfApartmentRelations = relations(brfApartment, ({ one }) => ({
+  unit: one(unit, { fields: [brfApartment.unitId], references: [unit.id] }),
+}))
+
+export const chargeRelations = relations(charge, ({ one }) => ({
+  agreement: one(agreement, { fields: [charge.agreementId], references: [agreement.id] }),
 }))
 
 export const partyRelations = relations(party, ({ many }) => ({
@@ -213,6 +272,7 @@ export const partyRelations = relations(party, ({ many }) => ({
 export const agreementRelations = relations(agreement, ({ one, many }) => ({
   parties: many(agreementParty),
   units: many(agreementUnit),
+  charges: many(charge),
   leaseTerms: one(leaseTerms),
   ownershipTerms: one(ownershipTerms),
   invoices: many(invoice),
@@ -315,12 +375,18 @@ export const invoiceLine = sqliteTable(
       .references(() => invoice.id, { onDelete: 'cascade' }),
     organizationId: organizationId(),
     position: integer('position').notNull(),
+    // What the line is for, which bookkeeping maps to accounts; and the charge that billed it.
+    kind: text('kind', { enum: chargeKinds }).notNull(),
+    chargeId: text('charge_id').references(() => charge.id),
     description: text('description').notNull(),
     netOre: integer('net_ore').notNull(),
     vatRatePercent: integer('vat_rate_percent').notNull(),
     vatOre: integer('vat_ore').notNull(),
   },
-  (t) => [index('invoice_line_invoice_idx').on(t.invoiceId)],
+  (t) => [
+    index('invoice_line_invoice_idx').on(t.invoiceId),
+    index('invoice_line_charge_idx').on(t.chargeId),
+  ],
 )
 
 export const invoiceRelations = relations(invoice, ({ one, many }) => ({
@@ -386,6 +452,8 @@ export const creditNoteLine = sqliteTable(
       .references(() => creditNote.id, { onDelete: 'cascade' }),
     organizationId: organizationId(),
     position: integer('position').notNull(),
+    // What is credited, for bookkeeping: the kind of the invoice line it reverses.
+    kind: text('kind', { enum: chargeKinds }).notNull(),
     description: text('description').notNull(),
     netOre: integer('net_ore').notNull(),
     vatRatePercent: integer('vat_rate_percent').notNull(),

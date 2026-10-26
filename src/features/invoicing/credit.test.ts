@@ -14,6 +14,7 @@ const rent: CreditableInvoice = {
   voidedAt: null,
   lines: [
     {
+      kind: 'rent',
       description: 'Hyra Uppsala Kungsängen 12:3 · 1001, oktober 2026',
       netOre: 845_000,
       vatRatePercent: 0,
@@ -27,7 +28,13 @@ const commercial: CreditableInvoice = {
   creditedOre: 0,
   voidedAt: null,
   lines: [
-    { description: 'Hyra lokal, Q4', netOre: 4_500_000, vatRatePercent: 25, vatOre: 1_125_000 },
+    {
+      kind: 'rent',
+      description: 'Hyra lokal, Q4',
+      netOre: 4_500_000,
+      vatRatePercent: 25,
+      vatOre: 1_125_000,
+    },
   ],
 }
 
@@ -59,6 +66,7 @@ describe('draftCreditNote', () => {
       draft: {
         lines: [
           {
+            kind: 'rent',
             description: 'Kreditering, avi 8',
             netOre: 100_000,
             vatRatePercent: 25,

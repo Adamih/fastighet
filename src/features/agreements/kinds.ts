@@ -13,3 +13,23 @@ export type AgreementKind = (typeof agreementKinds)[number]
  */
 export const partyRoles = ['tenant', 'co_tenant', 'owner'] as const
 export type PartyRole = (typeof partyRoles)[number]
+
+/**
+ * What a charge is for. `rent` (a lease) and `fee` (a bostadsrätt's månadsavgift) are the base
+ * charge; the rest are add-ons, index increases and one-off amounts.
+ */
+export const chargeKinds = [
+  'rent',
+  'fee',
+  'parking',
+  'storage',
+  'utility',
+  'index',
+  'one_off',
+  'other',
+] as const
+export type ChargeKind = (typeof chargeKinds)[number]
+
+/** `once` is a one-off amount, billed on the first avi that covers its date. */
+export const chargeIntervals = ['monthly', 'yearly', 'once'] as const
+export type ChargeInterval = (typeof chargeIntervals)[number]

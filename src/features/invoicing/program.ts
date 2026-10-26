@@ -1,7 +1,19 @@
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { Clock, Effect, Exit } from 'effect'
-import { agreement, creditNote, creditNoteLine, invoice, invoiceLine, payment } from '#/db/schema'
-import { invoiceRecipient } from '#/features/agreements/parties'
+import {
+  agreement,
+  type agreementParty,
+  type agreementUnit,
+  type charge,
+  creditNote,
+  creditNoteLine,
+  invoice,
+  invoiceLine,
+  type party,
+  payment,
+} from '#/db/schema'
+import { billFor } from '#/features/agreements/billing'
+import { billedOnceChargeIds } from '#/features/agreements/program'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
@@ -23,17 +35,7 @@ import {
 } from './correction'
 import { type CreditProblem, draftCreditNote } from './credit'
 import { matchesFilter } from './overview'
-import {
-  dueDate,
-  invoicePeriod,
-  invoiceStatus,
-  ocrFor,
-  periodLabel,
-  rentForPeriod,
-  rentLineDescription,
-  VAT_RATE_PERCENT,
-  vatFor,
-} from './rules'
+import { dueDate, invoicePeriod, invoiceStatus, ocrFor, type Period, periodLabel } from './rules'
 import type {
   CreateCreditNoteInput,
   CreateInvoiceRunInput,
@@ -55,19 +57,38 @@ const refundMoney: Permissions = { invoice: ['manage'], payment: ['manage'] }
 // ---------------------------------------------------------------------------------------------
 // Invoice runs
 
-/** What billing reads from an agreement: its parties (the recipient) and units (the line). */
+/**
+ * What billing reads from an agreement: its charges (the lines), parties (the recipient) and
+ * units (the line text), each with the dates they apply.
+ */
 const billingDetails = {
+  charges: true,
   parties: { with: { party: true } },
   units: { with: { unit: { with: { property: { columns: { designation: true } } } } } },
 } as const
 
-type BillingAgreement = typeof agreement.$inferSelect & {
-  parties: Parameters<typeof invoiceRecipient>[0][number][]
-  units: { unit: { label: string; property: { designation: string } } }[]
+type BillingRow = typeof agreement.$inferSelect & {
+  charges: (typeof charge.$inferSelect)[]
+  parties: (typeof agreementParty.$inferSelect & { party: typeof party.$inferSelect })[]
+  units: (typeof agreementUnit.$inferSelect & {
+    unit: { label: string; property: { designation: string } }
+  })[]
 }
 
-const unitsOf = (a: BillingAgreement) =>
-  a.units.map(({ unit }) => ({ designation: unit.property.designation, label: unit.label }))
+/** The avi an agreement gets for a period (see `billFor`), or null when nothing is billed. */
+const billRow = (a: BillingRow, period: Period, billedOnce: ReadonlySet<string>) =>
+  billFor(
+    {
+      ...a,
+      units: a.units.map(({ unit, ...u }) => ({
+        ...u,
+        designation: unit.property.designation,
+        label: unit.label,
+      })),
+    },
+    period,
+    billedOnce,
+  )
 
 /** What a run for `month` would invoice. Agreements already invoiced for the period are flagged. */
 export const previewInvoiceRun = (month: string) =>
@@ -76,7 +97,7 @@ export const previewInvoiceRun = (month: string) =>
     const issueDate = yield* today
     const settings = yield* loadSettings
 
-    const agreements: BillingAgreement[] = yield* orgQuery((db, organizationId) =>
+    const agreements: BillingRow[] = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findMany({
         where: eq(agreement.organizationId, organizationId),
         orderBy: agreement.number,
@@ -96,23 +117,25 @@ export const previewInvoiceRun = (month: string) =>
         ),
     )
     const alreadyInvoiced = new Set(invoiced.map((i) => i.agreementId))
+    const billedOnce = yield* billedOnceChargeIds(agreements.map((a) => a.id))
 
     const rows = agreements.flatMap((a) => {
       const period = invoicePeriod(month, a.invoiceInterval)
       if (!period) return []
-      const netOre = rentForPeriod(a, period)
-      if (netOre <= 0) return []
-      const vatOre = vatFor(netOre, a.vat)
+      const bill = billRow(a, period, billedOnce)
+      if (!bill) return []
       return [
         {
           agreementId: a.id,
           agreementNumber: a.number,
-          recipient: invoiceRecipient(a.parties),
+          recipient: bill.recipient,
           period,
-          description: rentLineDescription(unitsOf(a), period, a.kind),
-          netOre,
-          vatOre,
-          totalOre: netOre + vatOre,
+          lines: bill.lines,
+          /** The first line, to name the avi in previews. */
+          description: bill.lines[0].description,
+          netOre: bill.netOre,
+          vatOre: bill.vatOre,
+          totalOre: bill.totalOre,
           dueDate: dueDate(period, issueDate),
           alreadyInvoiced: alreadyInvoiced.has(a.id),
         },
@@ -170,15 +193,14 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
             vatOre: row.vatOre,
             totalOre: row.totalOre,
           }),
-          db.insert(invoiceLine).values({
-            invoiceId: id,
-            organizationId,
-            position: 1,
-            description: row.description,
-            netOre: row.netOre,
-            vatRatePercent: row.vatOre > 0 ? VAT_RATE_PERCENT : 0,
-            vatOre: row.vatOre,
-          }),
+          db.insert(invoiceLine).values(
+            row.lines.map((line, index) => ({
+              ...line,
+              invoiceId: id,
+              organizationId,
+              position: index + 1,
+            })),
+          ),
         ])
         const [first, ...rest] = statements
         return db.batch([first, ...rest])
@@ -647,7 +669,7 @@ export const previewReissue = (invoiceId: string) =>
     const inv = yield* getInvoice(invoiceId)
     const issueDate = yield* today
     const settings = yield* loadSettings
-    const billed: BillingAgreement | undefined = yield* orgQuery((db, organizationId) =>
+    const billed: BillingRow | undefined = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findFirst({
         where: and(eq(agreement.id, inv.agreementId), eq(agreement.organizationId, organizationId)),
         with: billingDetails,
@@ -672,18 +694,19 @@ export const previewReissue = (invoiceId: string) =>
         ),
     )
     const period = { start: inv.periodStart, end: inv.periodEnd }
-    const netOre = rentForPeriod(billed, period)
-    const vatOre = vatFor(netOre, billed.vat)
-    const problem = reissueProblem(inv, others, netOre)
+    // One-off charges on the avi being replaced are billed again on the corrected one.
+    const bill = billRow(billed, period, yield* billedOnceChargeIds([billed.id]))
+    const problem = reissueProblem(inv, others, bill?.netOre ?? 0)
     return {
       invoiceId: inv.id,
       agreementId: billed.id,
-      recipient: invoiceRecipient(billed.parties),
+      recipient: bill?.recipient ?? null,
       period,
-      description: rentLineDescription(unitsOf(billed), period, billed.kind),
-      netOre,
-      vatOre,
-      totalOre: netOre + vatOre,
+      lines: bill?.lines ?? [],
+      description: bill?.lines[0]?.description ?? '',
+      netOre: bill?.netOre ?? 0,
+      vatOre: bill?.vatOre ?? 0,
+      totalOre: bill?.totalOre ?? 0,
       issueDate,
       dueDate: dueDate(period, issueDate),
       canInvoice: settings.bankgiro !== null,
@@ -713,6 +736,8 @@ export const reissueInvoice = (invoiceId: string) =>
         .from(invoice)
         .where(eq(invoice.organizationId, organizationId)),
     )
+    const { recipient } = preview
+    if (!recipient) return yield* new Conflict({ message: 'Avtalet har ingen hyra för perioden' })
     const number = maxNumber + 1
     const id = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
@@ -723,7 +748,7 @@ export const reissueInvoice = (invoiceId: string) =>
           number,
           ocr: ocrFor(number),
           agreementId: preview.agreementId,
-          ...preview.recipient,
+          ...recipient,
           periodStart: preview.period.start,
           periodEnd: preview.period.end,
           issueDate: preview.issueDate,
@@ -733,15 +758,14 @@ export const reissueInvoice = (invoiceId: string) =>
           totalOre: preview.totalOre,
           replacesInvoiceId: preview.invoiceId,
         }),
-        db.insert(invoiceLine).values({
-          invoiceId: id,
-          organizationId,
-          position: 1,
-          description: preview.description,
-          netOre: preview.netOre,
-          vatRatePercent: preview.vatOre > 0 ? VAT_RATE_PERCENT : 0,
-          vatOre: preview.vatOre,
-        }),
+        db.insert(invoiceLine).values(
+          preview.lines.map((line, index) => ({
+            ...line,
+            invoiceId: id,
+            organizationId,
+            position: index + 1,
+          })),
+        ),
       ]),
     )
     return { id }

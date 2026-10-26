@@ -1,6 +1,6 @@
 import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowRightLeft, Mail, Pencil, Phone } from 'lucide-react'
+import { ArrowRightLeft, Banknote, Mail, Pencil, Phone } from 'lucide-react'
 import {
   DetailColumns,
   DetailHeader,
@@ -12,6 +12,7 @@ import {
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
+import { useChangeBaseChargeDrawer } from '#/features/agreements/change-charge-form'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
@@ -46,6 +47,7 @@ function OwnershipPage() {
   })
   const edit = useEditOwnershipDrawer(ownership)
   const transfer = useTransferOwnershipDrawer(ownership)
+  const changeFee = useChangeBaseChargeDrawer(ownership)
   const units = unitSummary(ownership.units)
   const title = m.ownership_number({ number: ownership.number })
 
@@ -70,6 +72,12 @@ function OwnershipPage() {
                 {m.ownership_edit()}
               </Button>
               {!ownership.endDate && (
+                <Button variant="outline" className="flex-1 sm:flex-none" onClick={changeFee.open}>
+                  <Banknote aria-hidden="true" />
+                  {changeFee.label}
+                </Button>
+              )}
+              {!ownership.endDate && (
                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={transfer.open}>
                   <ArrowRightLeft aria-hidden="true" />
                   {m.ownership_transfer()}
@@ -80,6 +88,9 @@ function OwnershipPage() {
         }
       />
 
+      {changeFee.notice && (
+        <p className="text-[13px] text-emerald-700 dark:text-emerald-300">{changeFee.notice}</p>
+      )}
       <StatRow>
         <StatCard
           label={m.ownership_fee_label()}

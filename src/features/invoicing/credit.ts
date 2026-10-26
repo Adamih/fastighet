@@ -1,3 +1,5 @@
+import type { ChargeKind } from '#/features/agreements/kinds'
+
 // Pure rules for credit notes (kreditfakturor): what can still be credited on an invoice and the
 // lines a credit note gets. Shared by the server (creating them) and the client (the preview).
 
@@ -7,6 +9,7 @@ export interface CreditableInvoice {
   readonly creditedOre: number
   readonly voidedAt: Date | null
   readonly lines: readonly {
+    readonly kind: ChargeKind
     readonly description: string
     readonly netOre: number
     readonly vatRatePercent: number
@@ -24,15 +27,19 @@ export const owedOrTotal = (invoice: { status: string; totalOre: number; credite
     ? remainingOre(invoice)
     : invoice.totalOre
 
-/** The invoice's VAT rate; rent invoices have one rate for all lines. */
+/**
+ * The VAT rate a partial credit uses: the first (base) line's. An avi can mix rates when an
+ * add-on carries VAT and the rent doesn't; crediting all of an untouched avi repeats each line.
+ */
 export const vatRateOf = (invoice: Pick<CreditableInvoice, 'lines'>) =>
-  Math.max(0, ...invoice.lines.map((l) => l.vatRatePercent))
+  invoice.lines[0]?.vatRatePercent ?? 0
 
 /** `rest`: everything not yet credited. `amount`: a part, given excluding VAT. */
 export type CreditRequest = { readonly kind: 'rest' } | { readonly kind: 'amount'; netOre: number }
 
 export interface CreditNoteDraft {
   readonly lines: {
+    kind: ChargeKind
     description: string
     netOre: number
     vatRatePercent: number
@@ -58,7 +65,13 @@ export function draftCreditNote(
   if (left === 0) return { ok: false, problem: 'nothing_left' }
 
   if (request.kind === 'rest' && invoice.creditedOre === 0) {
-    const lines = invoice.lines.map((l) => ({ ...l }))
+    const lines = invoice.lines.map((l) => ({
+      kind: l.kind,
+      description: l.description,
+      netOre: l.netOre,
+      vatRatePercent: l.vatRatePercent,
+      vatOre: l.vatOre,
+    }))
     return { ok: true, draft: totals(lines) }
   }
 
@@ -81,7 +94,9 @@ export function draftCreditNote(
       : `Kreditering, avi ${invoice.number}`
   return {
     ok: true,
-    draft: totals([{ description, netOre, vatRatePercent: rate, vatOre }]),
+    draft: totals([
+      { kind: invoice.lines[0]?.kind ?? 'rent', description, netOre, vatRatePercent: rate, vatOre },
+    ]),
   }
 }
 

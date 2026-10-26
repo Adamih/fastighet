@@ -56,16 +56,12 @@ const monthly: RentTerms = {
   endDate: null,
   rentOre: 845000,
   rentInterval: 'monthly',
-  invoiceInterval: 'monthly',
-  vat: false,
 }
 
 const yearlyQuarterly: RentTerms = {
   ...monthly,
   rentOre: 10000000, // 100 000 kr per year
   rentInterval: 'yearly',
-  invoiceInterval: 'quarterly',
-  vat: true,
 }
 
 describe('invoicePeriod', () => {

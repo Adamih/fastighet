@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, party } from '#/db/schema'
+import type { Charge } from '#/features/agreements/charges'
+import { rentFields } from '#/features/agreements/current'
 import type { PartyRole } from '#/features/agreements/kinds'
 import { agreementTerms } from '#/features/agreements/terms'
 import { invoiceStatus } from '#/features/invoicing/rules'
@@ -18,7 +20,9 @@ const read: Permissions = { tenant: ['read'] }
 const manage: Permissions = { tenant: ['manage'] }
 
 /** A party's agreements (leases, or a bostadsrätt), newest first, with lease-shaped terms. */
-const partyAgreements = <A extends Parameters<typeof agreementTerms>[0] & { number: number }>(
+const partyAgreements = <
+  A extends Parameters<typeof agreementTerms>[0] & { number: number; charges: Charge[] },
+>(
   parties: readonly { role: PartyRole; agreement: A }[],
   on: string,
 ) =>
@@ -26,7 +30,13 @@ const partyAgreements = <A extends Parameters<typeof agreementTerms>[0] & { numb
     .map(({ role, agreement }) => {
       const terms = agreementTerms(agreement)
       /** The tenant's own place on it: `co_tenant` when someone else's lease. */
-      return { ...agreement, ...terms, role, status: leaseStatus(terms, on) }
+      return {
+        ...agreement,
+        ...terms,
+        ...rentFields(agreement, on),
+        role,
+        status: leaseStatus(terms, on),
+      }
     })
     .sort((a, b) => b.number - a.number)
 
@@ -47,6 +57,7 @@ export const listTenants = Effect.gen(function* () {
             agreement: {
               with: {
                 leaseTerms: true,
+                charges: true,
                 units: { with: { unit: { columns: { kind: true, label: true } } } },
               },
             },
@@ -76,7 +87,9 @@ const loadTenant = (tenantId: string) =>
     const row = yield* orgQuery((db, organizationId) =>
       db.query.party.findFirst({
         where: and(eq(party.id, tenantId), eq(party.organizationId, organizationId)),
-        with: { agreements: { with: { agreement: { with: { leaseTerms: true } } } } },
+        with: {
+          agreements: { with: { agreement: { with: { leaseTerms: true, charges: true } } } },
+        },
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'tenant', id: tenantId })

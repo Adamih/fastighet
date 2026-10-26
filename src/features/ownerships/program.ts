@@ -1,20 +1,32 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
+import type { Db } from '#/db'
 import {
   agreement,
   agreementParty,
   agreementUnit,
+  brfApartment,
+  charge,
   ownershipTerms,
   party,
   type unit,
+  unit as unitTable,
 } from '#/db/schema'
+import { currentTerms, shownRows } from '#/features/agreements/current'
 import {
   joinNames,
   type OwnersProblem,
   ownershipParties,
   primaryParty,
 } from '#/features/agreements/parties'
-import { checkPartiesExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
+import { inForceOn } from '#/features/agreements/periods'
+import {
+  checkPartiesExist,
+  checkUnitsFree,
+  correctBaseCharge,
+  correctOpenTerms,
+  invoiceHistory,
+} from '#/features/agreements/program'
 import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
@@ -36,47 +48,79 @@ const withOwnershipDetails = {
     orderBy: agreementParty.position,
     with: { party: { columns: { id: true, name: true, kind: true } } },
   },
-  units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
+  units: {
+    with: {
+      unit: {
+        with: {
+          property: { columns: { id: true, designation: true } },
+          brfApartment: true,
+        },
+      },
+    },
+  },
+  charges: true,
 } as const
 
 type OwnershipRow = typeof agreement.$inferSelect & {
   ownershipTerms: typeof ownershipTerms.$inferSelect | null
+  charges: (typeof charge.$inferSelect)[]
   parties: (typeof agreementParty.$inferSelect & {
     party: { id: string; name: string; kind: 'person' | 'company' }
   })[]
-  units: {
-    unit: typeof unit.$inferSelect & { property: { id: string; designation: string } }
-  }[]
+  units: (typeof agreementUnit.$inferSelect & {
+    unit: typeof unit.$inferSelect & {
+      property: { id: string; designation: string }
+      brfApartment: typeof brfApartment.$inferSelect | null
+    }
+  })[]
 }
 
-const toView = ({ ownershipTerms: terms, parties, ...row }: OwnershipRow, on: string) => ({
-  ...row,
-  shareRatio: terms?.shareRatio ?? null,
-  depositOre: terms?.depositOre ?? null,
-  grantedOn: terms?.grantedOn ?? null,
-  previousAgreementId: terms?.previousAgreementId ?? null,
-  /** The owner named first. */
-  owner: primaryParty(parties).party,
-  ownerNames: joinNames(parties.map((p) => p.party.name)),
-  owners: parties.map((p) => ({
-    ...p.party,
-    sharePercent: p.sharePercent ?? 0,
-    receivesInvoices: p.receivesInvoices,
-  })),
-  units: row.units
-    .map(({ unit }) => ({
-      id: unit.id,
-      label: unit.label,
-      kind: unit.kind,
-      areaSqm: unit.areaSqm,
-      rooms: unit.rooms,
-      propertyId: unit.property.id,
-      designation: unit.property.designation,
-    }))
-    .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label)),
-  // A bostadsrätt is active until it is transferred; `terminated` means a sale is registered.
-  status: leaseStatus(agreementTerms({ ...row, leaseTerms: null }), on),
-})
+const toView = (
+  { ownershipTerms: terms, parties: partyRows, units: unitRows, charges, ...row }: OwnershipRow,
+  on: string,
+) => {
+  const now = currentTerms({ ...row, parties: partyRows, units: unitRows, charges }, on)
+  const parties = shownRows(now.parties, partyRows)
+  const units = shownRows(now.units, unitRows)
+  // The apartment's facts come from the apartment register, not the bostadsrätt.
+  const apartment = units.find((u) => u.unit.kind === 'apartment')?.unit.brfApartment ?? null
+  return {
+    ...row,
+    /** The månadsavgift in force (the base charge). */
+    rentOre: now.rentOre,
+    rentInterval: now.rentInterval,
+    baseChargeId: now.baseCharge?.id ?? null,
+    charges: [...charges].sort((a, b) => a.fromDate.localeCompare(b.fromDate)),
+    partyRows: partyRows.map(({ party, ...p }) => ({ ...p, name: party.name })),
+    unitRows: unitRows.map(({ unit, ...u }) => ({ ...u, label: unit.label })),
+    apartmentUnitId: units.find((u) => u.unit.kind === 'apartment')?.unitId ?? null,
+    shareRatio: apartment?.shareRatio ?? null,
+    depositOre: apartment?.depositOre ?? null,
+    grantedOn: apartment?.grantedOn ?? null,
+    previousAgreementId: terms?.previousAgreementId ?? null,
+    /** The owner named first. */
+    owner: primaryParty(parties).party,
+    ownerNames: joinNames(parties.map((p) => p.party.name)),
+    owners: parties.map((p) => ({
+      ...p.party,
+      sharePercent: p.sharePercent ?? 0,
+      receivesInvoices: p.receivesInvoices,
+    })),
+    units: units
+      .map(({ unit }) => ({
+        id: unit.id,
+        label: unit.label,
+        kind: unit.kind,
+        areaSqm: unit.areaSqm,
+        rooms: unit.rooms,
+        propertyId: unit.property.id,
+        designation: unit.property.designation,
+      }))
+      .sort((a, b) => a.designation.localeCompare(b.designation) || a.label.localeCompare(b.label)),
+    // A bostadsrätt is active until it is transferred; `terminated` means a sale is registered.
+    status: leaseStatus(agreementTerms({ ...row, leaseTerms: null }), on),
+  }
+}
 
 export type OwnershipView = ReturnType<typeof toView>
 
@@ -174,20 +218,41 @@ const checkOwners = (input: {
     return result.parties
   })
 
-const termsValues = (input: CreateOwnershipInput) => ({
+/** The apartment's facts for the apartment register (lägenhetsförteckning). */
+const registerValues = (input: CreateOwnershipInput) => ({
   shareRatio: input.shareRatio,
   depositOre: input.depositOre,
   grantedOn: input.grantedOn,
 })
 
-const agreementValues = (input: CreateOwnershipInput) => ({
-  startDate: input.startDate,
-  // The fee is monthly and carries no VAT (member fees are outside VAT).
-  rentOre: input.feeOre,
-  rentInterval: 'monthly' as const,
-  invoiceInterval: input.invoiceInterval,
-  vat: false,
-})
+/** The chosen units that are apartments: they get the register entry. */
+const apartmentIds = (unitIds: readonly string[]) =>
+  orgQuery((db, organizationId) =>
+    db
+      .select({ id: unitTable.id })
+      .from(unitTable)
+      .where(
+        and(
+          eq(unitTable.organizationId, organizationId),
+          inArray(unitTable.id, [...unitIds]),
+          eq(unitTable.kind, 'apartment'),
+        ),
+      ),
+  ).pipe(Effect.map((rows) => rows.map((r) => r.id)))
+
+/** Writes the register entry for each apartment; it belongs to the apartment, not the right. */
+const upsertRegister = (
+  db: Db,
+  organizationId: string,
+  unitIds: readonly string[],
+  values: ReturnType<typeof registerValues>,
+) =>
+  unitIds.map((unitId) =>
+    db
+      .insert(brfApartment)
+      .values({ unitId, organizationId, ...values })
+      .onConflictDoUpdate({ target: brfApartment.unitId, set: values }),
+  )
 
 /** The next avtalsnummer, in the same series as leases, numbered in the insert itself. */
 const nextNumber = (organizationId: string) =>
@@ -198,6 +263,7 @@ export const createOwnership = (input: CreateOwnershipInput) =>
     yield* requirePermission(manage)
     const parties = yield* checkOwners(input)
     const unitIds = yield* checkUnitsFree(input.unitIds, { start: input.startDate, end: null })
+    const apartments = yield* apartmentIds(unitIds)
     const id = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
       db.batch([
@@ -206,26 +272,47 @@ export const createOwnership = (input: CreateOwnershipInput) =>
           organizationId,
           number: nextNumber(organizationId),
           kind: 'tenant_ownership',
+          startDate: input.startDate,
           endDate: null,
-          ...agreementValues(input),
+          invoiceInterval: input.invoiceInterval,
         }),
-        db
-          .insert(ownershipTerms)
-          .values({ agreementId: id, organizationId, ...termsValues(input) }),
-        db
-          .insert(agreementParty)
-          .values(parties.map((p) => ({ ...p, agreementId: id, organizationId }))),
-        db
-          .insert(agreementUnit)
-          .values(unitIds.map((unitId) => ({ agreementId: id, unitId, organizationId }))),
+        // The månadsavgift: monthly and outside VAT, like all member fees.
+        db.insert(charge).values({
+          organizationId,
+          agreementId: id,
+          kind: 'fee',
+          amountOre: input.feeOre,
+          interval: 'monthly',
+          vat: false,
+          fromDate: input.startDate,
+        }),
+        db.insert(ownershipTerms).values({ agreementId: id, organizationId }),
+        db.insert(agreementParty).values(
+          parties.map((p) => ({
+            ...p,
+            agreementId: id,
+            organizationId,
+            fromDate: input.startDate,
+          })),
+        ),
+        db.insert(agreementUnit).values(
+          unitIds.map((unitId) => ({
+            agreementId: id,
+            unitId,
+            organizationId,
+            fromDate: input.startDate,
+          })),
+        ),
+        ...upsertRegister(db, organizationId, apartments, registerValues(input)),
       ]),
     )
     return { id }
   })
 
 /**
- * Changes the owners, units, fee and details, for corrections. A sale is a transfer, which keeps
- * the sellers' bostadsrätt as history. Issued avier are not touched.
+ * Corrects the owners, units, fee and the apartment's register entry. A sale is a transfer,
+ * which keeps the sellers' bostadsrätt as history; a new fee from a date is `changeBaseCharge`.
+ * Issued avier are not touched.
  */
 export const updateOwnership = (input: UpdateOwnershipInput) =>
   Effect.gen(function* () {
@@ -248,43 +335,32 @@ export const updateOwnership = (input: UpdateOwnershipInput) =>
       { start: input.startDate, end: current.endDate },
       current.id,
     )
+    const apartments = yield* apartmentIds(unitIds)
+    const base = yield* correctBaseCharge(
+      current,
+      { startDate: input.startDate, amountOre: input.feeOre, interval: 'monthly', vat: false },
+      yield* today,
+    )
+    if (!base) return yield* new Conflict({ message: 'Bostadsrätten saknar avgift' })
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db
           .update(agreement)
-          .set(agreementValues(input))
+          .set({ startDate: input.startDate, invoiceInterval: input.invoiceInterval })
           .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
         db
-          .update(ownershipTerms)
-          .set(termsValues(input))
-          .where(
-            and(
-              eq(ownershipTerms.agreementId, current.id),
-              eq(ownershipTerms.organizationId, organizationId),
-            ),
-          ),
-        db
-          .delete(agreementParty)
-          .where(
-            and(
-              eq(agreementParty.agreementId, current.id),
-              eq(agreementParty.organizationId, organizationId),
-            ),
-          ),
-        db
-          .insert(agreementParty)
-          .values(parties.map((p) => ({ ...p, agreementId: current.id, organizationId }))),
-        db
-          .delete(agreementUnit)
-          .where(
-            and(
-              eq(agreementUnit.agreementId, current.id),
-              eq(agreementUnit.organizationId, organizationId),
-            ),
-          ),
-        db
-          .insert(agreementUnit)
-          .values(unitIds.map((unitId) => ({ agreementId: current.id, unitId, organizationId }))),
+          .update(charge)
+          .set(base.values)
+          .where(and(eq(charge.id, base.id), eq(charge.organizationId, organizationId))),
+        ...correctOpenTerms(
+          db,
+          organizationId,
+          current.id,
+          { oldStart: current.startDate, newStart: input.startDate },
+          { parties: current.partyRows, units: current.unitRows },
+          { parties, unitIds },
+        ),
+        ...upsertRegister(db, organizationId, apartments, registerValues(input)),
       ]),
     )
     return yield* getOwnership(current.id)
@@ -312,6 +388,12 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
       { start: input.transferDate, end: null },
       seller.id,
     )
+    const carried = seller.charges.filter(
+      (c) => c.interval !== 'once' && inForceOn(c, input.transferDate),
+    )
+    if (!carried.some((c) => c.kind === 'fee')) {
+      return yield* new Conflict({ message: 'Bostadsrätten har ingen avgift på tillträdesdagen' })
+    }
     const id = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
       db.batch([
@@ -326,25 +408,41 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
           kind: 'tenant_ownership',
           startDate: input.transferDate,
           endDate: null,
-          rentOre: seller.rentOre,
-          rentInterval: seller.rentInterval,
           invoiceInterval: seller.invoiceInterval,
-          vat: false,
         }),
-        db.insert(ownershipTerms).values({
-          agreementId: id,
-          organizationId,
-          shareRatio: seller.shareRatio,
-          depositOre: seller.depositOre,
-          grantedOn: seller.grantedOn,
-          previousAgreementId: seller.id,
-        }),
+        // The buyers take over every recurring charge in force on their first day.
+        db.insert(charge).values(
+          carried.map((c) => ({
+            organizationId,
+            agreementId: id,
+            kind: c.kind,
+            description: c.description,
+            amountOre: c.amountOre,
+            interval: c.interval,
+            vat: c.vat,
+            fromDate: input.transferDate,
+            toDate: c.toDate,
+          })),
+        ),
         db
-          .insert(agreementParty)
-          .values(parties.map((p) => ({ ...p, agreementId: id, organizationId }))),
-        db
-          .insert(agreementUnit)
-          .values(unitIds.map((unitId) => ({ agreementId: id, unitId, organizationId }))),
+          .insert(ownershipTerms)
+          .values({ agreementId: id, organizationId, previousAgreementId: seller.id }),
+        db.insert(agreementParty).values(
+          parties.map((p) => ({
+            ...p,
+            agreementId: id,
+            organizationId,
+            fromDate: input.transferDate,
+          })),
+        ),
+        db.insert(agreementUnit).values(
+          unitIds.map((unitId) => ({
+            agreementId: id,
+            unitId,
+            organizationId,
+            fromDate: input.transferDate,
+          })),
+        ),
       ]),
     )
     return { id }

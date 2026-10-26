@@ -1,13 +1,28 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { agreement, agreementParty, agreementUnit, leaseTerms, party, type unit } from '#/db/schema'
+import {
+  agreement,
+  agreementParty,
+  agreementUnit,
+  charge,
+  leaseTerms,
+  party,
+  type unit,
+} from '#/db/schema'
+import { currentTerms, shownRows } from '#/features/agreements/current'
 import {
   joinNames,
   leaseParties,
   type PartiesProblem,
   primaryParty,
 } from '#/features/agreements/parties'
-import { checkPartiesExist, checkUnitsFree, invoiceHistory } from '#/features/agreements/program'
+import {
+  checkPartiesExist,
+  checkUnitsFree,
+  correctBaseCharge,
+  correctOpenTerms,
+  invoiceHistory,
+} from '#/features/agreements/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
@@ -25,24 +40,40 @@ const withLeaseDetails = {
     with: { party: { columns: { id: true, name: true, kind: true } } },
   },
   units: { with: { unit: { with: { property: { columns: { id: true, designation: true } } } } } },
+  charges: true,
 } as const
 
 type LeaseRow = typeof agreement.$inferSelect & {
+  charges: (typeof charge.$inferSelect)[]
   leaseTerms: typeof leaseTerms.$inferSelect | null
   parties: (typeof agreementParty.$inferSelect & {
     party: { id: string; name: string; kind: 'person' | 'company' }
   })[]
-  units: {
+  units: (typeof agreementUnit.$inferSelect & {
     unit: typeof unit.$inferSelect & { property: { id: string; designation: string } }
-  }[]
+  })[]
 }
 
-const toView = ({ leaseTerms: terms, parties, ...row }: LeaseRow, on: string) => {
+const toView = (
+  { leaseTerms: terms, parties: partyRows, units: unitRows, charges, ...row }: LeaseRow,
+  on: string,
+) => {
   if (!terms) throw new Error(`Lease ${row.id} has no lease terms`)
   const { agreementId: _, organizationId: __, ...leaseFields } = terms
   const lease = { ...row, ...leaseFields }
+  const now = currentTerms({ ...row, parties: partyRows, units: unitRows, charges }, on)
+  const parties = shownRows(now.parties, partyRows)
   return {
     ...lease,
+    // The base charge in force, as the familiar rent fields.
+    rentOre: now.rentOre,
+    rentInterval: now.rentInterval,
+    vat: now.vat,
+    baseChargeId: now.baseCharge?.id ?? null,
+    charges: [...charges].sort((a, b) => a.fromDate.localeCompare(b.fromDate)),
+    /** Every party and unit row with its dates, for corrections and history. */
+    partyRows: partyRows.map(({ party, ...p }) => ({ ...p, name: party.name })),
+    unitRows: unitRows.map(({ unit, ...u }) => ({ ...u, label: unit.label })),
     /** The tenant named first; the one the lease pages show. */
     tenant: primaryParty(parties).party,
     /** Every tenant's name, as the avier print them. */
@@ -52,7 +83,7 @@ const toView = ({ leaseTerms: terms, parties, ...row }: LeaseRow, on: string) =>
       role: p.role,
       receivesInvoices: p.receivesInvoices,
     })),
-    units: row.units
+    units: shownRows(now.units, unitRows)
       .map(({ unit }) => ({
         id: unit.id,
         label: unit.label,
@@ -207,10 +238,16 @@ export const createLease = (input: CreateLeaseInput) =>
             extensionMonths,
             moveOutDate: null,
           }),
-          rentOre: input.rentOre,
-          rentInterval: input.rentInterval,
           invoiceInterval: input.invoiceInterval,
+        }),
+        db.insert(charge).values({
+          organizationId,
+          agreementId: leaseId,
+          kind: 'rent',
+          amountOre: input.rentOre,
+          interval: input.rentInterval,
           vat: input.vat,
+          fromDate: input.startDate,
         }),
         db.insert(leaseTerms).values({
           agreementId: leaseId,
@@ -219,12 +256,22 @@ export const createLease = (input: CreateLeaseInput) =>
           extensionMonths,
           noticePeriodMonths: input.noticePeriodMonths,
         }),
-        db
-          .insert(agreementParty)
-          .values(parties.map((p) => ({ ...p, agreementId: leaseId, organizationId }))),
-        db
-          .insert(agreementUnit)
-          .values(unitIds.map((unitId) => ({ agreementId: leaseId, unitId, organizationId }))),
+        db.insert(agreementParty).values(
+          parties.map((p) => ({
+            ...p,
+            agreementId: leaseId,
+            organizationId,
+            fromDate: input.startDate,
+          })),
+        ),
+        db.insert(agreementUnit).values(
+          unitIds.map((unitId) => ({
+            agreementId: leaseId,
+            unitId,
+            organizationId,
+            fromDate: input.startDate,
+          })),
+        ),
       ]),
     )
     return yield* getLease(leaseId)
@@ -253,6 +300,17 @@ export const updateLease = (input: UpdateLeaseInput) =>
       current.id,
     )
     const parties = yield* checkParties(current.tenant.id, input)
+    const base = yield* correctBaseCharge(
+      current,
+      {
+        startDate: input.startDate,
+        amountOre: input.rentOre,
+        interval: input.rentInterval,
+        vat: input.vat,
+      },
+      yield* today,
+    )
+    if (!base) return yield* new Conflict({ message: 'Avtalet saknar hyra' })
 
     yield* orgQuery((db, organizationId) =>
       db.batch([
@@ -265,12 +323,13 @@ export const updateLease = (input: UpdateLeaseInput) =>
               extensionMonths,
               moveOutDate: current.moveOutDate,
             }),
-            rentOre: input.rentOre,
-            rentInterval: input.rentInterval,
             invoiceInterval: input.invoiceInterval,
-            vat: input.vat,
           })
           .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
+        db
+          .update(charge)
+          .set(base.values)
+          .where(and(eq(charge.id, base.id), eq(charge.organizationId, organizationId))),
         db
           .update(leaseTerms)
           .set({
@@ -284,28 +343,14 @@ export const updateLease = (input: UpdateLeaseInput) =>
               eq(leaseTerms.organizationId, organizationId),
             ),
           ),
-        db
-          .delete(agreementParty)
-          .where(
-            and(
-              eq(agreementParty.agreementId, current.id),
-              eq(agreementParty.organizationId, organizationId),
-            ),
-          ),
-        db
-          .insert(agreementParty)
-          .values(parties.map((p) => ({ ...p, agreementId: current.id, organizationId }))),
-        db
-          .delete(agreementUnit)
-          .where(
-            and(
-              eq(agreementUnit.agreementId, current.id),
-              eq(agreementUnit.organizationId, organizationId),
-            ),
-          ),
-        db
-          .insert(agreementUnit)
-          .values(unitIds.map((unitId) => ({ agreementId: current.id, unitId, organizationId }))),
+        ...correctOpenTerms(
+          db,
+          organizationId,
+          current.id,
+          { oldStart: current.startDate, newStart: input.startDate },
+          { parties: current.partyRows, units: current.unitRows },
+          { parties, unitIds },
+        ),
       ]),
     )
     return yield* getLease(current.id)

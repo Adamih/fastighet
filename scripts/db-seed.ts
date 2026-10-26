@@ -9,23 +9,21 @@
 // only pass their checksums.
 
 import { hashPassword } from 'better-auth/crypto'
-import { count, eq } from 'drizzle-orm'
+import { count, eq, getTableColumns } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { getPlatformProxy } from 'wrangler'
 import * as schema from '#/db/schema'
-import { equalShares, invoiceRecipient } from '#/features/agreements/parties'
+import { type BillableAgreement, billFor } from '#/features/agreements/billing'
+import type { Charge, InvoiceLineDraft } from '#/features/agreements/charges'
+import { equalShares, type Party } from '#/features/agreements/parties'
 import { type CreditRequest, draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
   formatBankgiro,
+  type InvoiceInterval,
   invoicePeriod,
   ocrFor,
   type Period,
-  type RentTerms,
-  rentForPeriod,
-  rentLineDescription,
-  VAT_RATE_PERCENT,
-  vatFor,
 } from '#/features/invoicing/rules'
 import { earliestMoveOutDate, effectiveEndDate, type LeaseTerms } from '#/features/leases/terms'
 import type { UnitKind } from '#/features/properties/unit-kinds'
@@ -34,6 +32,9 @@ import { addDays, addMonths, stockholmDate } from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
 import { formatSek } from '#/lib/money'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
+
+/** Seed records are built up step by step, so their fields stay writable. */
+type Mutable<T> = { -readonly [K in keyof T]: T[K] }
 
 const withCheckDigit = (base: string) => `${base}${luhnCheckDigit(base)}`
 const id = () => crypto.randomUUID()
@@ -64,7 +65,9 @@ async function insertAll<T extends Record<string, unknown>>(
   rows: T[],
 ) {
   if (rows.length === 0) return
-  const perStatement = Math.max(1, Math.floor(90 / Object.keys(rows[0]).length))
+  // Drizzle binds every column of the table in a multi-row insert, defaults included.
+  const columns = Object.keys(getTableColumns(table)).length
+  const perStatement = Math.max(1, Math.floor(90 / columns))
   for (let i = 0; i < rows.length; i += perStatement) {
     // biome-ignore lint/suspicious/noExplicitAny: one helper for every table's insert type
     await db.insert(table).values(rows.slice(i, i + perStatement) as any)
@@ -300,8 +303,8 @@ async function seed() {
     units: Unit[]
     terms: LeaseTerms & { noticeDate?: string }
     rentOre: number
-    rentInterval: RentTerms['rentInterval']
-    invoiceInterval: RentTerms['invoiceInterval']
+    rentInterval: 'monthly' | 'yearly'
+    invoiceInterval: InvoiceInterval
     vat: boolean
     payer: Payer
   }
@@ -480,6 +483,87 @@ async function seed() {
       party: tenants[key],
     })),
   }))
+  type Lease = (typeof leases)[number]
+  const leaseByKey = (key: string) => {
+    const found = leases.find((l) => l.key === key)
+    if (!found) throw new Error(`seed lease ${key}`)
+    return found
+  }
+
+  // What each lease bills, from a date: its rent from the start, plus a few changes below. Each
+  // charge was recorded on `createdOn`; a seeded run only sees charges recorded by its issue date.
+  type SeedCharge = Mutable<Charge> & { agreementId: string; createdOn: string }
+  const charges: SeedCharge[] = leases.map((l) => ({
+    id: id(),
+    agreementId: l.id,
+    kind: 'rent',
+    unitId: null,
+    description: null,
+    amountOre: l.rentOre,
+    interval: l.rentInterval,
+    vat: l.vat,
+    fromDate: l.terms.startDate,
+    toDate: null,
+    createdOn: addDays(l.terms.startDate, -30),
+  }))
+  const unitRows = leases.flatMap((l) =>
+    l.units.map((u) => ({
+      agreementId: l.id,
+      unit: u,
+      fromDate: l.terms.startDate,
+      toDate: null as string | null,
+    })),
+  )
+  const addCharge = (lease: Lease, charge: Omit<SeedCharge, 'id' | 'agreementId'>) => {
+    const added = { ...charge, id: id(), agreementId: lease.id }
+    charges.push(added)
+    return added
+  }
+  // Emma's rent went up 3,5 % three months ago, agreed three weeks before.
+  const emmaRaise = addMonths(thisMonth, -3)
+  const emmaRent = charges.find((c) => c.agreementId === leaseByKey('emma').id)
+  if (emmaRent) {
+    emmaRent.toDate = addDays(emmaRaise, -1)
+    addCharge(leaseByKey('emma'), {
+      ...emmaRent,
+      amountOre: Math.round((emmaRent.amountOre * 1.035) / 100) * 100,
+      fromDate: emmaRaise,
+      toDate: null,
+      createdOn: addDays(emmaRaise, -21),
+    })
+  }
+  // Fatima added parking space P4 two months ago, at 650 kr a month on top of her rent.
+  const fatimaParking = addMonths(thisMonth, -2)
+  unitRows.push({
+    agreementId: leaseByKey('fatima').id,
+    unit: units.lP4,
+    fromDate: fatimaParking,
+    toDate: null,
+  })
+  addCharge(leaseByKey('fatima'), {
+    kind: 'parking',
+    unitId: units.lP4.id,
+    description: null,
+    amountOre: 65_000,
+    interval: 'monthly',
+    vat: false,
+    fromDate: fatimaParking,
+    toDate: null,
+    createdOn: addDays(fatimaParking, -25),
+  })
+  // Anna lost a key today; the replacement goes on her next avi.
+  addCharge(leaseByKey('anna'), {
+    kind: 'one_off',
+    unitId: null,
+    description: 'Ny nyckel',
+    amountOre: 45_000,
+    interval: 'once',
+    vat: false,
+    fromDate: today,
+    toDate: null,
+    createdOn: today,
+  })
+
   // Leases are agreements with lease terms; the agreement's end date is the last billed day.
   await insertAll(
     schema.agreement,
@@ -490,11 +574,16 @@ async function seed() {
       kind: 'lease' as const,
       startDate: l.terms.startDate,
       endDate: effectiveEndDate(l.terms),
-      rentOre: l.rentOre,
-      rentInterval: l.rentInterval,
       invoiceInterval: l.invoiceInterval,
-      vat: l.vat,
       createdAt: new Date(`${addDays(l.terms.startDate, -between(20, 45))}T09:00:00Z`),
+    })),
+  )
+  await insertAll(
+    schema.charge,
+    charges.map(({ createdOn, ...c }) => ({
+      ...c,
+      organizationId: orgId,
+      createdAt: new Date(`${createdOn}T09:00:00Z`),
     })),
   )
   await insertAll(
@@ -519,37 +608,56 @@ async function seed() {
         role: index === 0 ? ('tenant' as const) : ('co_tenant' as const),
         receivesInvoices: p.receivesInvoices,
         position: p.position,
+        fromDate: l.terms.startDate,
       })),
     ),
   )
   await insertAll(
     schema.agreementUnit,
-    leases.flatMap((l) =>
-      l.units.map((u) => ({ agreementId: l.id, unitId: u.id, organizationId: orgId })),
-    ),
+    unitRows.map((u) => ({
+      agreementId: u.agreementId,
+      unitId: u.unit.id,
+      organizationId: orgId,
+      fromDate: u.fromDate,
+      toDate: u.toDate,
+    })),
   )
 
   // --- Invoice runs: one a month for the last eight months and the coming one, each issued 20
-  // days before its month starts (only runs whose issue date has passed). Built exactly like
-  // "Skapa avier", so each lease is invoiced its rent for the period.
+  // days before its month starts (only runs whose issue date has passed). Built with the same
+  // rule as "Skapa avier" (`billFor`), from the charges, parties and units of each lease.
   type Invoice = typeof schema.invoice.$inferInsert & {
     id: string
-    lease: (typeof leases)[number]
-    line: string
+    lease: Lease
+    lines: InvoiceLineDraft[]
     /** Credit notes against it, so a payment only subtracts those issued before it was made. */
     credits: { issueDate: string; totalOre: number }[]
   }
   const invoices: Invoice[] = []
+  const billedOnce = new Set<string>()
+  const billable = (lease: Lease, issueDate: string): BillableAgreement => ({
+    startDate: lease.terms.startDate,
+    endDate: effectiveEndDate(lease.terms),
+    charges: charges.filter((c) => c.agreementId === lease.id && c.createdOn <= issueDate),
+    parties: lease.parties.map((p) => ({ ...p, fromDate: lease.terms.startDate, toDate: null })),
+    units: unitRows
+      .filter((u) => u.agreementId === lease.id)
+      .map((u) => ({
+        ...u,
+        unitId: u.unit.id,
+        designation: u.unit.designation,
+        label: u.unit.label,
+      })),
+  })
   const invoiceFor = (
-    lease: (typeof leases)[number],
+    lease: Lease,
     period: Period,
     issueDate: string,
-    terms: RentTerms,
+    agreement = billable(lease, issueDate),
   ) => {
-    const netOre = rentForPeriod(terms, period)
-    if (netOre <= 0) return
-    const recipient = invoiceRecipient(lease.parties)
-    const vatOre = vatFor(netOre, lease.vat)
+    const bill = billFor(agreement, period, billedOnce)
+    if (!bill) return
+    for (const line of bill.lines) if (line.kind === 'one_off') billedOnce.add(line.chargeId)
     const number = invoices.length + 1
     invoices.push({
       id: id(),
@@ -558,25 +666,22 @@ async function seed() {
       number,
       ocr: ocrFor(number),
       agreementId: lease.id,
-      ...recipient,
+      ...bill.recipient,
       periodStart: period.start,
       periodEnd: period.end,
       issueDate,
       dueDate: dueDate(period, issueDate),
-      netOre,
-      vatOre,
-      totalOre: netOre + vatOre,
-      sentAt: recipient.recipientEmail ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`) : null,
+      netOre: bill.netOre,
+      vatOre: bill.vatOre,
+      totalOre: bill.totalOre,
+      sentAt: bill.recipient.recipientEmail
+        ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`)
+        : null,
       createdAt: new Date(`${issueDate}T07:00:00Z`),
-      line: rentLineDescription(lease.units, period),
+      lines: bill.lines,
       credits: [],
     })
   }
-  const termsOf = (l: (typeof leases)[number]): RentTerms => ({
-    ...l,
-    startDate: l.terms.startDate,
-    endDate: effectiveEndDate(l.terms),
-  })
   let oskarCredited: Invoice | undefined
   for (let offset = -8; offset <= 1; offset++) {
     const monthStart = addMonths(thisMonth, offset)
@@ -588,8 +693,8 @@ async function seed() {
       // When this month's run went out, Oskar still lived there: invoice him as the lease was.
       const asSigned =
         lease.key === 'oskar' && offset === 0
-          ? { ...termsOf(lease), endDate: null }
-          : termsOf(lease)
+          ? { ...billable(lease, issueDate), endDate: null }
+          : billable(lease, issueDate)
       const before = invoices.length
       invoiceFor(lease, period, issueDate, asSigned)
       if (lease.key === 'oskar' && offset === 0 && invoices.length > before) {
@@ -598,37 +703,31 @@ async function seed() {
     }
     // Two months back Ahmed's avi was created with his old address and caught before it was sent.
     // It was voided and a corrected avi issued for the same period ("Ny avi för perioden").
-    const ahmed = leases.find((l) => l.key === 'ahmed')
+    const ahmed = leaseByKey('ahmed')
     const wrong = invoices.find((i) => i.lease === ahmed && i.issueDate === issueDate)
-    if (offset === -2 && ahmed && wrong) {
+    if (offset === -2 && wrong) {
       const correctedOn = addDays(issueDate, 2)
       wrong.voidedAt = new Date(`${correctedOn}T09:00:00Z`)
       wrong.sentAt = null
-      invoiceFor(
-        ahmed,
-        { start: wrong.periodStart, end: wrong.periodEnd },
-        correctedOn,
-        termsOf(ahmed),
-      )
+      invoiceFor(ahmed, { start: wrong.periodStart, end: wrong.periodEnd }, correctedOn)
       const corrected = invoices.at(-1)
       if (corrected) corrected.replacesInvoiceId = wrong.id
     }
   }
   await insertAll(
     schema.invoice,
-    invoices.map(({ lease: _, line: __, ...i }) => i),
+    invoices.map(({ lease: _, lines: __, credits: ___, ...i }) => i),
   )
   await insertAll(
     schema.invoiceLine,
-    invoices.map((i) => ({
-      invoiceId: i.id,
-      organizationId: orgId,
-      position: 1,
-      description: i.line,
-      netOre: i.netOre,
-      vatRatePercent: i.vatOre > 0 ? VAT_RATE_PERCENT : 0,
-      vatOre: i.vatOre,
-    })),
+    invoices.flatMap((i) =>
+      i.lines.map((line, index) => ({
+        ...line,
+        invoiceId: i.id,
+        organizationId: orgId,
+        position: index + 1,
+      })),
+    ),
   )
 
   // --- Credit notes, in date order. Each is built with the "Kreditera" rule and lowers what is
@@ -643,14 +742,7 @@ async function seed() {
         totalOre: invoice.totalOre,
         creditedOre: invoice.creditedOre ?? 0,
         voidedAt: null,
-        lines: [
-          {
-            description: invoice.line,
-            netOre: invoice.netOre,
-            vatRatePercent: invoice.vatOre > 0 ? VAT_RATE_PERCENT : 0,
-            vatOre: invoice.vatOre,
-          },
-        ],
+        lines: invoice.lines,
       },
       request,
     )
@@ -1055,10 +1147,20 @@ async function seedBrf() {
 
   type Agreement = typeof schema.agreement.$inferInsert & {
     id: string
-    units: { designation: string; label: string }[]
-    parties: { position: number; receivesInvoices: boolean; party: (typeof members)[string] }[]
+    units: { designation: string; label: string; fromDate: string; toDate: null }[]
+    parties: {
+      position: number
+      receivesInvoices: boolean
+      fromDate: string
+      toDate: null
+      party: Party['party']
+    }[]
   }
   const agreements: Agreement[] = []
+  const charges: (Mutable<Charge> & { agreementId: string })[] = []
+  const terms: (typeof schema.ownershipTerms.$inferInsert)[] = []
+  const parties: (typeof schema.agreementParty.$inferInsert)[] = []
+  const links: (typeof schema.agreementUnit.$inferInsert)[] = []
   const owned = (
     flat: (typeof flats)[number],
     owners: [string, number][],
@@ -1076,28 +1178,38 @@ async function seedBrf() {
       kind: 'tenant_ownership',
       startDate,
       endDate: extra.endDate ?? null,
-      rentOre: feeOf(flat),
-      rentInterval: 'monthly',
       invoiceInterval: 'monthly',
-      vat: false,
       createdAt: new Date(`${addDays(startDate, -between(10, 30))}T09:00:00Z`),
       units: [flat, ...(extra.units ?? [])].map((u) => ({
         designation: property.designation,
         label: u.label,
+        fromDate: startDate,
+        toDate: null,
       })),
       parties: owners.map(([name], i) => ({
         position: i + 1,
         receivesInvoices: i === 0,
+        fromDate: startDate,
+        toDate: null,
         party: members[name],
       })),
     }
     agreements.push(ownership)
+    charges.push({
+      id: id(),
+      agreementId: ownership.id,
+      kind: 'fee',
+      unitId: null,
+      description: null,
+      amountOre: feeOf(flat),
+      interval: 'monthly',
+      vat: false,
+      fromDate: startDate,
+      toDate: null,
+    })
     terms.push({
       agreementId: ownership.id,
       organizationId: orgId,
-      shareRatio: shareOf(flat),
-      depositOre: Math.round(((flat.areaSqm ?? 0) * 6_500_00) / 100_000) * 100_000,
-      grantedOn: '2004-05-01',
       previousAgreementId: extra.previousAgreementId ?? null,
     })
     parties.push(
@@ -1109,16 +1221,19 @@ async function seedBrf() {
         sharePercent: share,
         receivesInvoices: i === 0,
         position: i + 1,
+        fromDate: startDate,
       })),
     )
     for (const u of [flat, ...(extra.units ?? [])]) {
-      links.push({ agreementId: ownership.id, unitId: u.id, organizationId: orgId })
+      links.push({
+        agreementId: ownership.id,
+        unitId: u.id,
+        organizationId: orgId,
+        fromDate: startDate,
+      })
     }
     return ownership
   }
-  const terms: (typeof schema.ownershipTerms.$inferInsert)[] = []
-  const parties: (typeof schema.agreementParty.$inferInsert)[] = []
-  const links: (typeof schema.agreementUnit.$inferInsert)[] = []
   const half = equalShares(2)
   const couple = (a: string, b: string): [string, number][] => [
     [a, half[0]],
@@ -1146,6 +1261,31 @@ async function seedBrf() {
   owned(f1301, couple('Elsa Strand', 'Viktor Strand'), '2017-10-01')
   owned(f1103, [['Mats Wik', 100]], soldOn, { previousAgreementId: sold.id })
 
+  // The board raised every fee by 4 % two months ago, decided well before the run went out.
+  const feeRaise = addMonths(thisMonth, -2)
+  for (const fee of [...charges]) {
+    const ownership = agreements.find((a) => a.id === fee.agreementId)
+    if (!ownership || (ownership.endDate && ownership.endDate < feeRaise)) continue
+    fee.toDate = addDays(feeRaise, -1)
+    charges.push({
+      ...fee,
+      id: id(),
+      amountOre: Math.round((fee.amountOre * 1.04) / 100) * 100,
+      fromDate: feeRaise,
+      toDate: null,
+    })
+  }
+
+  // The apartment register: each apartment's andelstal, insats and upplåtelse, kept across sales.
+  const register = flats.map((flat) => ({
+    unitId: flat.id,
+    organizationId: orgId,
+    shareRatio: shareOf(flat),
+    depositOre: Math.round(((flat.areaSqm ?? 0) * 6_500_00) / 100_000) * 100_000,
+    grantFeeOre: null,
+    grantedOn: '2004-05-01',
+  }))
+
   // The salon rents the commercial unit on an ordinary lease, with VAT, invoiced quarterly.
   const salonLease: Agreement = {
     id: id(),
@@ -1154,16 +1294,39 @@ async function seedBrf() {
     kind: 'lease',
     startDate: '2024-01-01',
     endDate: null,
-    rentOre: 16_800_000,
-    rentInterval: 'yearly',
     invoiceInterval: 'quarterly',
-    vat: true,
     createdAt: new Date('2023-11-20T09:00:00Z'),
-    units: [{ designation: property.designation, label: salonUnit.label }],
-    // biome-ignore lint/suspicious/noExplicitAny: the salon is a company, not a member
-    parties: [{ position: 1, receivesInvoices: true, party: salonOwner as any }],
+    units: [
+      {
+        designation: property.designation,
+        label: salonUnit.label,
+        fromDate: '2024-01-01',
+        toDate: null,
+      },
+    ],
+    parties: [
+      {
+        position: 1,
+        receivesInvoices: true,
+        fromDate: '2024-01-01',
+        toDate: null,
+        party: salonOwner,
+      },
+    ],
   }
   agreements.push(salonLease)
+  charges.push({
+    id: id(),
+    agreementId: salonLease.id,
+    kind: 'rent',
+    unitId: null,
+    description: null,
+    amountOre: 16_800_000,
+    interval: 'yearly',
+    vat: true,
+    fromDate: '2024-01-01',
+    toDate: null,
+  })
   parties.push({
     agreementId: salonLease.id,
     partyId: salonOwner.id,
@@ -1171,14 +1334,25 @@ async function seedBrf() {
     role: 'tenant',
     receivesInvoices: true,
     position: 1,
+    fromDate: '2024-01-01',
   })
-  links.push({ agreementId: salonLease.id, unitId: salonUnit.id, organizationId: orgId })
+  links.push({
+    agreementId: salonLease.id,
+    unitId: salonUnit.id,
+    organizationId: orgId,
+    fromDate: '2024-01-01',
+  })
 
   await insertAll(
     schema.agreement,
     agreements.map(({ units: _, parties: __, ...a }) => a),
   )
+  await insertAll(
+    schema.charge,
+    charges.map((c) => ({ ...c, organizationId: orgId })),
+  )
   await insertAll(schema.ownershipTerms, terms)
+  await insertAll(schema.brfApartment, register)
   await db.insert(schema.leaseTerms).values({
     agreementId: salonLease.id,
     organizationId: orgId,
@@ -1190,7 +1364,10 @@ async function seedBrf() {
   await insertAll(schema.agreementUnit, links)
 
   // Monthly runs for the last four months and the coming one, issued 20 days ahead.
-  const invoices: (typeof schema.invoice.$inferInsert & { id: string; line: string })[] = []
+  const invoices: (typeof schema.invoice.$inferInsert & {
+    id: string
+    lines: InvoiceLineDraft[]
+  })[] = []
   for (let offset = -4; offset <= 1; offset++) {
     const monthStart = addMonths(thisMonth, offset)
     const issueDate = addDays(monthStart, -20)
@@ -1198,38 +1375,38 @@ async function seedBrf() {
     for (const a of agreements) {
       const period = invoicePeriod(monthStart.slice(0, 7), a.invoiceInterval)
       if (!period) continue
-      const terms: RentTerms = {
-        startDate: a.startDate,
-        endDate: a.endDate ?? null,
-        rentOre: a.rentOre,
-        rentInterval: a.rentInterval,
-        invoiceInterval: a.invoiceInterval,
-        vat: a.vat ?? false,
-      }
-      const netOre = rentForPeriod(terms, period)
-      if (netOre <= 0) continue
-      const vatOre = vatFor(netOre, terms.vat)
+      const bill = billFor(
+        {
+          startDate: a.startDate,
+          endDate: a.endDate ?? null,
+          charges: charges.filter((c) => c.agreementId === a.id),
+          parties: a.parties,
+          units: a.units,
+        },
+        period,
+        new Set(),
+      )
+      if (!bill) continue
       const number = invoices.length + 1
-      const recipient = invoiceRecipient(a.parties)
       invoices.push({
         id: id(),
         organizationId: orgId,
         number,
         ocr: ocrFor(number),
         agreementId: a.id,
-        ...recipient,
+        ...bill.recipient,
         periodStart: period.start,
         periodEnd: period.end,
         issueDate,
         dueDate: dueDate(period, issueDate),
-        netOre,
-        vatOre,
-        totalOre: netOre + vatOre,
-        sentAt: recipient.recipientEmail
+        netOre: bill.netOre,
+        vatOre: bill.vatOre,
+        totalOre: bill.totalOre,
+        sentAt: bill.recipient.recipientEmail
           ? new Date(`${issueDate}T07:${between(10, 50)}:00Z`)
           : null,
         createdAt: new Date(`${issueDate}T07:00:00Z`),
-        line: rentLineDescription(a.units, period, a.kind),
+        lines: bill.lines,
       })
     }
   }
@@ -1264,19 +1441,18 @@ async function seedBrf() {
   }
   await insertAll(
     schema.invoice,
-    invoices.map(({ line: _, ...i }) => i),
+    invoices.map(({ lines: _, ...i }) => i),
   )
   await insertAll(
     schema.invoiceLine,
-    invoices.map((i) => ({
-      invoiceId: i.id,
-      organizationId: orgId,
-      position: 1,
-      description: i.line,
-      netOre: i.netOre,
-      vatRatePercent: i.vatOre > 0 ? VAT_RATE_PERCENT : 0,
-      vatOre: i.vatOre,
-    })),
+    invoices.flatMap((i) =>
+      i.lines.map((line, index) => ({
+        ...line,
+        invoiceId: i.id,
+        organizationId: orgId,
+        position: index + 1,
+      })),
+    ),
   )
   await db.insert(schema.paymentImport).values({
     id: importId,

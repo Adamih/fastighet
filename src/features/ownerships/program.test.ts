@@ -5,6 +5,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
+import { changeBaseCharge } from '#/features/agreements/program'
 import { CurrentOrganization, CurrentUser, Database, PermissionChecker } from '#/server/services'
 import { createOwnership, deleteOwnership, getOwnership, transferOwnership } from './program'
 
@@ -97,7 +98,12 @@ test('a bostadsrätt is created with its owners, units and details', async () =>
     ['erik', 50, true],
   ])
   expect(created.units.map((u) => u.label)).toEqual(['1001', 'F1'])
-  expect(created).toMatchObject({ rentOre: 412_500, vat: false, shareRatio: 2.145, endDate: null })
+  expect(created).toMatchObject({ rentOre: 412_500, shareRatio: 2.145, endDate: null })
+  // The fee is a charge; andelstal and insats live in the apartment register.
+  expect(created.charges.map((c) => [c.kind, c.amountOre, c.fromDate, c.toDate])).toEqual([
+    ['fee', 412_500, '2020-05-01', null],
+  ])
+  expect(created.apartmentUnitId).toBe('u1')
 })
 
 test('owners must share 100 % and units must be free', async () => {
@@ -146,4 +152,33 @@ test('a transfer ends the sellers’ bostadsrätt and starts the buyers’; dele
 
   await run(deleteOwnership(buyerId))
   expect((await run(getOwnership(sellerId))).endDate).toBeNull()
+})
+
+test('a new fee from a date ends the old one and makes up already billed days', async () => {
+  const { run, sqlite } = harness()
+  const { id } = await run(createOwnership(ownership))
+  const before = await run(getOwnership(id))
+  // November was already billed at the old fee.
+  sqlite.exec(`
+    INSERT INTO invoice (id, organization_id, number, ocr, agreement_id, party_id, recipient_name,
+      period_start, period_end, issue_date, due_date, net_ore, vat_ore, total_ore)
+    VALUES ('i1', 'org', 1, '18', '${id}', 'erik', 'Anna och Erik', '2026-11-01', '2026-11-30',
+      '2026-10-12', '2026-10-30', 412500, 0, 412500);
+    INSERT INTO invoice_line (id, invoice_id, organization_id, position, kind, charge_id,
+      description, net_ore, vat_rate_percent, vat_ore)
+    VALUES ('l1', 'i1', 'org', 1, 'fee', '${before.baseChargeId}', 'Avgift', 412500, 0, 0);
+  `)
+  const result = await run(
+    changeBaseCharge({ agreementId: id, fromDate: '2026-11-01', amountOre: 429_000 }),
+  )
+  expect(result.retroactiveOre).toBe(16_500)
+  const after = await run(getOwnership(id))
+  expect(after.charges.map((c) => [c.kind, c.amountOre, c.fromDate, c.toDate])).toEqual([
+    ['fee', 412_500, '2020-05-01', '2026-10-31'],
+    ['one_off', 16_500, expect.any(String), null],
+    ['fee', 429_000, '2026-11-01', null],
+  ])
+  expect(after.charges.find((c) => c.kind === 'one_off')?.description).toBe(
+    'Retroaktiv justering av avgift 2026-11-01 – 2026-11-30',
+  )
 })

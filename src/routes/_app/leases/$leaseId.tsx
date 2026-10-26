@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
+  Banknote,
   CircleCheck,
   DoorOpen,
   FilePlus,
@@ -28,6 +29,7 @@ import {
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
+import { useChangeBaseChargeDrawer } from '#/features/agreements/change-charge-form'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
@@ -86,6 +88,7 @@ function LeasePage() {
   })
   const terminate = useTerminateLeaseDrawer(lease)
   const edit = useEditLeaseDrawer(lease)
+  const changeRent = useChangeBaseChargeDrawer(lease)
   const today = stockholmDate(Date.now())
 
   const queryClient = useQueryClient()
@@ -129,6 +132,12 @@ function LeasePage() {
                   {m.common_edit()}
                 </Button>
               )}
+              {open && (
+                <Button variant="outline" className="flex-1 sm:flex-none" onClick={changeRent.open}>
+                  <Banknote aria-hidden="true" />
+                  {changeRent.label}
+                </Button>
+              )}
               {open && !lease.moveOutDate && (
                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={terminate.open}>
                   <FileX aria-hidden="true" />
@@ -151,6 +160,9 @@ function LeasePage() {
         }
       />
       {withdraw.error && <p className="text-destructive text-sm">{withdraw.error.message}</p>}
+      {changeRent.notice && (
+        <p className="text-[13px] text-emerald-700 dark:text-emerald-300">{changeRent.notice}</p>
+      )}
 
       <LeaseStats lease={lease} invoices={leaseInvoices} today={today} />
 

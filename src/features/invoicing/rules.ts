@@ -1,5 +1,3 @@
-import type { AgreementKind } from '#/features/agreements/kinds'
-import { documentTerms } from '#/features/settings/terminology'
 import {
   addDays,
   addMonths,
@@ -19,15 +17,18 @@ export interface Period {
   readonly end: string
 }
 
-/** What billing needs from an agreement, whatever its kind. */
+export type InvoiceInterval = 'monthly' | 'quarterly'
+
+/**
+ * One recurring amount over a span of days: what `rentForPeriod` prorates. Charges use it for
+ * each recurring charge (`recurringAmount` in `features/agreements/charges.ts`).
+ */
 export interface RentTerms {
   readonly startDate: string
-  /** The last billed day (`agreement.endDate`), or null while it runs until further notice. */
+  /** The last day, or null while it runs until further notice. */
   readonly endDate: string | null
   readonly rentOre: number
   readonly rentInterval: 'monthly' | 'yearly'
-  readonly invoiceInterval: 'monthly' | 'quarterly'
-  readonly vat: boolean
 }
 
 /** An invoice run is chosen by month ("2026-12"). */
@@ -37,10 +38,7 @@ export const isInvoiceMonth = (value: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(
  * The period a lease is invoiced for in a run for `month`: that month for monthly invoicing; the
  * quarter starting that month for quarterly invoicing, which is only invoiced in Jan/Apr/Jul/Oct.
  */
-export function invoicePeriod(
-  month: string,
-  interval: RentTerms['invoiceInterval'],
-): Period | null {
+export function invoicePeriod(month: string, interval: InvoiceInterval): Period | null {
   const start = `${month}-01`
   if (interval === 'monthly') return { start, end: endOfMonth(start) }
   const monthNumber = Number(month.slice(5, 7))
@@ -153,17 +151,4 @@ export function periodLabel(period: Period): string {
   const year = period.end.slice(0, 4)
   if (period.start.slice(0, 7) === period.end.slice(0, 7)) return `${monthOf(period.start)} ${year}`
   return `${monthOf(period.start)}–${monthOf(period.end)} ${year}`
-}
-
-/** "Hyra Uppsala Kungsängen 12:3 · 1001, december 2026", or "Avgift …" for a bostadsrätt. */
-export function rentLineDescription(
-  units: readonly { designation: string; label: string }[],
-  period: Period,
-  kind: AgreementKind = 'lease',
-): string {
-  const objects = units
-    .map((u) => `${u.designation} · ${u.label}`)
-    .sort()
-    .join(', ')
-  return `${documentTerms(kind).charge} ${objects}, ${periodLabel(period)}`
 }
