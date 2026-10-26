@@ -10,7 +10,6 @@ import {
   endClient,
   listClients,
   listManagers,
-  managerActivity,
   previewRequest,
   requestAccess,
   revokeGrant,
@@ -81,10 +80,3 @@ export const revokeGrantFn = createServerFn({ method: 'POST' })
 
 export const managersQuery = () =>
   queryOptions({ queryKey: ['management', 'managers'], queryFn: () => listManagersFn() })
-
-export const managerActivityFn = createServerFn({ method: 'GET' }).handler(() =>
-  runApp(managerActivity),
-)
-
-export const managerActivityQuery = () =>
-  queryOptions({ queryKey: ['management', 'activity'], queryFn: () => managerActivityFn() })
