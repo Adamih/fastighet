@@ -1,20 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { X } from 'lucide-react'
 import { DeleteButton } from '#/components/delete-button'
 import { Optional, optionsFrom, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { QueryError } from '#/components/query-error'
 import { SubmissionForm } from '#/components/submission-form'
-import { Button } from '#/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '#/components/ui/select'
-import { MAX_PARTIES } from '#/features/agreements/parties'
 import { UnitsField } from '#/features/agreements/units-field'
 import { useCan } from '#/features/auth/use-can'
 import { unitsQuery } from '#/features/properties/functions'
@@ -25,6 +15,7 @@ import { useFormMutation } from '#/lib/form-mutation'
 import { oreToInput, parseSek } from '#/lib/money'
 import { rich } from '#/lib/rich'
 import { m } from '#/paraglide/messages'
+import { CoTenantsField, receiverOptions } from './co-tenants-field'
 import { createLeaseFn, deleteLeaseFn, leaseQuery, leasesQuery, updateLeaseFn } from './functions'
 import {
   type InvoiceInterval,
@@ -154,67 +145,17 @@ export function LeaseForm({
         <form.Subscribe selector={(s) => s.values.tenantId}>
           {(tenantId) => (
             <form.AppField name="coTenantIds">
-              {(field) => {
-                const nameOf = (id: string) => tenants.find((t) => t.id === id)?.name ?? ''
-                const chosen = field.state.value.filter((id) => id !== tenantId)
-                const available = tenants.filter((t) => t.id !== tenantId && !chosen.includes(t.id))
-                const remove = (id: string) => {
-                  field.handleChange(field.state.value.filter((other) => other !== id))
-                  if (form.getFieldValue('invoiceRecipientId') === id) {
-                    form.setFieldValue('invoiceRecipientId', '')
-                  }
-                }
-                return (
-                  <fieldset className="grid gap-2">
-                    <legend className="mb-1 font-medium text-sm">
-                      <Optional>{m.lease_form_co_tenants()}</Optional>
-                    </legend>
-                    {chosen.length > 0 && (
-                      <ul className="grid gap-1.5">
-                        {chosen.map((id) => (
-                          <li
-                            key={id}
-                            className="flex items-center justify-between gap-2 rounded-md border py-1 pr-1 pl-3 text-sm"
-                          >
-                            <span className="truncate">{nameOf(id)}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="size-11 sm:size-8"
-                              aria-label={m.lease_form_remove_co_tenant({ name: nameOf(id) })}
-                              onClick={() => remove(id)}
-                            >
-                              <X aria-hidden="true" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {available.length > 0 && chosen.length < MAX_PARTIES - 1 && (
-                      // Picking a name adds it; the picker then resets to its placeholder.
-                      <Select value="" onValueChange={(id) => field.handleChange([...chosen, id])}>
-                        <SelectTrigger
-                          aria-label={m.lease_form_add_co_tenant()}
-                          className="w-full data-[size=default]:h-11 sm:data-[size=default]:h-9"
-                        >
-                          <SelectValue placeholder={m.lease_form_add_co_tenant()} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {available.map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              {t.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                    <p className="text-muted-foreground text-sm">
-                      {m.lease_form_co_tenants_hint()}
-                    </p>
-                  </fieldset>
-                )
-              }}
+              {() => (
+                <CoTenantsField
+                  tenants={tenants}
+                  tenantId={tenantId}
+                  onRemove={(id) => {
+                    if (form.getFieldValue('invoiceRecipientId') === id) {
+                      form.setFieldValue('invoiceRecipientId', '')
+                    }
+                  }}
+                />
+              )}
             </form.AppField>
           )}
         </form.Subscribe>
@@ -223,12 +164,8 @@ export function LeaseForm({
           selector={(s) => [s.values.tenantId, s.values.coTenantIds.join(',')] as const}
         >
           {([tenantId, coTenants]) => {
-            const ids = [tenantId, ...coTenants.split(',')].filter(Boolean)
-            if (!tenantId || ids.length < 2) return null
-            const options = [...new Set(ids)].map((id) => ({
-              value: id,
-              label: tenants.find((t) => t.id === id)?.name ?? '',
-            }))
+            const options = receiverOptions(tenantId, coTenants.split(','), tenants)
+            if (!tenantId || options.length < 2) return null
             return (
               <form.AppField name="invoiceRecipientId">
                 {(field) => (

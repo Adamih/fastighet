@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from 'drizzle-orm'
+import { type AnyColumn, and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { Effect } from 'effect'
 import {
   agreement,
@@ -9,6 +9,11 @@ import {
   party,
   type unit,
 } from '#/db/schema'
+import {
+  type ChangePlanProblem,
+  changeDateProblem,
+  planChange,
+} from '#/features/agreements/changes'
 import { currentTerms, shownRows } from '#/features/agreements/current'
 import {
   joinNames,
@@ -17,6 +22,7 @@ import {
   primaryParty,
 } from '#/features/agreements/parties'
 import {
+  billedOnceChargeIds,
   checkPartiesExist,
   checkUnitsFree,
   correctBaseCharge,
@@ -28,7 +34,12 @@ import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
-import type { CreateLeaseInput, TerminateLeaseInput, UpdateLeaseInput } from './schemas'
+import type {
+  ChangeLeaseFromInput,
+  CreateLeaseInput,
+  TerminateLeaseInput,
+  UpdateLeaseInput,
+} from './schemas'
 import { earliestMoveOutDate, effectiveEndDate, leaseStatus } from './terms'
 
 // A lease is an agreement of kind `lease` with its `leaseTerms`. The view flattens both, so the
@@ -151,6 +162,8 @@ export const getLease = (leaseId: string) =>
     }
     return {
       ...view,
+      /** One-off charges an avi in force has billed; the rest are still to come. */
+      billedChargeIds: [...(yield* billedOnceChargeIds([view.id]))],
       parties: view.parties.map((p) => ({ ...p, contact: contactOf(p.id) })),
     }
   })
@@ -459,4 +472,91 @@ export const deleteLease = (leaseId: string) =>
         .where(and(eq(agreement.id, current.id), eq(agreement.organizationId, organizationId))),
     )
     return { tenantId: current.tenant.id }
+  })
+
+const changeProblemMessages: Record<ChangePlanProblem, string> = {
+  too_early: 'Datumet måste vara efter avtalets start. Ändra avtalet i stället för att rätta det.',
+  after_end: 'Datumet är efter avtalets sista dag',
+  no_change: 'Inget ändras från det datumet',
+}
+
+/**
+ * Changes who is on the lease, who receives the avier, and its units from a date. Rows no longer
+ * wanted end the day before; new ones start on the date; the rest are kept, so history stays.
+ * The tenant stays: a new tenant is a new lease.
+ */
+export const changeLeaseFrom = (input: ChangeLeaseFromInput) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manage)
+    const current = yield* getLease(input.leaseId)
+    const parties = yield* checkParties(current.tenant.id, input)
+    const partyKey = (p: { partyId: string; role: string; receivesInvoices: boolean }) =>
+      `${p.partyId}:${p.role}:${p.receivesInvoices ? 1 : 0}`
+    const partyPlan = planChange(
+      current.partyRows.map((p) => ({ ...p, key: partyKey(p) })),
+      parties.map(partyKey),
+      input.fromDate,
+    )
+    const unitIds = [...new Set(input.unitIds)]
+    const unitPlan = planChange(
+      current.unitRows.map((u) => ({ ...u, key: u.unitId })),
+      unitIds,
+      input.fromDate,
+    )
+    const problem = changeDateProblem(current, input.fromDate, {
+      end: [...partyPlan.end, ...unitPlan.end],
+      remove: [...partyPlan.remove, ...unitPlan.remove],
+      add: [...partyPlan.add, ...unitPlan.add],
+    })
+    if (problem) return yield* new Conflict({ message: changeProblemMessages[problem] })
+    if (unitPlan.add.length > 0) {
+      yield* checkUnitsFree(
+        unitPlan.add,
+        { start: input.fromDate, end: current.endDate },
+        current.id,
+      )
+    }
+    const added = parties.filter((p) => partyPlan.add.includes(partyKey(p)))
+
+    yield* orgQuery((db, organizationId): Promise<unknown> => {
+      const mine = <T extends { id: AnyColumn; organizationId: AnyColumn }>(table: T, id: string) =>
+        and(eq(table.id, id), eq(table.organizationId, organizationId))
+      const statements = [
+        ...partyPlan.end.map((r) =>
+          db.update(agreementParty).set({ toDate: r.toDate }).where(mine(agreementParty, r.id)),
+        ),
+        ...partyPlan.remove.map((id) => db.delete(agreementParty).where(mine(agreementParty, id))),
+        ...unitPlan.end.map((r) =>
+          db.update(agreementUnit).set({ toDate: r.toDate }).where(mine(agreementUnit, r.id)),
+        ),
+        ...unitPlan.remove.map((id) => db.delete(agreementUnit).where(mine(agreementUnit, id))),
+        ...(added.length > 0
+          ? [
+              db.insert(agreementParty).values(
+                added.map((p) => ({
+                  ...p,
+                  agreementId: current.id,
+                  organizationId,
+                  fromDate: input.fromDate,
+                })),
+              ),
+            ]
+          : []),
+        ...(unitPlan.add.length > 0
+          ? [
+              db.insert(agreementUnit).values(
+                unitPlan.add.map((unitId) => ({
+                  agreementId: current.id,
+                  unitId,
+                  organizationId,
+                  fromDate: input.fromDate,
+                })),
+              ),
+            ]
+          : []),
+      ]
+      const [first, ...rest] = statements
+      return first ? db.batch([first, ...rest]) : Promise.resolve([])
+    })
+    return yield* getLease(current.id)
   })

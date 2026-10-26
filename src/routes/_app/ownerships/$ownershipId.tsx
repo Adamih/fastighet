@@ -13,6 +13,8 @@ import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useChangeBaseChargeDrawer } from '#/features/agreements/change-charge-form'
+import { ChargesPanel } from '#/features/agreements/charges-panel'
+import { useAddOneOffDrawer } from '#/features/agreements/one-off-form'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
@@ -26,6 +28,7 @@ import { ownershipStatusLabels } from '#/features/ownerships/labels'
 import { useEditOwnershipDrawer } from '#/features/ownerships/ownership-form'
 import { formatShareRatio } from '#/features/ownerships/rules'
 import { useTransferOwnershipDrawer } from '#/features/ownerships/transfer-form'
+import { stockholmDate } from '#/lib/dates'
 import { formatSekShort } from '#/lib/money'
 import { m } from '#/paraglide/messages'
 
@@ -48,6 +51,9 @@ function OwnershipPage() {
   const edit = useEditOwnershipDrawer(ownership)
   const transfer = useTransferOwnershipDrawer(ownership)
   const changeFee = useChangeBaseChargeDrawer(ownership)
+  // Member fees are outside VAT, so one-off amounts default to without.
+  const addOneOff = useAddOneOffDrawer({ id: ownership.id, vat: false })
+  const today = stockholmDate(Date.now())
   const units = unitSummary(ownership.units)
   const title = m.ownership_number({ number: ownership.number })
 
@@ -225,6 +231,13 @@ function OwnershipPage() {
                 ))}
               </ul>
             </Panel>
+            <ChargesPanel
+              agreement={ownership}
+              units={ownership.unitRows}
+              today={today}
+              canManage={canManage}
+              onAddOneOff={addOneOff.open}
+            />
             <Panel title={m.ownership_details()}>
               <FactList
                 facts={[

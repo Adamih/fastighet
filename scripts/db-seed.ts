@@ -300,6 +300,8 @@ async function seed() {
     tenant: keyof typeof tenants
     /** Others on the same lease; the first tenant receives the avier. */
     coTenants?: (keyof typeof tenants)[]
+    /** When the co-tenants joined, if later than the lease's start. */
+    coTenantsFrom?: string
     units: Unit[]
     terms: LeaseTerms & { noticeDate?: string }
     rentOre: number
@@ -410,6 +412,8 @@ async function seed() {
       key: 'mikael',
       tenant: 'mikael',
       coTenants: ['sofia'],
+      // Sofia moved in with Mikael four months ago.
+      coTenantsFrom: addMonths(thisMonth, -4),
       units: [units.l1101, units.lP2],
       terms: openEnded(addMonths(thisMonth, -18)),
       rentOre: 815_000,
@@ -481,6 +485,8 @@ async function seed() {
       position: index + 1,
       receivesInvoices: index === 0,
       party: tenants[key],
+      fromDate: index === 0 ? l.terms.startDate : (l.coTenantsFrom ?? l.terms.startDate),
+      toDate: null,
     })),
   }))
   type Lease = (typeof leases)[number]
@@ -608,7 +614,7 @@ async function seed() {
         role: index === 0 ? ('tenant' as const) : ('co_tenant' as const),
         receivesInvoices: p.receivesInvoices,
         position: p.position,
-        fromDate: l.terms.startDate,
+        fromDate: p.fromDate,
       })),
     ),
   )
@@ -639,7 +645,7 @@ async function seed() {
     startDate: lease.terms.startDate,
     endDate: effectiveEndDate(lease.terms),
     charges: charges.filter((c) => c.agreementId === lease.id && c.createdOn <= issueDate),
-    parties: lease.parties.map((p) => ({ ...p, fromDate: lease.terms.startDate, toDate: null })),
+    parties: lease.parties,
     units: unitRows
       .filter((u) => u.agreementId === lease.id)
       .map((u) => ({

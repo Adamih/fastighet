@@ -28,6 +28,7 @@ import {
   retroactiveDifference,
 } from './charges'
 import { inForceOn } from './periods'
+import type { AddOneOffChargeInput } from './schemas'
 
 // Checks shared by every kind of agreement (leases and bostadsrätter). No permission checks of
 // their own: the calling program has already made them.
@@ -343,4 +344,64 @@ export const correctBaseCharge = (
       id: current.id,
       values: { amountOre: next.amountOre, interval: next.interval, vat: next.vat, fromDate },
     }
+  })
+
+/** Adds a one-off amount (engångsbelopp) to an agreement; the next avi covering its date bills it. */
+export const addOneOffCharge = (input: AddOneOffChargeInput) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manageAgreements)
+    const found = yield* orgQuery((db, organizationId) =>
+      db.query.agreement.findFirst({
+        columns: { id: true, startDate: true },
+        where: and(
+          eq(agreement.id, input.agreementId),
+          eq(agreement.organizationId, organizationId),
+        ),
+      }),
+    )
+    if (!found) return yield* new NotFound({ entity: 'agreement', id: input.agreementId })
+    if (input.fromDate < found.startDate) {
+      return yield* new Conflict({ message: `Avtalet börjar ${found.startDate}` })
+    }
+    const id = crypto.randomUUID()
+    yield* orgQuery((db, organizationId) =>
+      db.insert(charge).values({
+        id,
+        organizationId,
+        agreementId: found.id,
+        kind: 'one_off',
+        description: input.description.trim(),
+        amountOre: input.amountOre,
+        interval: 'once',
+        vat: input.vat,
+        fromDate: input.fromDate,
+      }),
+    )
+    return { id }
+  })
+
+/** Removes a one-off amount that no avi has billed yet. Billed ones are history. */
+export const removeOneOffCharge = (chargeId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manageAgreements)
+    const found = yield* orgQuery((db, organizationId) =>
+      db.query.charge.findFirst({
+        where: and(eq(charge.id, chargeId), eq(charge.organizationId, organizationId)),
+      }),
+    )
+    if (!found) return yield* new NotFound({ entity: 'charge', id: chargeId })
+    if (found.interval !== 'once') {
+      return yield* new Conflict({ message: 'Bara engångsbelopp kan tas bort' })
+    }
+    if (yield* chargeIsBilled(found.id)) {
+      return yield* new Conflict({
+        message: 'Beloppet är aviserat. Kreditera avin i stället.',
+      })
+    }
+    yield* orgQuery((db, organizationId) =>
+      db
+        .delete(charge)
+        .where(and(eq(charge.id, found.id), eq(charge.organizationId, organizationId))),
+    )
+    return { agreementId: found.agreementId }
   })

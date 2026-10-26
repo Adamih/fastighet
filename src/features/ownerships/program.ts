@@ -21,6 +21,7 @@ import {
 } from '#/features/agreements/parties'
 import { inForceOn } from '#/features/agreements/periods'
 import {
+  billedOnceChargeIds,
   checkPartiesExist,
   checkUnitsFree,
   correctBaseCharge,
@@ -190,6 +191,8 @@ export const getOwnership = (ownershipId: string) =>
       : []
     return {
       ...view,
+      /** One-off charges an avi in force has billed; the rest are still to come. */
+      billedChargeIds: [...(yield* billedOnceChargeIds([view.id]))],
       owners: view.owners.map((o) => {
         const contact = contacts.find((c) => c.id === o.id)
         return { ...o, contact: contact ? { email: contact.email, phone: contact.phone } : null }

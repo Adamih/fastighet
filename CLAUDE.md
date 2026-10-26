@@ -13,6 +13,10 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
   - Gate navigation and controls with `useCan()` and disable edit forms without manage access. UI checks mirror server checks; they never replace them. Team listing is open to all members. Better Auth enforces member/invitation permissions and owner protections.
 - **Agreements.** Runs invoice an `agreement`: a lease (`kind: 'lease'`) or a bostadsrätt (`tenant_ownership`).
   - Billing code (runs, rules, matching, reissue) uses only the agreement, its parties (`agreementParty`) and its units. It never uses `leaseTerms`.
+  - **Terms are effective-dated.** What an agreement bills is in `charge`: a base charge (`rent` or `fee`), add-ons (optionally for one unit), and one-off amounts (`interval: 'once'`, billed once by the first avi covering their date). Parties (`agreementParty`) and units (`agreementUnit`) have `fromDate`/`toDate` too. Avi lines record the charge kind and charge.
+  - A change from a date ends rows the day before and adds new ones; nothing in force is rewritten. Rent and fees: `changeBaseCharge`, which also adds a one-off line for days already billed. Lease parties and units: `changeLeaseFrom`, planned by `planChange` (`features/agreements/changes.ts`). Editing an agreement only corrects its open terms; a billed charge can't be corrected.
+  - Billing reads the terms in force through `billFor` (`features/agreements/billing.ts`), and pages through `currentTerms` (`features/agreements/current.ts`). Both are pure and unit-tested.
+  - The BRF apartment register (`brf_apartment`, keyed by unit) holds andelstal, insats and upplåtelse; a bostadsrätt only links to its apartment.
   - `agreement.endDate` is the last billed day. The lease program derives it with `effectiveEndDate` and writes it in the same batch as the lease terms. A lease's fixed-term end is `termEndDate`.
   - Avier copy their recipient from `invoiceRecipient` (`features/agreements/parties.ts`): every party's name, and the address and email of the party that receives the invoices.
   - Occupancy and status rules take any agreement through `agreementTerms` (`features/agreements/terms.ts`).
@@ -67,4 +71,5 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
 - Use `.validator()` on `createServerFn` (this Start version has no `inputValidator`).
 - Server functions are CSRF-protected (same-origin only). When calling them outside the browser, send `Sec-Fetch-Site: same-origin`.
+- Program tests run against an in-memory database with every migration through `harness()` (`src/test/harness.ts`).
 - Before finishing: `bun run typecheck && bun run check && bun test`.

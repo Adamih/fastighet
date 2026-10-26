@@ -1,76 +1,7 @@
-import { Database as Sqlite } from 'bun:sqlite'
-import { afterEach, expect, test } from 'bun:test'
-import { readdirSync, readFileSync } from 'node:fs'
-import { drizzle } from 'drizzle-orm/bun-sqlite'
-import { Effect } from 'effect'
-import type { Db } from '#/db'
-import * as schema from '#/db/schema'
+import { expect, test } from 'bun:test'
 import { changeBaseCharge } from '#/features/agreements/program'
-import { CurrentOrganization, CurrentUser, Database, PermissionChecker } from '#/server/services'
+import { fail, harness } from '#/test/harness'
 import { createOwnership, deleteOwnership, getOwnership, transferOwnership } from './program'
-
-// Runs the bostadsrätt programs against an in-memory SQLite database with every migration
-// applied. Bun's SQLite driver has no `batch`, so the test runs a batch in one transaction, which
-// is what D1 does.
-
-const databases: Sqlite[] = []
-afterEach(() => {
-  for (const db of databases.splice(0)) db.close()
-})
-
-function harness() {
-  const sqlite = new Sqlite(':memory:')
-  databases.push(sqlite)
-  sqlite.exec('PRAGMA foreign_keys = ON')
-  const dir = 'drizzle'
-  for (const file of readdirSync(dir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort()) {
-    for (const statement of readFileSync(`${dir}/${file}`, 'utf8').split(
-      '--> statement-breakpoint',
-    )) {
-      const sql = statement
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('--'))
-        .join('\n')
-        .trim()
-      if (sql) sqlite.exec(sql)
-    }
-  }
-  const db = drizzle(sqlite, { schema })
-  Object.assign(db, {
-    batch: async (statements: { run: () => unknown }[]) =>
-      sqlite.transaction(() => statements.map((s) => s.run()))(),
-  })
-  const run = <A, E, R>(program: Effect.Effect<A, E, R>) =>
-    Effect.runPromise(
-      program.pipe(
-        Effect.provideService(Database, db as unknown as Db),
-        Effect.provideService(CurrentOrganization, { id: 'org', name: 'Brf', role: 'owner' }),
-        Effect.provideService(CurrentUser, { id: 'user', name: 'u', email: 'u@example.test' }),
-        Effect.provideService(PermissionChecker, { check: async () => true }),
-      ) as Effect.Effect<A, E, never>,
-    )
-  const now = Date.now()
-  sqlite.exec(`
-    INSERT INTO organization (id, name, slug, created_at) VALUES ('org', 'Brf', 'brf', ${now});
-    INSERT INTO property (id, organization_id, designation) VALUES ('p', 'org', 'Uppsala 1:1');
-    INSERT INTO unit (id, organization_id, property_id, kind, label) VALUES
-      ('u1', 'org', 'p', 'apartment', '1001'), ('f1', 'org', 'p', 'storage', 'F1');
-    INSERT INTO party (id, organization_id, kind, name) VALUES
-      ('anna', 'org', 'person', 'Anna'), ('erik', 'org', 'person', 'Erik'),
-      ('maja', 'org', 'person', 'Maja');
-  `)
-  return { run, sqlite }
-}
-
-const fail = (promise: Promise<unknown>) =>
-  promise.then(
-    () => {
-      throw new Error('expected a failure')
-    },
-    (error: unknown) => String(error),
-  )
 
 const ownership = {
   owners: [

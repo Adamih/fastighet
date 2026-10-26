@@ -36,3 +36,15 @@ export const TerminateLeaseInput = Schema.Struct({
   moveOutDate: Schema.NullOr(IsoDate),
 })
 export type TerminateLeaseInput = typeof TerminateLeaseInput.Type
+
+/** Co-tenants, who receives the avier, and units, changed from a date (the tenant stays). */
+export const ChangeLeaseFromInput = Schema.Struct({
+  leaseId: Schema.String,
+  fromDate: IsoDate,
+  coTenantIds: Schema.Array(Schema.String),
+  invoiceRecipientId: Schema.NullOr(Schema.String),
+  unitIds: Schema.Array(Schema.String).check(
+    Schema.isMinLength(1, { message: 'Välj minst ett objekt' }),
+  ),
+})
+export type ChangeLeaseFromInput = typeof ChangeLeaseFromInput.Type

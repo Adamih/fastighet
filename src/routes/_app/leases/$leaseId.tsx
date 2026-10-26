@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient, useSuspenseQuery } from '@tansta
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   Banknote,
+  CalendarClock,
   CircleCheck,
   DoorOpen,
   FilePlus,
@@ -22,6 +23,7 @@ import {
   EventList,
   type EventTone,
   FactList,
+  MoreActions,
   Panel,
   PanelRow,
   StatRow,
@@ -29,13 +31,17 @@ import {
 import { InitialsAvatar } from '#/components/initials-avatar'
 import { StatCard } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
+import { DropdownMenuItem } from '#/components/ui/dropdown-menu'
 import { useChangeBaseChargeDrawer } from '#/features/agreements/change-charge-form'
+import { ChargesPanel } from '#/features/agreements/charges-panel'
+import { useAddOneOffDrawer } from '#/features/agreements/one-off-form'
 import { useCan } from '#/features/auth/use-can'
 import { InvoiceStatusBadge } from '#/features/invoicing/components'
 import { owedOrTotal } from '#/features/invoicing/credit'
 import { invoicesQuery, type listInvoicesFn } from '#/features/invoicing/functions'
 import { invoiceOverview } from '#/features/invoicing/overview'
 import { periodLabel } from '#/features/invoicing/rules'
+import { useChangeLeaseFromDrawer } from '#/features/leases/change-from-form'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import {
   type LeaseEvent,
@@ -89,6 +95,8 @@ function LeasePage() {
   const terminate = useTerminateLeaseDrawer(lease)
   const edit = useEditLeaseDrawer(lease)
   const changeRent = useChangeBaseChargeDrawer(lease)
+  const changeFrom = useChangeLeaseFromDrawer(lease)
+  const addOneOff = useAddOneOffDrawer(lease)
   const today = stockholmDate(Date.now())
 
   const queryClient = useQueryClient()
@@ -132,12 +140,6 @@ function LeasePage() {
                   {m.common_edit()}
                 </Button>
               )}
-              {open && (
-                <Button variant="outline" className="flex-1 sm:flex-none" onClick={changeRent.open}>
-                  <Banknote aria-hidden="true" />
-                  {changeRent.label}
-                </Button>
-              )}
               {open && !lease.moveOutDate && (
                 <Button variant="outline" className="flex-1 sm:flex-none" onClick={terminate.open}>
                   <FileX aria-hidden="true" />
@@ -154,6 +156,20 @@ function LeasePage() {
                   <Undo2 aria-hidden="true" />
                   {m.lease_withdraw_termination()}
                 </Button>
+              )}
+              {open && (
+                <MoreActions label={m.invoice_more_actions({ number: lease.number })}>
+                  <DropdownMenuItem onSelect={changeRent.open}>
+                    <Banknote aria-hidden="true" />
+                    {changeRent.label}
+                  </DropdownMenuItem>
+                  {can({ tenant: ['read'], property: ['read'] }) && (
+                    <DropdownMenuItem onSelect={changeFrom.open}>
+                      <CalendarClock aria-hidden="true" />
+                      {m.lease_change_from()}
+                    </DropdownMenuItem>
+                  )}
+                </MoreActions>
               )}
             </>
           )
@@ -239,6 +255,7 @@ function LeasePage() {
                   </li>
                 ))}
               </ul>
+              <PartyHistory lease={lease} today={today} />
             </Panel>
             <Panel
               title={
@@ -275,6 +292,13 @@ function LeasePage() {
                 ))}
               </div>
             </Panel>
+            <ChargesPanel
+              agreement={lease}
+              units={lease.unitRows}
+              today={today}
+              canManage={canManage}
+              onAddOneOff={addOneOff.open}
+            />
             <Panel title="Villkor">
               <FactList
                 facts={[
@@ -537,5 +561,28 @@ function LeaseInvoices({ invoices }: { invoices: LeaseInvoiceRow[] }) {
         </div>
       )}
     </Panel>
+  )
+}
+
+/** Tenants who have left the lease, or will join it, with their dates. */
+function PartyHistory({ lease, today }: { lease: LeaseView; today: string }) {
+  const rows = lease.partyRows.filter(
+    (p) => (p.toDate !== null && p.toDate < today) || p.fromDate > today,
+  )
+  if (rows.length === 0) return null
+  return (
+    <div className="grid gap-1 border-t pt-3 text-[13px]">
+      <span className="font-medium text-muted-foreground">{m.lease_former_parties()}</span>
+      {rows.map((p) => (
+        <span key={p.id} className="flex justify-between gap-3">
+          <span className="truncate">{p.name}</span>
+          <span className="shrink-0 text-muted-foreground tabular-nums">
+            {p.fromDate > today
+              ? m.lease_party_from({ date: p.fromDate })
+              : m.lease_party_until({ date: p.toDate ?? '' })}
+          </span>
+        </span>
+      ))}
+    </div>
   )
 }
