@@ -4,7 +4,9 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 
 ## Rules
 
-- **Tenant isolation.** Every domain table has `organizationId`. Read and write domain tables only through `orgQuery` (`src/server/scoped.ts`) and always filter on the id it passes in. D1/SQLite has no row-level security, so this is the only guard.
+- **Tenant isolation.** Every domain table has `organizationId`. Read and write domain tables only through `orgQuery` (`src/server/scoped.ts`) and always filter on the id it passes in. D1/SQLite has no row-level security, so queries can't be checked by the database.
+  - The database does refuse references across companies. Each domain table has a unique `(organization_id, id)` key (`companyKey`), and references between domain tables are composite foreign keys on it (`sameCompany` in `src/db/schema.ts`), never a plain `.references()`. A new domain table needs both. Only `organization` and `user` are referenced by a single column.
+  - Don't use `onDelete: 'set null'` on a `sameCompany` key: it would null `organization_id` too.
 - **Server code goes through Effect.** Server functions are thin: validate input with an Effect Schema (`Schema.toStandardSchemaV1`) and call `runApp(program)`. Business logic lives in `features/*/program.ts` as Effect programs that use `Database`, `CurrentUser` and `CurrentOrganization`.
 - **Active company.** `runApp` checks on every request that the user still belongs to the session's active company. If not (for example after being removed), it switches the session to the user's oldest remaining company, or fails with `NoActiveOrganization` when there is none. Route guards use `getSessionFn().hasOrganization`, which reads the member table, never the session's `activeOrganizationId`.
 - **Team permissions.** Use Better Auth's organization APIs for role changes, member removal and invitations. Its endpoints enforce permissions and creator-role protections; `memberActions` mirrors those rules for the UI, including multi-role owners. Self-actions stay hidden in the team UI. Leaving organizations is disabled server-side through Better Auth's `disabledPaths`.
@@ -77,7 +79,7 @@ See README.md for stack, scripts and layout. UI copy is Swedish; code and commen
 - **Seed data** (`scripts/db-seed.ts`) writes through the app's Drizzle schema and pure rules, so a schema change that breaks it fails `bun run typecheck`.
   - When you add a feature, give it seed data and keep `bun run db:reset` working.
   - Seeded logins are in `scripts/db-seed-constants.ts`. The BRF board login belongs to a second seeded company, Brf Linden.
-- **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
+- **Schema changes:** edit `src/db/schema.ts`, run `bun run db:generate`, then `bun run db:migrate:local`. Migrations start from one baseline (`drizzle/0000_baseline.sql`); nothing was deployed before it. D1 can't turn foreign keys off, and dropping a table cascades deletes to rows that reference it, so prefer adding columns and tables; rebuild a table only if nothing references it. Never edit `src/db/auth-schema.ts` by hand; use `bun run auth:generate`.
 - Use `.validator()` on `createServerFn` (this Start version has no `inputValidator`).
 - Server functions are CSRF-protected (same-origin only). When calling them outside the browser, send `Sec-Fetch-Site: same-origin`.
 - Program tests run against an in-memory database with every migration through `harness()` (`src/test/harness.ts`).

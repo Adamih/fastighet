@@ -1,6 +1,7 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   type AnySQLiteColumn,
+  foreignKey,
   index,
   integer,
   primaryKey,
@@ -25,7 +26,9 @@ import { organization, user } from './auth-schema'
 export * from './auth-schema'
 
 // Every domain table carries `organizationId` (the customer company) and every query filters on
-// it — SQLite has no row-level security, so tenant isolation lives in `src/server/scoped.ts`.
+// it (`src/server/scoped.ts`). The database backs that up: each domain table has a unique
+// `(organization_id, id)` key, and references between domain tables are composite foreign keys
+// on it (`sameCompany`), so a row can never point at another company's row.
 // Calendar dates are ISO text ("2026-10-23"); money is integer öre.
 //
 // References that must block deletes (a leased unit, a tenant with leases) use the default
@@ -41,6 +44,24 @@ const organizationId = () =>
   text('organization_id')
     .notNull()
     .references(() => organization.id, { onDelete: 'cascade' })
+
+/** The `(organization_id, id)` key that references within the company point at. */
+const companyKey = (table: string, t: { organizationId: AnySQLiteColumn; id: AnySQLiteColumn }) =>
+  uniqueIndex(`${table}_org_id_uq`).on(t.organizationId, t.id)
+
+/**
+ * A reference to another row of the same company: `(organization_id, column)` →
+ * `target(organization_id, id)`. A null column isn't checked, as with any foreign key.
+ */
+const sameCompany = (
+  t: { organizationId: AnySQLiteColumn },
+  column: AnySQLiteColumn,
+  target: { organizationId: AnySQLiteColumn; id: AnySQLiteColumn },
+) =>
+  foreignKey({
+    columns: [t.organizationId, column],
+    foreignColumns: [target.organizationId, target.id],
+  })
 
 const createdAt = () =>
   integer('created_at', { mode: 'timestamp_ms' })
@@ -60,7 +81,10 @@ export const property = sqliteTable(
     city: text('city'),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('property_org_designation_uq').on(t.organizationId, t.designation)],
+  (t) => [
+    companyKey('property', t),
+    uniqueIndex('property_org_designation_uq').on(t.organizationId, t.designation),
+  ],
 )
 
 export const unit = sqliteTable(
@@ -68,9 +92,7 @@ export const unit = sqliteTable(
   {
     id: id(),
     organizationId: organizationId(),
-    propertyId: text('property_id')
-      .notNull()
-      .references(() => property.id, { onDelete: 'cascade' }),
+    propertyId: text('property_id').notNull(),
     kind: text('kind', { enum: unitKinds }).notNull(),
     // Objektsnummer as printed on contracts and rent notices.
     label: text('label').notNull(),
@@ -80,6 +102,8 @@ export const unit = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [
+    companyKey('unit', t),
+    sameCompany(t, t.propertyId, property).onDelete('cascade'),
     index('unit_org_property_idx').on(t.organizationId, t.propertyId),
     uniqueIndex('unit_property_label_uq').on(t.propertyId, t.label),
   ],
@@ -103,7 +127,7 @@ export const party = sqliteTable(
     city: text('city'),
     createdAt: createdAt(),
   },
-  (t) => [index('party_org_name_idx').on(t.organizationId, t.name)],
+  (t) => [companyKey('party', t), index('party_org_name_idx').on(t.organizationId, t.name)],
 )
 
 // An agreement is what a run invoices: a lease (hyresavtal) or a bostadsrätt. It holds what
@@ -125,7 +149,10 @@ export const agreement = sqliteTable(
     invoiceInterval: text('invoice_interval', { enum: invoiceIntervals }).notNull(),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('agreement_org_number_uq').on(t.organizationId, t.number)],
+  (t) => [
+    companyKey('agreement', t),
+    uniqueIndex('agreement_org_number_uq').on(t.organizationId, t.number),
+  ],
 )
 
 // What an agreement bills, from a date: the base charge (rent or a bostadsrätt's fee), add-ons
@@ -136,12 +163,10 @@ export const charge = sqliteTable(
   {
     id: id(),
     organizationId: organizationId(),
-    agreementId: text('agreement_id')
-      .notNull()
-      .references(() => agreement.id, { onDelete: 'cascade' }),
+    agreementId: text('agreement_id').notNull(),
     kind: text('kind', { enum: chargeKinds }).notNull(),
     // The unit an add-on is for (e.g. a parking space); the rent line then leaves that unit out.
-    unitId: text('unit_id').references(() => unit.id),
+    unitId: text('unit_id'),
     // Shown on the avi; null uses the kind's standard text.
     description: text('description'),
     // Per interval; for a one-off charge the whole amount, negative for a reduction.
@@ -154,7 +179,12 @@ export const charge = sqliteTable(
     toDate: text('to_date'),
     createdAt: createdAt(),
   },
-  (t) => [index('charge_agreement_idx').on(t.agreementId)],
+  (t) => [
+    companyKey('charge', t),
+    sameCompany(t, t.agreementId, agreement).onDelete('cascade'),
+    sameCompany(t, t.unitId, unit),
+    index('charge_agreement_idx').on(t.agreementId),
+  ],
 )
 
 // The units an agreement covers, from a date (e.g. a parking space added later).
@@ -162,17 +192,16 @@ export const agreementUnit = sqliteTable(
   'agreement_unit',
   {
     id: id(),
-    agreementId: text('agreement_id')
-      .notNull()
-      .references(() => agreement.id, { onDelete: 'cascade' }),
-    unitId: text('unit_id')
-      .notNull()
-      .references(() => unit.id),
     organizationId: organizationId(),
+    agreementId: text('agreement_id').notNull(),
+    unitId: text('unit_id').notNull(),
     fromDate: text('from_date').notNull(),
     toDate: text('to_date'),
   },
   (t) => [
+    companyKey('agreement_unit', t),
+    sameCompany(t, t.agreementId, agreement).onDelete('cascade'),
+    sameCompany(t, t.unitId, unit),
     uniqueIndex('agreement_unit_from_uq').on(t.agreementId, t.unitId, t.fromDate),
     index('agreement_unit_unit_idx').on(t.unitId),
   ],
@@ -184,13 +213,9 @@ export const agreementParty = sqliteTable(
   'agreement_party',
   {
     id: id(),
-    agreementId: text('agreement_id')
-      .notNull()
-      .references(() => agreement.id, { onDelete: 'cascade' }),
-    partyId: text('party_id')
-      .notNull()
-      .references(() => party.id),
     organizationId: organizationId(),
+    agreementId: text('agreement_id').notNull(),
+    partyId: text('party_id').notNull(),
     role: text('role', { enum: partyRoles }).notNull(),
     // Ownership share in percent, for co-owners of a bostadsrätt.
     sharePercent: integer('share_percent'),
@@ -201,53 +226,63 @@ export const agreementParty = sqliteTable(
     toDate: text('to_date'),
   },
   (t) => [
+    companyKey('agreement_party', t),
+    sameCompany(t, t.agreementId, agreement).onDelete('cascade'),
+    sameCompany(t, t.partyId, party),
     uniqueIndex('agreement_party_from_uq').on(t.agreementId, t.partyId, t.fromDate),
     index('agreement_party_org_party_idx').on(t.organizationId, t.partyId),
   ],
 )
 
 // A lease's own terms. `agreement.endDate` is derived from them and written in the same batch.
-export const leaseTerms = sqliteTable('lease_terms', {
-  agreementId: text('agreement_id')
-    .primaryKey()
-    .references(() => agreement.id, { onDelete: 'cascade' }),
-  organizationId: organizationId(),
-  // Set for a fixed-term lease (tidsbestämt); null for an open-ended one (tillsvidare).
-  termEndDate: text('term_end_date'),
-  extensionMonths: integer('extension_months'),
-  noticePeriodMonths: integer('notice_period_months').notNull(),
-  noticeDate: text('notice_date'),
-  moveOutDate: text('move_out_date'),
-})
+export const leaseTerms = sqliteTable(
+  'lease_terms',
+  {
+    agreementId: text('agreement_id').primaryKey(),
+    organizationId: organizationId(),
+    // Set for a fixed-term lease (tidsbestämt); null for an open-ended one (tillsvidare).
+    termEndDate: text('term_end_date'),
+    extensionMonths: integer('extension_months'),
+    noticePeriodMonths: integer('notice_period_months').notNull(),
+    noticeDate: text('notice_date'),
+    moveOutDate: text('move_out_date'),
+  },
+  (t) => [sameCompany(t, t.agreementId, agreement).onDelete('cascade')],
+)
 
 // A bostadsrätt's own details: who held it before. The apartment's facts (andelstal, insats) are
 // in the apartment register, `brfApartment`, since they don't change when it is sold.
-export const ownershipTerms = sqliteTable('ownership_terms', {
-  agreementId: text('agreement_id')
-    .primaryKey()
-    .references(() => agreement.id, { onDelete: 'cascade' }),
-  organizationId: organizationId(),
-  // The sellers' bostadsrätt when this one came from a transfer (överlåtelse).
-  previousAgreementId: text('previous_agreement_id').references(
-    (): AnySQLiteColumn => agreement.id,
-  ),
-})
+export const ownershipTerms = sqliteTable(
+  'ownership_terms',
+  {
+    agreementId: text('agreement_id').primaryKey(),
+    organizationId: organizationId(),
+    // The sellers' bostadsrätt when this one came from a transfer (överlåtelse).
+    previousAgreementId: text('previous_agreement_id'),
+  },
+  (t) => [
+    sameCompany(t, t.agreementId, agreement).onDelete('cascade'),
+    sameCompany(t, t.previousAgreementId, agreement),
+  ],
+)
 
 // The BRF's apartment register (lägenhetsförteckning): one row per apartment upplåten med
 // bostadsrätt, keyed by its unit. It outlives every sale of the right.
-export const brfApartment = sqliteTable('brf_apartment', {
-  unitId: text('unit_id')
-    .primaryKey()
-    .references(() => unit.id, { onDelete: 'cascade' }),
-  organizationId: organizationId(),
-  // Andelstal, in percent of the association's total; fees are split by it.
-  shareRatio: real('share_ratio'),
-  // Insats and upplåtelseavgift paid when the right was first granted.
-  depositOre: integer('deposit_ore'),
-  grantFeeOre: integer('grant_fee_ore'),
-  // Upplåtelsedatum.
-  grantedOn: text('granted_on'),
-})
+export const brfApartment = sqliteTable(
+  'brf_apartment',
+  {
+    unitId: text('unit_id').primaryKey(),
+    organizationId: organizationId(),
+    // Andelstal, in percent of the association's total; fees are split by it.
+    shareRatio: real('share_ratio'),
+    // Insats and upplåtelseavgift paid when the right was first granted.
+    depositOre: integer('deposit_ore'),
+    grantFeeOre: integer('grant_fee_ore'),
+    // Upplåtelsedatum.
+    grantedOn: text('granted_on'),
+  },
+  (t) => [sameCompany(t, t.unitId, unit).onDelete('cascade')],
+)
 
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
 
@@ -335,13 +370,9 @@ export const invoice = sqliteTable(
     organizationId: organizationId(),
     number: integer('number').notNull(),
     ocr: text('ocr').notNull(),
-    agreementId: text('agreement_id')
-      .notNull()
-      .references(() => agreement.id),
+    agreementId: text('agreement_id').notNull(),
     // The party that received the invoice.
-    partyId: text('party_id')
-      .notNull()
-      .references(() => party.id),
+    partyId: text('party_id').notNull(),
     recipientName: text('recipient_name').notNull(),
     recipientStreetAddress: text('recipient_street_address'),
     recipientPostalCode: text('recipient_postal_code'),
@@ -362,10 +393,14 @@ export const invoice = sqliteTable(
     creditedOre: integer('credited_ore').notNull().default(0),
     // A corrected avi issued for the same lease and period after this one was voided or credited
     // in full points back to the avi it replaces.
-    replacesInvoiceId: text('replaces_invoice_id').references((): AnySQLiteColumn => invoice.id),
+    replacesInvoiceId: text('replaces_invoice_id'),
     createdAt: createdAt(),
   },
   (t) => [
+    companyKey('invoice', t),
+    sameCompany(t, t.agreementId, agreement),
+    sameCompany(t, t.partyId, party),
+    sameCompany(t, t.replacesInvoiceId, t),
     uniqueIndex('invoice_org_number_uq').on(t.organizationId, t.number),
     // An agreement has at most one avi in force per period. Voided and fully credited avier no longer
     // count, so a corrected one can replace them. Invoice runs skip any period already invoiced,
@@ -381,20 +416,21 @@ export const invoiceLine = sqliteTable(
   'invoice_line',
   {
     id: id(),
-    invoiceId: text('invoice_id')
-      .notNull()
-      .references(() => invoice.id, { onDelete: 'cascade' }),
     organizationId: organizationId(),
+    invoiceId: text('invoice_id').notNull(),
     position: integer('position').notNull(),
     // What the line is for, which bookkeeping maps to accounts; and the charge that billed it.
     kind: text('kind', { enum: chargeKinds }).notNull(),
-    chargeId: text('charge_id').references(() => charge.id),
+    chargeId: text('charge_id'),
     description: text('description').notNull(),
     netOre: integer('net_ore').notNull(),
     vatRatePercent: integer('vat_rate_percent').notNull(),
     vatOre: integer('vat_ore').notNull(),
   },
   (t) => [
+    companyKey('invoice_line', t),
+    sameCompany(t, t.invoiceId, invoice).onDelete('cascade'),
+    sameCompany(t, t.chargeId, charge),
     index('invoice_line_invoice_idx').on(t.invoiceId),
     index('invoice_line_charge_idx').on(t.chargeId),
   ],
@@ -429,9 +465,7 @@ export const creditNote = sqliteTable(
     id: id(),
     organizationId: organizationId(),
     number: integer('number').notNull(),
-    invoiceId: text('invoice_id')
-      .notNull()
-      .references(() => invoice.id),
+    invoiceId: text('invoice_id').notNull(),
     reason: text('reason').notNull(),
     recipientName: text('recipient_name').notNull(),
     recipientStreetAddress: text('recipient_street_address'),
@@ -446,6 +480,8 @@ export const creditNote = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [
+    companyKey('credit_note', t),
+    sameCompany(t, t.invoiceId, invoice),
     uniqueIndex('credit_note_org_number_uq').on(t.organizationId, t.number),
     index('credit_note_invoice_idx').on(t.invoiceId),
   ],
@@ -455,10 +491,8 @@ export const creditNoteLine = sqliteTable(
   'credit_note_line',
   {
     id: id(),
-    creditNoteId: text('credit_note_id')
-      .notNull()
-      .references(() => creditNote.id, { onDelete: 'cascade' }),
     organizationId: organizationId(),
+    creditNoteId: text('credit_note_id').notNull(),
     position: integer('position').notNull(),
     // What is credited, for bookkeeping: the kind of the invoice line it reverses.
     kind: text('kind', { enum: chargeKinds }).notNull(),
@@ -467,7 +501,11 @@ export const creditNoteLine = sqliteTable(
     vatRatePercent: integer('vat_rate_percent').notNull(),
     vatOre: integer('vat_ore').notNull(),
   },
-  (t) => [index('credit_note_line_note_idx').on(t.creditNoteId)],
+  (t) => [
+    companyKey('credit_note_line', t),
+    sameCompany(t, t.creditNoteId, creditNote).onDelete('cascade'),
+    index('credit_note_line_note_idx').on(t.creditNoteId),
+  ],
 )
 
 export const creditNoteRelations = relations(creditNote, ({ one, many }) => ({
@@ -489,9 +527,7 @@ export const paymentReminder = sqliteTable(
   {
     id: id(),
     organizationId: organizationId(),
-    invoiceId: text('invoice_id')
-      .notNull()
-      .references(() => invoice.id),
+    invoiceId: text('invoice_id').notNull(),
     // 1 for the first reminder of the avi, 2 for the second, …
     sequence: integer('sequence').notNull(),
     sentOn: text('sent_on').notNull(),
@@ -503,7 +539,11 @@ export const paymentReminder = sqliteTable(
     recipientEmail: text('recipient_email').notNull(),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex('payment_reminder_invoice_sequence_uq').on(t.invoiceId, t.sequence)],
+  (t) => [
+    companyKey('payment_reminder', t),
+    sameCompany(t, t.invoiceId, invoice),
+    uniqueIndex('payment_reminder_invoice_sequence_uq').on(t.invoiceId, t.sequence),
+  ],
 )
 
 export const paymentReminderRelations = relations(paymentReminder, ({ one }) => ({
@@ -525,7 +565,10 @@ export const bookkeepingExport = sqliteTable(
     }),
     createdAt: createdAt(),
   },
-  (t) => [index('bookkeeping_export_org_idx').on(t.organizationId, t.createdAt)],
+  (t) => [
+    companyKey('bookkeeping_export', t),
+    index('bookkeeping_export_org_idx').on(t.organizationId, t.createdAt),
+  ],
 )
 
 /** One uploaded bank file (camt.054). */
@@ -544,7 +587,10 @@ export const paymentImport = sqliteTable(
     totalOre: integer('total_ore').notNull(),
     createdAt: createdAt(),
   },
-  (t) => [index('payment_import_org_idx').on(t.organizationId, t.createdAt)],
+  (t) => [
+    companyKey('payment_import', t),
+    index('payment_import_org_idx').on(t.organizationId, t.createdAt),
+  ],
 )
 
 // Incoming payments are accounting records like invoices: never deleted, only re-classified.
@@ -553,9 +599,7 @@ export const payment = sqliteTable(
   {
     id: id(),
     organizationId: organizationId(),
-    importId: text('import_id')
-      .notNull()
-      .references(() => paymentImport.id),
+    importId: text('import_id').notNull(),
     // The bank's own id for the transaction; a payment is imported at most once.
     bankReference: text('bank_reference').notNull(),
     bookingDate: text('booking_date').notNull(),
@@ -568,6 +612,8 @@ export const payment = sqliteTable(
   },
   // Which avier a payment settled is in the ledger: its allocation postings.
   (t) => [
+    companyKey('payment', t),
+    sameCompany(t, t.importId, paymentImport),
     uniqueIndex('payment_org_bank_reference_uq').on(t.organizationId, t.bankReference),
     index('payment_org_status_idx').on(t.organizationId, t.status),
   ],
@@ -594,14 +640,19 @@ export const posting = sqliteTable(
     kind: text('kind', { enum: postingKinds }).notNull(),
     description: text('description').notNull(),
     // The document or payment it records.
-    invoiceId: text('invoice_id').references(() => invoice.id),
-    creditNoteId: text('credit_note_id').references(() => creditNote.id),
-    paymentId: text('payment_id').references(() => payment.id),
+    invoiceId: text('invoice_id'),
+    creditNoteId: text('credit_note_id'),
+    paymentId: text('payment_id'),
     // Set on a reversal; a posting is reversed at most once.
-    reversesPostingId: text('reverses_posting_id').references((): AnySQLiteColumn => posting.id),
+    reversesPostingId: text('reverses_posting_id'),
     createdAt: createdAt(),
   },
   (t) => [
+    companyKey('posting', t),
+    sameCompany(t, t.invoiceId, invoice),
+    sameCompany(t, t.creditNoteId, creditNote),
+    sameCompany(t, t.paymentId, payment),
+    sameCompany(t, t.reversesPostingId, t),
     index('posting_org_date_idx').on(t.organizationId, t.date),
     uniqueIndex('posting_reverses_uq')
       .on(t.reversesPostingId)
@@ -614,22 +665,26 @@ export const ledgerEntry = sqliteTable(
   {
     id: id(),
     organizationId: organizationId(),
-    postingId: text('posting_id')
-      .notNull()
-      .references(() => posting.id),
+    postingId: text('posting_id').notNull(),
     account: text('account', { enum: ledgerAccounts }).notNull(),
     // Debit positive, credit negative.
     amountOre: integer('amount_ore').notNull(),
     // Whose receivable, and which open item: an avi, or none for a party's credit balance.
-    partyId: text('party_id').references(() => party.id),
-    agreementId: text('agreement_id').references(() => agreement.id),
-    invoiceId: text('invoice_id').references(() => invoice.id),
-    paymentId: text('payment_id').references(() => payment.id),
+    partyId: text('party_id'),
+    agreementId: text('agreement_id'),
+    invoiceId: text('invoice_id'),
+    paymentId: text('payment_id'),
     // For income and VAT: what it is for, so bookkeeping can choose accounts.
     chargeKind: text('charge_kind', { enum: chargeKinds }),
     vatRatePercent: integer('vat_rate_percent'),
   },
   (t) => [
+    companyKey('ledger_entry', t),
+    sameCompany(t, t.postingId, posting),
+    sameCompany(t, t.partyId, party),
+    sameCompany(t, t.agreementId, agreement),
+    sameCompany(t, t.invoiceId, invoice),
+    sameCompany(t, t.paymentId, payment),
     index('ledger_entry_posting_idx').on(t.postingId),
     index('ledger_entry_org_invoice_idx').on(t.organizationId, t.invoiceId),
     index('ledger_entry_org_payment_idx').on(t.organizationId, t.paymentId),
