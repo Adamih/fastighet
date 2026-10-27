@@ -29,6 +29,10 @@ export const chargeKinds = [
   'other',
   // A payment reminder's fee (påminnelseavgift); only ever posted by a reminder.
   'reminder_fee',
+  // A BRF's pantsättningsavgift and överlåtelseavgift, one-off amounts from the pledge and sale
+  // flows (`features/ownerships/fees.ts`).
+  'pledge_fee',
+  'transfer_fee',
 ] as const
 export type ChargeKind = (typeof chargeKinds)[number]
 

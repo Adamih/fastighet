@@ -9,6 +9,7 @@ import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { vatNumberFor } from '#/features/invoicing/rules'
+import { formatFeePercent } from '#/features/ownerships/fees'
 import {
   type CompanyKind,
   companyKindLabels,
@@ -45,6 +46,8 @@ const toValues = (s: Settings) => ({
   reminderFee: s.reminderFeeOre === null ? '' : oreToInput(s.reminderFeeOre),
   reminderIntervalDays: String(s.reminderIntervalDays),
   reminderDueDays: String(s.reminderDueDays),
+  pledgeFee: s.pledgeFeeBasisPoints === null ? '' : formatFeePercent(s.pledgeFeeBasisPoints),
+  transferFee: s.transferFeeBasisPoints === null ? '' : formatFeePercent(s.transferFeeBasisPoints),
 })
 type Values = ReturnType<typeof toValues>
 
@@ -64,6 +67,7 @@ function SettingsPage() {
     onSuccess: async (updated) => {
       queryClient.setQueryData(settingsQuery().queryKey, updated)
       await queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true })
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'fee-terms'] })
       // The company type sets the navigation's wording, which comes from the route context.
       await router.invalidate()
     },
@@ -199,6 +203,40 @@ function SettingsPage() {
               </form.AppField>
             </div>
           </Section>
+
+          <form.Subscribe selector={(s) => s.values.kind}>
+            {(kind) =>
+              kind === 'brf' && (
+                <Section
+                  title={m.settings_brf_fees()}
+                  description={m.settings_brf_fees_description()}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <form.AppField name="transferFee">
+                      {(field) => (
+                        <field.TextField
+                          label={<Optional>{m.settings_transfer_fee()}</Optional>}
+                          placeholder="2,5"
+                          inputMode="decimal"
+                          hint={m.settings_transfer_fee_hint()}
+                        />
+                      )}
+                    </form.AppField>
+                    <form.AppField name="pledgeFee">
+                      {(field) => (
+                        <field.TextField
+                          label={<Optional>{m.settings_pledge_fee()}</Optional>}
+                          placeholder="1"
+                          inputMode="decimal"
+                          hint={m.settings_pledge_fee_hint()}
+                        />
+                      )}
+                    </form.AppField>
+                  </div>
+                </Section>
+              )
+            }
+          </form.Subscribe>
 
           <Section title={m.settings_contact()} description={m.settings_contact_description()}>
             <form.AppField name="streetAddress">

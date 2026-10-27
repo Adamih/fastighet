@@ -44,6 +44,8 @@ export const TransferOwnershipInput = Schema.Struct({
   invoiceRecipientId: Schema.NullOr(Schema.String),
   /** The sellers' pledges to release in the same step (the lenders have asked for it). */
   releasePledgeIds: Schema.optional(Schema.Array(Schema.String)),
+  /** Charge the buyers the överlåtelseavgift, if the förening charges one; the board can skip it. */
+  chargeTransferFee: Schema.optional(Schema.Boolean),
 })
 export type TransferOwnershipInput = typeof TransferOwnershipInput.Type
 

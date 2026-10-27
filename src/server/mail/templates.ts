@@ -2,6 +2,7 @@ import CreditNote, * as creditNote from '#/emails/CreditNote'
 import ManagementRequest, * as managementRequest from '#/emails/ManagementRequest'
 import OrganizationInvitation, * as organizationInvitation from '#/emails/OrganizationInvitation'
 import PaymentReminder, * as paymentReminder from '#/emails/PaymentReminder'
+import PledgeConfirmation, * as pledgeConfirmation from '#/emails/PledgeConfirmation'
 import RentAdjustment, * as rentAdjustment from '#/emails/RentAdjustment'
 import RentInvoice, * as rentInvoice from '#/emails/RentInvoice'
 import ResetPassword, * as resetPassword from '#/emails/ResetPassword'
@@ -22,6 +23,7 @@ export const templates = {
   paymentReminder: { Component: PaymentReminder, subject: paymentReminder.subject },
   rentAdjustment: { Component: RentAdjustment, subject: rentAdjustment.subject },
   managementRequest: { Component: ManagementRequest, subject: managementRequest.subject },
+  pledgeConfirmation: { Component: PledgeConfirmation, subject: pledgeConfirmation.subject },
 } as const
 
 export type TemplateName = keyof typeof templates

@@ -1,7 +1,11 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Optional, useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { SubmissionForm } from '#/components/submission-form'
+import { useCan } from '#/features/auth/use-can'
+import { feeDescription } from '#/features/ownerships/fee-text'
+import { feeTermsQuery } from '#/features/ownerships/functions'
+import type { FeeTerms } from '#/features/settings/program'
 import { isIsoDate, stockholmDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
@@ -11,18 +15,25 @@ import { registerProblem, releaseProblem } from './rules'
 const refresh = (queryClient: ReturnType<typeof useQueryClient>) =>
   queryClient.invalidateQueries({ queryKey: ['ownerships'] }, { throwOnError: true })
 
-/** A lender's notice: who, their reference and the day it reached the förening. */
+/**
+ * A lender's notice: who, their reference and the day it reached the förening; the
+ * pantsättningsavgift if the förening charges one, and where to email the confirmation.
+ */
 function RegisterPledgeForm({
   ownership,
+  feeTerms,
   onSubmit,
 }: {
   ownership: { endDate: string | null }
+  feeTerms: FeeTerms | undefined
   onSubmit: (value: {
     creditorName: string
     creditorOrganizationNumber: string
     reference: string
     notifiedOn: string
     note: string
+    chargeFee: boolean
+    confirmationEmail: string
   }) => Promise<unknown>
 }) {
   const drawer = useFormDrawerContext()
@@ -34,8 +45,15 @@ function RegisterPledgeForm({
       reference: '',
       notifiedOn: today,
       note: '',
+      // The board skips the fee only where the bylaws say otherwise.
+      chargeFee: true,
+      confirmationEmail: '',
     },
-    onSubmit: ({ value }) => onSubmit(value),
+    onSubmit: ({ value }) =>
+      onSubmit({
+        ...value,
+        chargeFee: value.chargeFee && feeTerms?.pledgeFeeBasisPoints != null,
+      }),
   })
   return (
     <SubmissionForm form={form} id={drawer?.formId} className="grid gap-4">
@@ -87,6 +105,29 @@ function RegisterPledgeForm({
       <form.AppField name="note">
         {(field) => <field.TextField label={<Optional>{m.pledge_note()}</Optional>} />}
       </form.AppField>
+      <form.AppField name="confirmationEmail">
+        {(field) => (
+          <field.TextField
+            label={<Optional>{m.pledge_confirmation_email()}</Optional>}
+            type="email"
+            hint={m.pledge_confirmation_email_hint()}
+          />
+        )}
+      </form.AppField>
+      {feeTerms && feeTerms.pledgeFeeBasisPoints !== null && (
+        <form.Subscribe selector={(s) => s.values.notifiedOn}>
+          {(notifiedOn) => (
+            <form.AppField name="chargeFee">
+              {(field) => (
+                <field.SwitchField
+                  label={m.pledge_charge_fee()}
+                  description={feeDescription(feeTerms, 'pledge_fee', notifiedOn)}
+                />
+              )}
+            </form.AppField>
+          )}
+        </form.Subscribe>
+      )}
       <form.AppForm>
         <form.SubmitButton>{m.pledge_register_submit()}</form.SubmitButton>
       </form.AppForm>
@@ -97,6 +138,7 @@ function RegisterPledgeForm({
 /** "Registrera pantsättning" on the bostadsrätt page. */
 export function useRegisterPledgeDrawer(ownership: { id: string; endDate: string | null }) {
   const queryClient = useQueryClient()
+  const feeTerms = useQuery({ ...feeTermsQuery(), enabled: useCan()({ lease: ['manage'] }) })
   const register = useFormMutation({
     mutationFn: registerPledgeFn,
     onSuccess: () => refresh(queryClient),
@@ -108,6 +150,7 @@ export function useRegisterPledgeDrawer(ownership: { id: string; endDate: string
     form: ({ close }) => (
       <RegisterPledgeForm
         ownership={ownership}
+        feeTerms={feeTerms.data}
         onSubmit={async (value) => {
           await register.mutateAsync({ data: { ownershipId: ownership.id, ...value } })
           close()

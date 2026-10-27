@@ -55,6 +55,8 @@ const lineLabels: Record<ChargeKind, string> = {
   one_off: 'Engångsbelopp',
   other: 'Övrigt',
   reminder_fee: 'Påminnelseavgift',
+  pledge_fee: 'Pantsättningsavgift',
+  transfer_fee: 'Överlåtelseavgift',
 }
 
 export interface LineUnit {

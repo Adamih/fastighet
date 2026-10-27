@@ -36,6 +36,7 @@ import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$t
 import { Route as AppUnitsUnitIdRouteImport } from './routes/_app/units/$unitId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
+import { Route as AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport } from './routes/_app/ownerships/$ownershipId_.pledges.$pledgeId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -174,6 +175,12 @@ const AppOwnershipsOwnershipIdExtractRoute =
     path: '/ownerships/$ownershipId/extract',
     getParentRoute: () => AppRoute,
   } as any)
+const AppOwnershipsOwnershipIdPledgesPledgeIdRoute =
+  AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport.update({
+    id: '/ownerships/$ownershipId_/pledges/$pledgeId',
+    path: '/ownerships/$ownershipId/pledges/$pledgeId',
+    getParentRoute: () => AppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -202,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/ownerships/': typeof AppOwnershipsIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesByTo {
   '/forgot-password': typeof ForgotPasswordRoute
@@ -230,6 +238,7 @@ export interface FileRoutesByTo {
   '/ownerships': typeof AppOwnershipsIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -260,6 +269,7 @@ export interface FileRoutesById {
   '/_app/ownerships/': typeof AppOwnershipsIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
   '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/_app/ownerships/$ownershipId_/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/ownerships/'
     | '/tenants/'
     | '/ownerships/$ownershipId/extract'
+    | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/forgot-password'
@@ -318,6 +329,7 @@ export interface FileRouteTypes {
     | '/ownerships'
     | '/tenants'
     | '/ownerships/$ownershipId/extract'
+    | '/ownerships/$ownershipId/pledges/$pledgeId'
   id:
     | '__root__'
     | '/_app'
@@ -347,6 +359,7 @@ export interface FileRouteTypes {
     | '/_app/ownerships/'
     | '/_app/tenants/'
     | '/_app/ownerships/$ownershipId_/extract'
+    | '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -550,6 +563,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOwnershipsOwnershipIdExtractRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/ownerships/$ownershipId_/pledges/$pledgeId': {
+      id: '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
+      path: '/ownerships/$ownershipId/pledges/$pledgeId'
+      fullPath: '/ownerships/$ownershipId/pledges/$pledgeId'
+      preLoaderRoute: typeof AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -574,6 +594,7 @@ interface AppRouteChildren {
   AppOwnershipsIndexRoute: typeof AppOwnershipsIndexRoute
   AppTenantsIndexRoute: typeof AppTenantsIndexRoute
   AppOwnershipsOwnershipIdExtractRoute: typeof AppOwnershipsOwnershipIdExtractRoute
+  AppOwnershipsOwnershipIdPledgesPledgeIdRoute: typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -597,6 +618,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppOwnershipsIndexRoute: AppOwnershipsIndexRoute,
   AppTenantsIndexRoute: AppTenantsIndexRoute,
   AppOwnershipsOwnershipIdExtractRoute: AppOwnershipsOwnershipIdExtractRoute,
+  AppOwnershipsOwnershipIdPledgesPledgeIdRoute:
+    AppOwnershipsOwnershipIdPledgesPledgeIdRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

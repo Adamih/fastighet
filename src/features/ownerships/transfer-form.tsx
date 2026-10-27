@@ -8,11 +8,13 @@ import { Switch } from '#/components/ui/switch'
 import { useCan } from '#/features/auth/use-can'
 import { invoicesQuery } from '#/features/invoicing/functions'
 import type { PledgeView } from '#/features/pledges/program'
+import type { FeeTerms } from '#/features/settings/program'
 import { tenantsQuery } from '#/features/tenants/functions'
 import { isIsoDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
 import { m } from '#/paraglide/messages'
-import { transferOwnershipFn } from './functions'
+import { feeDescription } from './fee-text'
+import { feeTermsQuery, transferOwnershipFn } from './functions'
 import { OwnersField, type OwnerValue, ownersValidator, toOwners } from './owners-field'
 import { receiverOf, receiverOptions } from './ownership-form'
 import type { OwnershipView } from './program'
@@ -28,6 +30,7 @@ export function TransferForm({
   ownership,
   tenants,
   invoices,
+  feeTerms,
   onSubmit,
 }: {
   ownership: Seller
@@ -37,11 +40,13 @@ export function TransferForm({
     periodEnd: string
     status: Parameters<typeof invoicedPastTransfer>[0][number]['status']
   }[]
+  feeTerms: FeeTerms | undefined
   onSubmit: (value: {
     transferDate: string
     owners: { partyId: string; sharePercent: number }[]
     invoiceRecipientId: string | null
     releasePledgeIds: string[]
+    chargeTransferFee: boolean
   }) => Promise<unknown>
 }) {
   const drawer = useFormDrawerContext()
@@ -53,6 +58,7 @@ export function TransferForm({
       invoiceRecipientId: '',
       // Nothing is released unless the board ticks it: lenders ask for releases themselves.
       releasePledgeIds: [] as string[],
+      chargeTransferFee: true,
     },
     onSubmit: ({ value }) =>
       onSubmit({
@@ -60,6 +66,7 @@ export function TransferForm({
         owners: toOwners(value.owners),
         invoiceRecipientId: receiverOf(value.owners, value.invoiceRecipientId),
         releasePledgeIds: value.releasePledgeIds,
+        chargeTransferFee: value.chargeTransferFee && feeTerms?.transferFeeBasisPoints != null,
       }),
   })
 
@@ -177,6 +184,21 @@ export function TransferForm({
         }
       </form.Subscribe>
 
+      {feeTerms && feeTerms.transferFeeBasisPoints !== null && (
+        <form.Subscribe selector={(s) => s.values.transferDate}>
+          {(transferDate) => (
+            <form.AppField name="chargeTransferFee">
+              {(field) => (
+                <field.SwitchField
+                  label={m.ownership_transfer_charge_fee()}
+                  description={feeDescription(feeTerms, 'transfer_fee', transferDate)}
+                />
+              )}
+            </form.AppField>
+          )}
+        </form.Subscribe>
+      )}
+
       <form.AppForm>
         <form.SubmitButton>{m.ownership_transfer_submit()}</form.SubmitButton>
       </form.AppForm>
@@ -196,6 +218,7 @@ export function useTransferOwnershipDrawer(ownership: Seller) {
     ...invoicesQuery({ filter: 'all', agreementId: ownership.id }),
     enabled: enabled && can({ invoice: ['read'] }),
   })
+  const feeTerms = useQuery({ ...feeTermsQuery(), enabled })
   const transfer = useFormMutation({
     mutationFn: transferOwnershipFn,
     onSuccess: async () => {
@@ -226,6 +249,7 @@ export function useTransferOwnershipDrawer(ownership: Seller) {
           ownership={ownership}
           tenants={tenants.data}
           invoices={invoices.data ?? []}
+          feeTerms={feeTerms.data}
           onSubmit={async (value) => {
             const created = await transfer.mutateAsync({
               data: { ownershipId: ownership.id, ...value },

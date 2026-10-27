@@ -9,6 +9,7 @@ import {
 } from '#/features/ownerships/program'
 import { addDays, stockholmDate } from '#/lib/dates'
 import { fail, harness } from '#/test/harness'
+import { confirmPledge, pledgeConfirmation, registerAndConfirm } from './confirmation'
 import { registerPledge, releasePledge } from './program'
 
 const today = stockholmDate(Date.now())
@@ -155,4 +156,95 @@ test('a bostadsrätt with pledges, even released ones, is never deleted', async 
   const { id: pledgeId } = await run(registerPledge(notice(id, 'Bank', '2024-02-01')))
   await run(releasePledge({ pledgeId, releasedOn: today, note: '' }))
   expect(await fail(run(deleteOwnership(id)))).toContain('pantsättningar')
+})
+
+test('the förening’s fees are charged as one-off amounts, unless the board skips them', async () => {
+  const { run, sqlite } = harness()
+  const { id } = await run(createOwnership(ownership))
+  // Not charged until the bylaws' shares are set.
+  await run(registerPledge({ ...notice(id, 'Ingen avgift', '2025-02-01'), chargeFee: true }))
+  sqlite.exec(
+    "UPDATE organization_settings SET pledge_fee_basis_points = 100, transfer_fee_basis_points = 250 WHERE organization_id = 'org'",
+  )
+  await run(registerPledge({ ...notice(id, 'Bank', '2026-03-01'), chargeFee: true }))
+  await run(registerPledge({ ...notice(id, 'Skippad', '2026-03-02'), chargeFee: false }))
+  // A buyer's bank often notifies before tillträde; the fee waits for the right's first day.
+  const fees = (view: {
+    charges: { kind: string; amountOre: number; fromDate: string; description: string | null }[]
+  }) =>
+    view.charges
+      .filter((c) => c.kind === 'pledge_fee' || c.kind === 'transfer_fee')
+      .map((c) => [c.kind, c.amountOre, c.fromDate, c.description])
+  expect(fees(await run(getOwnership(id)))).toEqual([
+    ['pledge_fee', 59_200, '2026-03-01', 'Pantsättningsavgift, Bank'],
+  ])
+  expect(
+    await fail(run(registerPledge({ ...notice(id, 'Gammal', '2019-05-01'), chargeFee: true }))),
+  ).toContain('Prisbasbeloppet för 2019')
+
+  const { id: buyerId, feeOre } = await run(
+    transferOwnership({
+      ownershipId: id,
+      transferDate: '2026-06-01',
+      owners: [{ partyId: 'maja', sharePercent: 100 }],
+      invoiceRecipientId: null,
+      chargeTransferFee: true,
+    }),
+  )
+  expect(feeOre).toBe(148_000)
+  expect(fees(await run(getOwnership(buyerId)))).toEqual([
+    ['transfer_fee', 148_000, '2026-06-01', 'Överlåtelseavgift'],
+  ])
+  // The buyers' bank notifies before tillträde of the next sale's buyers.
+  const { id: next } = await run(
+    transferOwnership({
+      ownershipId: buyerId,
+      transferDate: '2026-09-01',
+      owners: [{ partyId: 'erik', sharePercent: 100 }],
+      invoiceRecipientId: null,
+      chargeTransferFee: false,
+    }),
+  )
+  await run(registerPledge({ ...notice(next, 'Eriks bank', '2026-08-20'), chargeFee: true }))
+  expect(fees(await run(getOwnership(next)))).toEqual([
+    ['pledge_fee', 59_200, '2026-09-01', 'Pantsättningsavgift, Eriks bank'],
+  ])
+})
+
+test('the lender gets a confirmation by email, or one printed and posted', async () => {
+  const { run, outbox } = harness()
+  const { id } = await run(createOwnership(ownership))
+  await run(registerPledge(notice(id, 'Första banken', '2021-06-15')))
+  const { id: pledgeId, confirmed } = await run(
+    registerAndConfirm({
+      ...notice(id, 'Andra banken', '2024-03-01'),
+      reference: 'L-2',
+      confirmationEmail: 'pant@bank.test',
+    }),
+  )
+  expect(confirmed).toBe(true)
+  const [mail] = outbox
+  expect(mail.to).toBe('pant@bank.test')
+  expect(mail.subject).toBe('Pantsättning registrerad: bostadsrätt 1 i Test, er ref. L-2')
+  expect(mail.text).toContain('plats 2 i företrädesordningen')
+
+  const registered = await run(pledgeConfirmation({ pledgeId, kind: 'registered' }))
+  expect(registered.email).toBe('pant@bank.test')
+  expect(registered.sentAt).toBeNumber()
+  expect(registered.text.facts).toContainEqual(['Bostadsrättshavare', 'Anna'])
+  expect(registered.text.facts).toContainEqual(['Företrädesordning', '2'])
+
+  expect(await fail(run(pledgeConfirmation({ pledgeId, kind: 'released' })))).toContain(
+    'inte avregistrerad',
+  )
+  await run(releasePledge({ pledgeId, releasedOn: today, note: '' }))
+  const released = await run(pledgeConfirmation({ pledgeId, kind: 'released' }))
+  expect(released.sentAt).toBeNull()
+  expect(released.text.paragraphs[0]).toContain(`avregistrerats ur lägenhetsförteckningen ${today}`)
+  // Sent by post: recorded without an email.
+  await run(confirmPledge({ pledgeId, kind: 'released', email: '' }))
+  expect(outbox).toHaveLength(1)
+  const pledge = (await run(getOwnership(id))).pledges.find((p) => p.id === pledgeId)
+  expect(pledge?.releaseConfirmedAt).toBeNumber()
+  expect(pledge?.confirmationEmail).toBe('pant@bank.test')
 })

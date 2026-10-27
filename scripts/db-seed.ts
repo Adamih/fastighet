@@ -47,6 +47,7 @@ import {
   reversal,
 } from '#/features/ledger/postings'
 import { generateCode, hashCode } from '#/features/management/codes'
+import { feeFor } from '#/features/ownerships/fees'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import {
   nextReminderOn,
@@ -1458,6 +1459,9 @@ async function seedBrf() {
     email: 'styrelsen@brflinden.test',
     fSkatt: false,
     kind: 'brf',
+    // The bylaws allow the highest överlåtelse- and pantsättningsavgift.
+    pledgeFeeBasisPoints: 100,
+    transferFeeBasisPoints: 250,
   })
 
   const property = {
@@ -1688,6 +1692,31 @@ async function seedBrf() {
     })
   }
 
+  // Mats paid the överlåtelseavgift and, for his bank's notice, the pantsättningsavgift on his
+  // first avi.
+  const priceBaseAmounts = Object.fromEntries(
+    (await db.select().from(schema.priceBaseAmount)).map((r) => [r.year, r.amountKr]),
+  )
+  for (const [kind, basisPoints, description] of [
+    ['transfer_fee', 250, 'Överlåtelseavgift'],
+    ['pledge_fee', 100, 'Pantsättningsavgift, Bolånebanken AB'],
+  ] as const) {
+    const fee = feeFor(basisPoints, priceBaseAmounts, soldOn)
+    if ('missing' in fee) continue
+    charges.push({
+      id: id(),
+      agreementId: wik.id,
+      kind,
+      unitId: null,
+      description,
+      amountOre: fee.ore,
+      interval: 'once',
+      vat: false,
+      fromDate: soldOn,
+      toDate: null,
+    })
+  }
+
   // The apartment register: each apartment's andelstal, insats and upplåtelse, kept across sales.
   const register = flats.map((flat) => ({
     unitId: flat.id,
@@ -1777,7 +1806,8 @@ async function seedBrf() {
 
   // Pledges in the apartment register: the Lunds have two loans (the second bank ranks after
   // the first), Lina and Omar one, and 1103 shows a sale: Ida's bank released its pledge when she
-  // sold, and Mats's bank registered a new one on his bostadsrätt before he moved in.
+  // sold, and Mats's bank registered a new one on his bostadsrätt before he moved in. The board
+  // has confirmed each to the banks, except Mats's.
   const pledge = (
     agreementId: string,
     creditorName: string,
@@ -1790,12 +1820,14 @@ async function seedBrf() {
     notifiedOn,
     registeredBy: board.id,
     createdAt: new Date(`${notifiedOn}T10:00:00Z`),
+    confirmedAt: new Date(`${addDays(notifiedOn, 2)}T10:00:00Z`),
     ...extra,
   })
   await insertAll(schema.pledge, [
     pledge(lunds.id, 'Exempelbanken AB', '2015-08-20', {
       creditorOrganizationNumber: formatOrganizationNumber(withCheckDigit('502000000')),
       reference: 'BL-449120',
+      confirmationEmail: 'pant@exempelbanken.test',
     }),
     pledge(lunds.id, 'Sparbanken Exempel', '2021-04-12', { reference: '7731-22' }),
     pledge(holm.id, 'Bolånebanken AB', '2020-10-15', { reference: 'H-20-0193' }),
@@ -1804,8 +1836,13 @@ async function seedBrf() {
       releasedOn: addDays(soldOn, -1),
       releaseNote: 'På begäran av Exempelbanken AB vid försäljningen',
       releasedBy: board.id,
+      releaseConfirmedAt: new Date(`${soldOn}T10:00:00Z`),
     }),
-    pledge(wik.id, 'Bolånebanken AB', addDays(soldOn, -12), { reference: 'H-25-1102' }),
+    pledge(wik.id, 'Bolånebanken AB', addDays(soldOn, -12), {
+      reference: 'H-25-1102',
+      confirmationEmail: 'pant@bolanebanken.test',
+      confirmedAt: null,
+    }),
   ])
 
   // Monthly runs for the last four months and the coming one, issued 20 days ahead.
@@ -1814,6 +1851,9 @@ async function seedBrf() {
     lines: InvoiceLineDraft[]
     paidOn?: string
   })[] = []
+  // One-off amounts (the fees) are billed by the first avi only.
+  const onceIds = new Set(charges.filter((c) => c.interval === 'once').map((c) => c.id))
+  const billedOnce = new Set<string>()
   for (let offset = -4; offset <= 1; offset++) {
     const monthStart = addMonths(thisMonth, offset)
     const issueDate = addDays(monthStart, -20)
@@ -1830,9 +1870,10 @@ async function seedBrf() {
           units: a.units,
         },
         period,
-        new Set(),
+        billedOnce,
       )
       if (!bill) continue
+      for (const line of bill.lines) if (onceIds.has(line.chargeId)) billedOnce.add(line.chargeId)
       const number = invoices.length + 1
       invoices.push({
         id: id(),

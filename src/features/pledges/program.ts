@@ -1,7 +1,9 @@
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
-import { agreement, pledge } from '#/db/schema'
+import { agreement, charge, pledge } from '#/db/schema'
+import { feeCharge } from '#/features/ownerships/fee-program'
+import { loadFeeTerms } from '#/features/settings/program'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -36,6 +38,9 @@ const columns = {
   createdAt: pledge.createdAt,
   releasedOn: pledge.releasedOn,
   releaseNote: pledge.releaseNote,
+  confirmationEmail: pledge.confirmationEmail,
+  confirmedAt: pledge.confirmedAt,
+  releaseConfirmedAt: pledge.releaseConfirmedAt,
 }
 
 /**
@@ -65,6 +70,8 @@ export const pledgesFor = (agreementIds: readonly string[], asOf?: string) =>
         .map((r) => ({
           ...r,
           createdAt: r.createdAt.getTime(),
+          confirmedAt: r.confirmedAt?.getTime() ?? null,
+          releaseConfirmedAt: r.releaseConfirmedAt?.getTime() ?? null,
           // A release after `asOf` hadn't happened yet.
           ...(r.releasedOn && r.releasedOn > on ? { releasedOn: null, releaseNote: null } : {}),
         }))
@@ -75,8 +82,13 @@ export const pledgesFor = (agreementIds: readonly string[], asOf?: string) =>
 
 type PledgeRow = Omit<
   typeof pledge.$inferSelect,
-  'createdAt' | 'organizationId' | 'registeredBy' | 'releasedBy'
-> & { createdAt: number }
+  | 'createdAt'
+  | 'confirmedAt'
+  | 'releaseConfirmedAt'
+  | 'organizationId'
+  | 'registeredBy'
+  | 'releasedBy'
+> & { createdAt: number; confirmedAt: number | null; releaseConfirmedAt: number | null }
 
 /** A pledge for display: `priority` numbers the active ones from 1, null once released. */
 export type PledgeView = PledgeRow & { active: boolean; priority: number | null }
@@ -99,14 +111,17 @@ const releaseProblemMessages: Record<ReleaseProblem, string> = {
   future: 'Avregistreringen kan inte vara i framtiden',
 }
 
-/** Registers a lender's notice on a bostadsrätt. */
+/**
+ * Registers a lender's notice on a bostadsrätt, with the förening's pantsättningsavgift as a
+ * one-off amount on it when it charges one (unless the board skips it), in the same batch.
+ */
 export const registerPledge = (input: RegisterPledgeInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const me = yield* CurrentUser
     const [ownership] = yield* orgQuery((db, organizationId) =>
       db
-        .select({ id: agreement.id, endDate: agreement.endDate })
+        .select({ id: agreement.id, startDate: agreement.startDate, endDate: agreement.endDate })
         .from(agreement)
         .where(
           and(
@@ -119,23 +134,33 @@ export const registerPledge = (input: RegisterPledgeInput) =>
     if (!ownership) return yield* new NotFound({ entity: 'ownership', id: input.ownershipId })
     const problem = registerProblem(ownership, input.notifiedOn, yield* today)
     if (problem) return yield* new Conflict({ message: registerProblemMessages[problem] })
+    const creditorName = input.creditorName.trim()
+    const fee = yield* feeCharge('pledge_fee', yield* loadFeeTerms, {
+      charge: input.chargeFee ?? false,
+      date: input.notifiedOn,
+      agreement: ownership,
+      description: `Pantsättningsavgift, ${creditorName}`,
+    })
     const orgNumber = blankToNull(input.creditorOrganizationNumber)
-    const [created] = yield* orgQuery((db, organizationId) =>
-      db
-        .insert(pledge)
-        .values({
+    const id = crypto.randomUUID()
+    yield* orgQuery((db, organizationId) =>
+      db.batch([
+        db.insert(pledge).values({
+          id,
           organizationId,
           agreementId: ownership.id,
-          creditorName: input.creditorName.trim(),
+          creditorName,
           creditorOrganizationNumber: orgNumber && formatOrganizationNumber(orgNumber),
           reference: blankToNull(input.reference),
           notifiedOn: input.notifiedOn,
           note: blankToNull(input.note),
           registeredBy: me.id,
-        })
-        .returning({ id: pledge.id }),
+          confirmationEmail: blankToNull(input.confirmationEmail ?? ''),
+        }),
+        ...(fee ? [db.insert(charge).values({ ...fee, organizationId })] : []),
+      ]),
     )
-    return { id: created.id, ownershipId: ownership.id }
+    return { id, ownershipId: ownership.id, feeOre: fee?.amountOre ?? null }
   })
 
 /**

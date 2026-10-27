@@ -1,10 +1,17 @@
 import { Schema } from 'effect'
 import { isValidBankgiro } from '#/features/invoicing/rules'
+import { type BrfFeeKind, feePercentProblem } from '#/features/ownerships/fees'
 import { MAX_REMINDER_FEE_ORE } from '#/features/reminders/rules'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { parseSek } from '#/lib/money'
 import { Email, OptionalText, PostalCode } from '#/lib/schemas'
 import { companyKinds } from './company-kinds'
+
+/** A BRF fee as a percent of the prisbasbelopp, as typed; blank means it isn't charged. */
+const FeePercent = (kind: BrfFeeKind, message: string) =>
+  Schema.String.check(
+    Schema.makeFilter((s: string) => feePercentProblem(kind, s) === null, { message }),
+  )
 
 export const UpdateSettingsInput = Schema.Struct({
   organizationNumber: Schema.String.check(
@@ -45,6 +52,8 @@ export const UpdateSettingsInput = Schema.Struct({
       message: 'Ange 1–60 dagar',
     }),
   ),
+  pledgeFee: FeePercent('pledge_fee', 'Ange högst 1 % av prisbasbeloppet, eller lämna tomt'),
+  transferFee: FeePercent('transfer_fee', 'Ange högst 2,5 % av prisbasbeloppet, eller lämna tomt'),
 })
 export type UpdateSettingsInput = typeof UpdateSettingsInput.Type
 

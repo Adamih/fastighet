@@ -50,6 +50,13 @@
       "when": 1793031622669,
       "tag": "0006_pledges",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793101524787,
+      "tag": "0007_brf_fees",
+      "breakpoints": true
     }
   ]
 }

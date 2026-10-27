@@ -27,7 +27,15 @@ const colors = {
 const fontFamily =
   '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
 
-export function EmailLayout({ preview, children }: { preview: string; children: ReactNode }) {
+export function EmailLayout({
+  preview,
+  footer = 'Det här är ett automatiskt meddelande från Fastighet. Svara inte på det.',
+  children,
+}: {
+  preview: string
+  footer?: string
+  children: ReactNode
+}) {
   return (
     <Html lang="sv">
       <Head />
@@ -53,7 +61,7 @@ export function EmailLayout({ preview, children }: { preview: string; children: 
               margin: '16px 0 0',
             }}
           >
-            Det här är ett automatiskt meddelande från Fastighet. Svara inte på det.
+            {footer}
           </Text>
         </Container>
       </Body>

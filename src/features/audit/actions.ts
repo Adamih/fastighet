@@ -60,6 +60,7 @@ export const auditActions = {
   'ownership.delete': action(m.audit_ownership_delete),
   'pledge.register': action(m.audit_pledge_register, 'pledge'),
   'pledge.release': action(m.audit_pledge_release, 'pledge'),
+  'pledge.confirm': action(m.audit_pledge_confirm, 'pledge'),
   'payment.import': action(m.audit_payment_import),
   'payment.assign': action(m.audit_payment_assign, 'payment'),
   'payment.ignore': action(m.audit_payment_ignore, 'payment'),

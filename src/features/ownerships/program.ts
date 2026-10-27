@@ -36,7 +36,7 @@ import {
   pledgesFor,
   releaseStatements,
 } from '#/features/pledges/program'
-import { loadSettings } from '#/features/settings/program'
+import { loadFeeTerms, loadSettings } from '#/features/settings/program'
 import { stockholmDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -44,6 +44,7 @@ import { Conflict, NotFound } from '#/server/errors'
 import { orgQuery } from '#/server/scoped'
 import { CurrentOrganization, CurrentUser, HomeOrganization } from '#/server/services'
 import { today } from '#/server/today'
+import { feeCharge } from './fee-program'
 import { sellersLastDay, type TransferProblem, transferProblem } from './rules'
 import type { CreateOwnershipInput, TransferOwnershipInput, UpdateOwnershipInput } from './schemas'
 
@@ -403,7 +404,8 @@ const transferProblemMessages: Record<TransferProblem, string> = {
 /**
  * A sale (överlåtelse). The sellers' bostadsrätt ends the day before `transferDate` and stays as
  * history with its avier; the buyers get a new one for the same units, fee and details, linked
- * back to it. Both happen in one batch.
+ * back to it. The förening's överlåtelseavgift, if it charges one, goes on the buyers' first avi
+ * (the bylaws usually have the buyer pay it). All in one batch.
  */
 export const transferOwnership = (input: TransferOwnershipInput) =>
   Effect.gen(function* () {
@@ -435,6 +437,12 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
       return yield* new Conflict({ message: 'Bostadsrätten har ingen avgift på tillträdesdagen' })
     }
     const id = crypto.randomUUID()
+    const fee = yield* feeCharge('transfer_fee', yield* loadFeeTerms, {
+      charge: input.chargeTransferFee ?? false,
+      date: input.transferDate,
+      agreement: { id, startDate: input.transferDate },
+      description: 'Överlåtelseavgift',
+    })
     yield* orgQuery((db, organizationId) =>
       db.batch([
         db
@@ -483,6 +491,7 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
             fromDate: input.transferDate,
           })),
         ),
+        ...(fee ? [db.insert(charge).values({ ...fee, organizationId })] : []),
         ...releaseStatements(db, organizationId, releaseIds, {
           releasedOn: on,
           note: 'Avregistrerad vid överlåtelsen',
@@ -490,7 +499,7 @@ export const transferOwnership = (input: TransferOwnershipInput) =>
         }),
       ]),
     )
-    return { id }
+    return { id, feeOre: fee?.amountOre ?? null }
   })
 
 /**
@@ -543,52 +552,30 @@ export const deleteOwnership = (ownershipId: string) =>
   })
 
 /**
- * An extract from the apartment register (lägenhetsförteckningen) for one bostadsrätt as it stood
- * on `onDate`: the förening, the apartment, the holders then, and the pledges in force then in
- * priority order (with released ones if asked for). The extract isn't stored; producing one is
- * recorded in the audit log by its server function.
+ * A bostadsrätt as the apartment register describes it on `on`: the apartment, what goes with it
+ * and the holders then. No permission check; the register's documents check their own.
  */
-export const ownershipExtract = (input: {
-  ownershipId: string
-  onDate: string
-  includeReleased: boolean
-}) =>
+export const registerEntry = (
+  ownershipId: string,
+  on: (row: { startDate: string; endDate: string | null }) => string,
+) =>
   Effect.gen(function* () {
-    yield* requirePermission(read)
-    const on = yield* today
-    if (input.onDate > on) {
-      return yield* new Conflict({ message: 'Utdraget kan inte avse en dag i framtiden' })
-    }
     const row = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findFirst({
-        where: and(eq(agreement.id, input.ownershipId), isOwnership(organizationId)),
+        where: and(eq(agreement.id, ownershipId), isOwnership(organizationId)),
         with: withOwnershipDetails,
       }),
     )
-    if (!row) return yield* new NotFound({ entity: 'ownership', id: input.ownershipId })
-    if (input.onDate < row.startDate || (row.endDate !== null && input.onDate > row.endDate)) {
-      return yield* new Conflict({
-        message: row.endDate
-          ? `Bostadsrätten gällde ${row.startDate} – ${row.endDate}. Välj en dag då.`
-          : `Bostadsrätten gäller från ${row.startDate}. Välj en dag från då.`,
-      })
-    }
-    const view = toView(row, input.onDate)
-    const pledges = (yield* pledgesFor([view.id], input.onDate)).get(view.id) ?? []
+    if (!row) return yield* new NotFound({ entity: 'ownership', id: ownershipId })
+    const view = toView(row, on(row))
     const apartment = row.units.find((u) => u.unit.kind === 'apartment')?.unit ?? null
-    const seller = yield* loadSettings
-    const me = yield* CurrentUser
-    const home = yield* HomeOrganization
-    const company = yield* CurrentOrganization
-    const producedAt = yield* Clock.currentTimeMillis
-
     return {
-      onDate: input.onDate,
-      association: {
-        name: seller.organizationName,
-        organizationNumber: seller.organizationNumber,
+      ownership: {
+        id: view.id,
+        number: view.number,
+        startDate: view.startDate,
+        endDate: view.endDate,
       },
-      ownership: { id: view.id, number: view.number, startDate: view.startDate },
       apartment: apartment && {
         label: apartment.label,
         designation: apartment.property.designation,
@@ -606,6 +593,53 @@ export const ownershipExtract = (input: {
         .filter((u) => u.kind !== 'apartment')
         .map((u) => ({ label: u.label, kind: u.kind })),
       holders: view.owners.map((o) => ({ name: o.name, sharePercent: o.sharePercent })),
+    }
+  })
+
+/**
+ * An extract from the apartment register (lägenhetsförteckningen) for one bostadsrätt as it stood
+ * on `onDate`: the förening, the apartment, the holders then, and the pledges in force then in
+ * priority order (with released ones if asked for). The extract isn't stored; producing one is
+ * recorded in the audit log by its server function.
+ */
+export const ownershipExtract = (input: {
+  ownershipId: string
+  onDate: string
+  includeReleased: boolean
+}) =>
+  Effect.gen(function* () {
+    yield* requirePermission(read)
+    const on = yield* today
+    if (input.onDate > on) {
+      return yield* new Conflict({ message: 'Utdraget kan inte avse en dag i framtiden' })
+    }
+    const entry = yield* registerEntry(input.ownershipId, () => input.onDate)
+    const { startDate, endDate } = entry.ownership
+    if (input.onDate < startDate || (endDate !== null && input.onDate > endDate)) {
+      return yield* new Conflict({
+        message: endDate
+          ? `Bostadsrätten gällde ${startDate} – ${endDate}. Välj en dag då.`
+          : `Bostadsrätten gäller från ${startDate}. Välj en dag från då.`,
+      })
+    }
+    const pledges =
+      (yield* pledgesFor([entry.ownership.id], input.onDate)).get(entry.ownership.id) ?? []
+    const seller = yield* loadSettings
+    const me = yield* CurrentUser
+    const home = yield* HomeOrganization
+    const company = yield* CurrentOrganization
+    const producedAt = yield* Clock.currentTimeMillis
+
+    return {
+      onDate: input.onDate,
+      association: {
+        name: seller.organizationName,
+        organizationNumber: seller.organizationNumber,
+      },
+      ownership: { id: entry.ownership.id, number: entry.ownership.number, startDate },
+      apartment: entry.apartment,
+      otherUnits: entry.otherUnits,
+      holders: entry.holders,
       pledges: pledges
         .filter((p) => p.active)
         .map((p) => ({

@@ -6,6 +6,7 @@ import type { Permissions } from '#/lib/permissions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
+import { getFeeTerms } from './fee-program'
 import {
   createOwnership,
   deleteOwnership,
@@ -88,6 +89,11 @@ export const ownershipExtractQuery = (input: OwnershipExtractInput) =>
     // An extract is a document as of a date; refetching would only add audit entries.
     staleTime: Number.POSITIVE_INFINITY,
   })
+
+export const feeTermsFn = createServerFn({ method: 'GET' }).handler(() => runApp(getFeeTerms))
+
+export const feeTermsQuery = () =>
+  queryOptions({ queryKey: ['settings', 'fee-terms'], queryFn: () => feeTermsFn() })
 
 export const ownershipsQuery = () =>
   queryOptions({ queryKey: ['ownerships'], queryFn: () => listOwnershipsFn() })

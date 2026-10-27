@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { organizationSettings } from '#/db/schema'
+import { organizationSettings, priceBaseAmount } from '#/db/schema'
 import { formatBankgiro } from '#/features/invoicing/rules'
+import { parseFeePercent } from '#/features/ownerships/fees'
 import {
   DEFAULT_REMINDER_DUE_DAYS,
   DEFAULT_REMINDER_INTERVAL_DAYS,
@@ -10,7 +11,7 @@ import { formatOrganizationNumber } from '#/features/tenants/organization-number
 import { parseSek } from '#/lib/money'
 import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
-import { orgQuery } from '#/server/scoped'
+import { orgQuery, query } from '#/server/scoped'
 import { CurrentOrganization } from '#/server/services'
 import type { CompanyKind } from './company-kinds'
 import type { UpdateSettingsInput } from './schemas'
@@ -40,10 +41,31 @@ export const loadSettings = Effect.gen(function* () {
     reminderFeeOre: row?.reminderFeeOre ?? null,
     reminderIntervalDays: row?.reminderIntervalDays ?? DEFAULT_REMINDER_INTERVAL_DAYS,
     reminderDueDays: row?.reminderDueDays ?? DEFAULT_REMINDER_DUE_DAYS,
+    pledgeFeeBasisPoints: row?.pledgeFeeBasisPoints ?? null,
+    transferFeeBasisPoints: row?.transferFeeBasisPoints ?? null,
   }
 })
 
 export type Settings = Effect.Success<typeof loadSettings>
+
+/**
+ * What a BRF charges for pledges and sales (null: not charged) and the prisbasbelopp by year,
+ * without a permission check: the pledge and sale flows use it under their own.
+ */
+export const loadFeeTerms = Effect.gen(function* () {
+  const settings = yield* loadSettings
+  const amounts = yield* query((db) => db.select().from(priceBaseAmount))
+  return {
+    pledgeFeeBasisPoints: settings.pledgeFeeBasisPoints,
+    transferFeeBasisPoints: settings.transferFeeBasisPoints,
+    priceBaseAmounts: Object.fromEntries(amounts.map((a) => [a.year, a.amountKr])) as Record<
+      number,
+      number
+    >,
+  }
+})
+
+export type FeeTerms = Effect.Success<typeof loadFeeTerms>
 
 export const getSettings = requirePermission({ settings: ['read'] }).pipe(
   Effect.andThen(loadSettings),
@@ -67,6 +89,8 @@ export const updateSettings = (input: UpdateSettingsInput) =>
       reminderFeeOre: input.reminderFee.trim() ? parseSek(input.reminderFee) : null,
       reminderIntervalDays: Number(input.reminderIntervalDays),
       reminderDueDays: Number(input.reminderDueDays),
+      pledgeFeeBasisPoints: parseFeePercent(input.pledgeFee),
+      transferFeeBasisPoints: parseFeePercent(input.transferFee),
     }
     yield* orgQuery((db, organizationId) =>
       db

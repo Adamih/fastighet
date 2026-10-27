@@ -1,6 +1,8 @@
+import { Link } from '@tanstack/react-router'
 import { Landmark, Plus } from 'lucide-react'
 import { Panel } from '#/components/detail'
 import { Button } from '#/components/ui/button'
+import { stockholmDate } from '#/lib/dates'
 import { m } from '#/paraglide/messages'
 import { useRegisterPledgeDrawer, useReleasePledgeDrawer } from './pledge-form'
 import type { PledgeView } from './program'
@@ -15,7 +17,48 @@ const pledgeMeta = (p: PledgeView) =>
     .filter(Boolean)
     .join(' · ')
 
-function ActivePledge({ pledge, canManage }: { pledge: PledgeView; canManage: boolean }) {
+/** The confirmation to the lender: whether it was sent, and a link to print or send it. */
+function ConfirmationLink({
+  ownershipId,
+  pledge,
+  kind,
+}: {
+  ownershipId: string
+  pledge: PledgeView
+  kind: 'registered' | 'released'
+}) {
+  const sentAt = kind === 'registered' ? pledge.confirmedAt : pledge.releaseConfirmedAt
+  return (
+    <span className="text-muted-foreground">
+      <Link
+        to="/ownerships/$ownershipId/pledges/$pledgeId"
+        params={{ ownershipId, pledgeId: pledge.id }}
+        search={{ kind }}
+        className="font-medium text-foreground underline-offset-4 hover:underline"
+      >
+        {kind === 'registered' ? m.pledge_confirmation() : m.pledge_confirmation_release()}
+      </Link>
+      {' · '}
+      {sentAt ? (
+        m.pledge_confirmation_sent({ date: stockholmDate(sentAt) })
+      ) : (
+        <span className="text-amber-700 dark:text-amber-300">
+          {m.pledge_confirmation_not_sent()}
+        </span>
+      )}
+    </span>
+  )
+}
+
+function ActivePledge({
+  ownershipId,
+  pledge,
+  canManage,
+}: {
+  ownershipId: string
+  pledge: PledgeView
+  canManage: boolean
+}) {
   const release = useReleasePledgeDrawer(pledge)
   return (
     <li className="flex items-start gap-3 border-t py-2.5 text-[13px] first:border-t-0 first:pt-0">
@@ -26,6 +69,7 @@ function ActivePledge({ pledge, canManage }: { pledge: PledgeView; canManage: bo
         <span className="truncate font-semibold">{pledge.creditorName}</span>
         <span className="text-muted-foreground">{pledgeMeta(pledge)}</span>
         {pledge.note && <span className="text-muted-foreground">{pledge.note}</span>}
+        <ConfirmationLink ownershipId={ownershipId} pledge={pledge} kind="registered" />
       </span>
       {canManage && (
         <Button variant="outline" className="h-11 shrink-0 sm:h-8" onClick={release.open}>
@@ -70,7 +114,7 @@ export function PledgesPanel({
       ) : (
         <ol>
           {active.map((p) => (
-            <ActivePledge key={p.id} pledge={p} canManage={canManage} />
+            <ActivePledge key={p.id} ownershipId={ownership.id} pledge={p} canManage={canManage} />
           ))}
         </ol>
       )}
@@ -89,6 +133,7 @@ export function PledgesPanel({
                     .join(' · ')}
                 </span>
                 {p.releaseNote && <span className="text-muted-foreground">{p.releaseNote}</span>}
+                <ConfirmationLink ownershipId={ownership.id} pledge={p} kind="released" />
               </li>
             ))}
           </ul>

@@ -310,6 +310,12 @@ export const pledge = sqliteTable(
     /** At whose request, or why (e.g. "På begäran av Banken AB", "Registrerad av misstag"). */
     releaseNote: text('release_note'),
     releasedBy: text('released_by').references(() => user.id, { onDelete: 'set null' }),
+    /** Where the lender wants the förening's confirmations, if given when registering. */
+    confirmationEmail: text('confirmation_email'),
+    /** When the lender was sent confirmation of the registration (by email or by post). */
+    confirmedAt: integer('confirmed_at', { mode: 'timestamp_ms' }),
+    /** When the lender was sent confirmation of the release. */
+    releaseConfirmedAt: integer('release_confirmed_at', { mode: 'timestamp_ms' }),
   },
   (t) => [
     companyKey('pledge', t),
@@ -378,6 +384,14 @@ export const kpi = sqliteTable('kpi', {
   month: text('month').primaryKey(),
   // The index times 100, e.g. 419.35 → 41935.
   valueHundredths: integer('value_hundredths').notNull(),
+})
+
+// Prisbasbelopp per year (socialförsäkringsbalken 2 kap.), set by the government each autumn
+// for the next year. Reference data shared by every company, like `kpi`: domain code only reads
+// it, and values come from a migration, never a form. A BRF's fees are capped by it.
+export const priceBaseAmount = sqliteTable('price_base_amount', {
+  year: integer('year').primaryKey(),
+  amountKr: integer('amount_kr').notNull(),
 })
 
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
@@ -465,6 +479,11 @@ export const organizationSettings = sqliteTable('organization_settings', {
   // account numbers for the SIE export as JSON; unset ones are BAS (`features/bookkeeping`).
   financialYearStartMonth: integer('financial_year_start_month').notNull().default(1),
   bookkeepingAccounts: text('bookkeeping_accounts'),
+  // A BRF's pantsättningsavgift and överlåtelseavgift as basis points of the prisbasbelopp
+  // (100 = 1 %), within the legal caps; null when the bylaws don't charge it. See
+  // `features/ownerships/fees.ts`.
+  pledgeFeeBasisPoints: integer('pledge_fee_basis_points'),
+  transferFeeBasisPoints: integer('transfer_fee_basis_points'),
 })
 
 // Issued invoices are accounting records: they are never deleted, only voided, and their
