@@ -41,6 +41,8 @@ Login (`/login`), signup (`/sign-up`), email verification and password recovery 
 
 Run `mise tasks` to list all tasks. Every package script has a matching mise task; the underlying Bun scripts remain available. `mise run setup` preserves an existing `.dev.vars` and creates a random `BETTER_AUTH_SECRET` only when that file is missing.
 
+`bun install` also installs the Husky Git hooks. Before each commit, `bun run check:fix` runs Biome's formatting and safe fixes across the project, using the exclusions in `biome.json`. Remaining errors block the commit. Fixes stay in the working tree; stage them to include them in a commit.
+
 | Task | What it does |
 |---|---|
 | `setup` | Install dependencies and create local auth configuration if missing |

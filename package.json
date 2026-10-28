@@ -26,7 +26,8 @@
     "db:seed": "bun scripts/db-seed.ts",
     "db:reset": "rm -rf .wrangler/state/v3/d1 && bun run db:migrate:local && bun run db:seed",
     "payments:sample": "bun scripts/payments-sample.ts",
-    "email:dev": "email dev --dir src/emails --port 3001"
+    "email:dev": "email dev --dir src/emails --port 3001",
+    "prepare": "husky"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
@@ -86,6 +87,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
     "auth": "^1.7.12",
+    "husky": "^9.1.7",
     "react-email": "^6.11.3",
     "typescript": "^6.0.2",
     "vite": "^8.0.0",
