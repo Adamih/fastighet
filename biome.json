@@ -16,6 +16,7 @@
       "!src/components/ui",
       "!src/components/auth",
       "!src/lib/auth/auth-plugin.ts",
+      "!src/lib/auth/organization-plugin.tsx",
       "!worker-configuration.d.ts"
     ]
   },

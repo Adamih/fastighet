@@ -1543,36 +1543,7 @@
   "settings_transfer_fee_hint": "Högst 2,5 %. Läggs på köparnas första avi när en överlåtelse registreras.",
   "settings_vat_footer_hint": "Momsreg.nr skrivs bara ut på avier med moms.",
   "settings_vat_number": "Momsreg.nr {number}",
-  "team_access_count": [
-    {
-      "declarations": [
-        "input count",
-        "local countPlural = count: plural"
-      ],
-      "selectors": [
-        "countPlural"
-      ],
-      "match": {
-        "countPlural=one": "{count} person har åtkomst",
-        "countPlural=other": "{count} personer har åtkomst"
-      }
-    }
-  ],
   "team_access_organization": "Personer med åtkomst till {organization}",
-  "team_admin_hint": "Administratörer kan också bjuda in och ta bort användare.",
-  "team_email_placeholder": "namn@foretag.se",
-  "team_email_required": "Ange en e-postadress",
-  "team_invitation_meta": "{role} · gäller till {date}",
-  "team_invite_colleague": "Bjud in en kollega",
-  "team_members": "Medlemmar",
-  "team_pending_invitations": "Väntande inbjudningar",
-  "team_remove_confirm": "Ta bort {name} från företaget?",
-  "team_remove_member": "Ta bort {name}",
-  "team_revoke": "Återkalla",
-  "team_role": "Roll",
-  "team_role_for": "Roll för {name}",
-  "team_send_invitation": "Skicka inbjudan",
-  "team_you": "(du)",
   "tenant_add": "Lägg till hyresgäst",
   "tenant_add_description": "Koppla hyresgästen till ett avtal i nästa steg.",
   "tenant_add_email": "Lägg till e-post",

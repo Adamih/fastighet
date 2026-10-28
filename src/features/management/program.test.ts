@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test'
 import { portfolio } from '#/features/portfolio/program'
 import { createProperty, listProperties } from '#/features/properties/program'
-import { getTeam } from '#/features/team/program'
 import { grantPresets, levelsFromGrant } from '#/lib/managed-access'
 import { recordAudit } from '#/server/audit'
 import { managedCompanies, resolveFocus } from '#/server/focus'
@@ -292,9 +291,6 @@ test('domain programs follow the grant and the role in a managed company; the te
       as('viewer', grantPresets.full)(createProperty({ ...property, designation: 'Uppsala 3:3' })),
     ),
   ).toContain('Forbidden')
-  expect(await fail(as('owner', grantPresets.full)(getTeam))).toContain('Forbidden')
-  // In their own company the team is open as before.
-  expect((await h.run(getTeam)).members.length).toBe(1)
 })
 
 test('the manager can end its own access; the client sees it in its log', async () => {
