@@ -31,8 +31,9 @@ describe('Better Auth role permissions', () => {
     expect(can('member', { bookkeeping: ['manage'] })).toBe(false)
   })
 
-  test('Better Auth team permissions are unchanged', () => {
-    expect(can('owner', { organization: ['delete'] })).toBe(true)
+  test('Better Auth team permissions are unchanged, except that nobody deletes the company', () => {
+    expect(can('owner', { organization: ['update'] })).toBe(true)
+    expect(can('owner', { organization: ['delete'] })).toBe(false)
     expect(can('admin', { organization: ['delete'] })).toBe(false)
     expect(can('admin', { member: ['delete'], invitation: ['create'] })).toBe(true)
     expect(can('member', { invitation: ['create'] })).toBe(false)

@@ -123,6 +123,9 @@ export function createAuth(
     baseURL: options.baseURL,
     disabledPaths: [
       '/organization/leave',
+      // A company is never deleted: every domain table cascades from `organization`, so it would
+      // take the company's accounting records and its audit log with it.
+      '/organization/delete',
       // Admins work through the dashboard: they never create accounts, set passwords or delete
       // users (whose records the audit log and accounting keep).
       '/admin/create-user',
@@ -212,6 +215,7 @@ export function createAuth(
         ac,
         roles,
         creatorRole: 'owner',
+        disableOrganizationDeletion: true,
         requireEmailVerificationOnInvitation: true,
         // The tier's backstop (a free manager has two users), else Better Auth's default.
         membershipLimit: async (_user, organization) =>

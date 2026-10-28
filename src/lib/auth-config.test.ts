@@ -253,6 +253,28 @@ describe('Team changes for the audit log', () => {
   })
 })
 
+describe('Companies are never deleted', () => {
+  test('not even by their owner, who may not and cannot', async () => {
+    const f = await fixture('owner')
+    f.db
+      .insert(schema.property)
+      .values({ id: 'p', organizationId: 'company', designation: 'Uppsala 1:1' })
+      .run()
+    const response = await f.post('delete', { organizationId: 'company' })
+    expect(response.status).toBe(404)
+    expect(
+      f.db
+        .select()
+        .from(schema.organization)
+        .all()
+        .map((o) => o.id),
+    ).toContain('company')
+    expect(f.db.select().from(schema.property).all()).toHaveLength(1)
+    expect(await f.permissions({ organization: ['delete'] })).toBe(false)
+    expect(await f.permissions({ organization: ['update'] })).toBe(true)
+  })
+})
+
 describe('Account settings', () => {
   test('a new email is approved from the current address before anything changes', async () => {
     const f = await fixture()

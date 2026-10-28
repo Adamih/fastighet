@@ -46,8 +46,18 @@ const appFull = {
   bookkeeping: full,
 }
 
-/** Only the owner decides who else may manage the company. */
-export const owner = ac.newRole({ ...ownerAc.statements, ...appFull, client: full, grant: full })
+/**
+ * Only the owner decides who else may manage the company. Better Auth's owner may also delete the
+ * company; ours may not (the endpoint is disabled too), since that would erase its accounting
+ * records.
+ */
+export const owner = ac.newRole({
+  ...ownerAc.statements,
+  organization: ['update'],
+  ...appFull,
+  client: full,
+  grant: full,
+})
 export const admin = ac.newRole({
   ...adminAc.statements,
   ...appFull,
