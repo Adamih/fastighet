@@ -13,6 +13,7 @@ import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
 import { stripe, stripeConfigured } from '#/lib/stripe'
 import { m } from '#/paraglide/messages'
 import { recordAudit } from './audit'
+import { requireCustomerSession } from './customer-access'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { resolveFocus } from './focus'
 import { Mailer } from './mail/mailer'
@@ -64,6 +65,9 @@ const loadRequestContext = Effect.gen(function* () {
   const session = yield* getSession
   if (!session) return yield* new Unauthenticated()
 
+  // Staff never enter a customer company under their own account, even with a membership.
+  yield* requireCustomerSession(session)
+
   // Re-check membership on every request: the session may point at a company the user was
   // removed from. Then fall back to their oldest remaining company and remember it on the session.
   const activeId = session.session.activeOrganizationId
@@ -107,6 +111,8 @@ export function toThrowable(cause: Cause.Cause<unknown>): unknown {
     switch (e._tag) {
       case 'Unauthenticated':
         return redirect({ to: '/login' })
+      case 'AdminOnly':
+        return redirect({ to: '/admin' })
       case 'NoActiveOrganization':
         return redirect({ to: '/onboarding' })
       case 'CompanyNotInScope':

@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { ArrowLeft, Building, LayoutDashboard, ScrollText, Shield, Users } from 'lucide-react'
+import { Building, LayoutDashboard, LogOut, ScrollText, Shield, Users } from 'lucide-react'
 import { getAdminContextFn } from '#/features/admin/functions'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
@@ -33,11 +33,12 @@ function AdminLayout() {
             {admin.email}
           </span>
           <Link
-            to="/"
+            to="/sign-out"
+            preload={false}
             className="flex h-11 items-center gap-1.5 text-sm underline-offset-4 hover:underline sm:h-9"
           >
-            <ArrowLeft aria-hidden="true" className="size-4" />
-            {m.admin_to_app()}
+            <LogOut aria-hidden="true" className="size-4" />
+            {m.admin_sign_out()}
           </Link>
         </div>
         <nav aria-label={m.admin_title()} className="mx-auto max-w-6xl overflow-x-auto px-2">

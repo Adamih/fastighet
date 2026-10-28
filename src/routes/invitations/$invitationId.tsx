@@ -11,7 +11,9 @@ import { m } from '#/paraglide/messages'
 // (with the invited address) and come back here.
 export const Route = createFileRoute('/invitations/$invitationId')({
   beforeLoad: async ({ params }) => {
-    if (!(await getSessionFn())) {
+    const session = await getSessionFn()
+    if (session?.isAdmin) throw redirect({ to: '/admin' })
+    if (!session) {
       throw redirect({ to: '/login', search: { redirect: `/invitations/${params.invitationId}` } })
     }
   },

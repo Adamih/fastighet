@@ -14,7 +14,9 @@ import { m } from '#/paraglide/messages'
 export const Route = createFileRoute('/login')({
   validateSearch: (search): { redirect?: string } => ({ redirect: safeRedirect(search.redirect) }),
   beforeLoad: async ({ search }) => {
-    if (await getSessionFn()) throw redirect({ href: search.redirect ?? '/' })
+    const session = await getSessionFn()
+    if (session?.isAdmin) throw redirect({ to: '/admin' })
+    if (session) throw redirect({ href: search.redirect ?? '/' })
   },
   component: LoginPage,
 })

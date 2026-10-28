@@ -2,6 +2,9 @@ import { Data } from 'effect'
 
 export class Unauthenticated extends Data.TaggedError('Unauthenticated') {}
 
+/** Fastighet staff use the admin dashboard, unless acting as a customer. */
+export class AdminOnly extends Data.TaggedError('AdminOnly') {}
+
 /** Signed in, but no company selected (or no longer a member of the selected one). */
 export class NoActiveOrganization extends Data.TaggedError('NoActiveOrganization') {}
 

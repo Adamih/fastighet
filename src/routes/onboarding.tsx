@@ -18,9 +18,9 @@ export const Route = createFileRoute('/onboarding')({
   beforeLoad: async () => {
     const session = await getSessionFn()
     if (!session) throw redirect({ to: '/login' })
-    if (session.hasOrganization) throw redirect({ to: '/' })
-    // A Fastighet admin outside any company belongs in the admin dashboard, not onboarding.
+    // Fastighet staff belong in the admin dashboard, even if they have a company membership.
     if (session.isAdmin) throw redirect({ to: '/admin' })
+    if (session.hasOrganization) throw redirect({ to: '/' })
   },
   component: OnboardingPage,
 })
