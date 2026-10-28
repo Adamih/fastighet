@@ -8,6 +8,7 @@ import { createAuth } from '#/lib/auth-config'
 export const auth = createAuth(drizzle({} as D1Database, { schema }), {
   deliverEmail: () => {},
   recordCompanyEvent: async () => {},
+  recordAdminEvent: async () => {},
   stripe: { client: new Stripe('sk_test_cli'), webhookSecret: '' },
   syncQuantity: async () => {},
 })

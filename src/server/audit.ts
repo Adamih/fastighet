@@ -5,7 +5,11 @@ import { query } from './scoped'
 
 export interface AuditContext {
   readonly organizationId: string
-  readonly user: { readonly id: string; readonly name: string }
+  readonly user: {
+    readonly id: string
+    readonly name: string
+    readonly impersonatedBy?: { readonly id: string; readonly name: string } | null
+  }
   readonly actor: { readonly id: string; readonly name: string }
 }
 
@@ -30,6 +34,8 @@ export const auditValues = (
   action: audit.action,
   entityId: audit.entityId === undefined ? resultId(result) : audit.entityId,
   details: audit.details ? JSON.stringify(audit.details) : null,
+  impersonatedById: context.user.impersonatedBy?.id ?? null,
+  impersonatedByName: context.user.impersonatedBy?.name ?? null,
 })
 
 /**

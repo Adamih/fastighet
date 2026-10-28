@@ -88,3 +88,7 @@ run = "bun run payments:sample"
 [tasks."email:dev"]
 description = "Preview email templates at http://localhost:3001"
 run = "bun run email:dev"
+
+[tasks."admin:grant"]
+description = "Give a user the Fastighet admin role (--revoke takes it away, --remote for production)"
+run = "bun run admin:grant"

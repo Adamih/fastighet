@@ -13,10 +13,12 @@ import { CurrentOrganization, CurrentUser, HomeOrganization } from '#/server/ser
 export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () => {
   const session = await getSessionOrNull()
   if (!session) return null
+  const role = (session.user as { role?: string | null }).role ?? ''
   return {
     userId: session.user.id,
     // Checked against the member table: the session's active company may be one the user left.
     hasOrganization: await hasAnyMembership(session.user.id),
+    isAdmin: role.split(',').includes('admin'),
   }
 })
 

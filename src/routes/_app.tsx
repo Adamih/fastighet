@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, retainSearchParams } from '@tanstack/react-rou
 import { AppSidebar } from '#/components/app-sidebar'
 import { FormDrawerProvider } from '#/components/form-drawer'
 import { SidebarProvider, SidebarTrigger } from '#/components/ui/sidebar'
+import { ImpersonationBanner } from '#/features/admin/impersonation-banner'
 import { getAppContextFn } from '#/features/auth/functions'
 import { m } from '#/paraglide/messages'
 
@@ -27,6 +28,7 @@ function AppLayout() {
       <SidebarProvider className="print:block print:min-h-0">
         <AppSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
+          {app.user.impersonatedBy && <ImpersonationBanner user={app.user} />}
           <header className="flex h-16 shrink-0 items-center gap-3 border-b px-4 print:hidden">
             <SidebarTrigger className="size-11 shrink-0" />
             <span className="grid min-w-0">

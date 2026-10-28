@@ -3,7 +3,7 @@ import { getRequest } from '@tanstack/react-start/server'
 import { and, asc, eq } from 'drizzle-orm'
 import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
-import { member, organization, session as sessionTable } from '#/db/schema'
+import { member, organization, session as sessionTable, user } from '#/db/schema'
 import type { Audit } from '#/features/audit/actions'
 import { syncQuantity } from '#/features/billing/store'
 import { fetchKpiFromScb } from '#/features/indexation/scb'
@@ -50,6 +50,16 @@ const membershipQuery = (userId: string, organizationId?: string) =>
       .limit(1),
   )
 
+/** The admin behind an impersonated session, for the banner and the audit log. */
+const impersonator = (adminId: string | null | undefined) =>
+  Effect.gen(function* () {
+    if (!adminId) return null
+    const [admin] = yield* query((db) =>
+      db.select({ id: user.id, name: user.name }).from(user).where(eq(user.id, adminId)),
+    )
+    return admin ?? { id: adminId, name: '' }
+  })
+
 const loadRequestContext = Effect.gen(function* () {
   const session = yield* getSession
   if (!session) return yield* new Unauthenticated()
@@ -72,7 +82,12 @@ const loadRequestContext = Effect.gen(function* () {
 
   const home = { id: membership.organizationId, name: membership.name, role: membership.role }
   return {
-    user: { id: session.user.id, email: session.user.email, name: session.user.name },
+    user: {
+      id: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+      impersonatedBy: yield* impersonator(session.session.impersonatedBy),
+    },
     home,
     organization: yield* resolveFocus(session.user.id, home, requestedCompany()),
   }
@@ -85,7 +100,7 @@ function requestedCompany(): string | null {
 }
 
 /** Turns a failed program into what TanStack Start expects a server function to throw. */
-function toThrowable(cause: Cause.Cause<unknown>): unknown {
+export function toThrowable(cause: Cause.Cause<unknown>): unknown {
   const error = Cause.findErrorOption(cause)
   if (Option.isSome(error)) {
     const e = error.value as { _tag?: string; message?: string }

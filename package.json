@@ -19,6 +19,7 @@
     "generate-routes": "tsr generate",
     "cf-typegen": "wrangler types",
     "auth:generate": "auth generate --config scripts/auth.cli.ts --output src/db/auth-schema.ts --yes && biome format --write src/db/auth-schema.ts",
+    "admin:grant": "bun scripts/admin-grant.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",

@@ -980,10 +980,37 @@ export const auditEvent = sqliteTable(
      * e.g. a team change's {"name":"Anna","role":"admin","previousRole":"member"}.
      */
     details: text('details'),
+    /** The admin acting as `userId` (impersonation), if one was. */
+    impersonatedById: text('impersonated_by_id').references(() => user.id, {
+      onDelete: 'set null',
+    }),
+    impersonatedByName: text('impersonated_by_name'),
     createdAt: createdAt(),
   },
   (t) => [
     companyKey('audit_event', t),
     index('audit_event_org_created_idx').on(t.organizationId, t.createdAt),
   ],
+)
+
+// What admins did in the admin dashboard (`features/admin`): impersonations, bans, roles and tiers
+// set by agreement. Not company data: it names any user or company, and only admins read it.
+export const adminEvent = sqliteTable(
+  'admin_event',
+  {
+    id: id(),
+    actorUserId: text('actor_user_id').references(() => user.id, { onDelete: 'set null' }),
+    /** The admin's name when it happened. */
+    actorName: text('actor_name').notNull(),
+    /** An `AdminAction`, e.g. "impersonate". */
+    action: text('action').notNull(),
+    targetUserId: text('target_user_id').references(() => user.id, { onDelete: 'set null' }),
+    targetOrganizationId: text('target_organization_id').references(() => organization.id, {
+      onDelete: 'set null',
+    }),
+    /** JSON of plain values, e.g. {"reason":"…","tier":"brf_plus"}. */
+    details: text('details'),
+    createdAt: createdAt(),
+  },
+  (t) => [index('admin_event_created_idx').on(t.createdAt)],
 )

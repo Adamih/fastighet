@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -23,6 +24,8 @@ import { Route as AppPlanRouteImport } from './routes/_app/plan'
 import { Route as AppPortfolioRouteImport } from './routes/_app/portfolio'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
+import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminEventsRouteImport } from './routes/admin/events'
 import { Route as InvitationsInvitationIdRouteImport } from './routes/invitations/$invitationId'
 import { Route as AppCreditNotesCreditNoteIdRouteImport } from './routes/_app/credit-notes/$creditNoteId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
@@ -35,12 +38,21 @@ import { Route as AppPropertiesPropertyIdRouteImport } from './routes/_app/prope
 import { Route as AppTenantsIndexRouteImport } from './routes/_app/tenants/index'
 import { Route as AppTenantsTenantIdRouteImport } from './routes/_app/tenants/$tenantId'
 import { Route as AppUnitsUnitIdRouteImport } from './routes/_app/units/$unitId'
+import { Route as AdminCompaniesIndexRouteImport } from './routes/admin/companies/index'
+import { Route as AdminCompaniesOrganizationIdRouteImport } from './routes/admin/companies/$organizationId'
+import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
+import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users/$userId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
 import { Route as AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport } from './routes/_app/ownerships/$ownershipId_.pledges.$pledgeId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -108,6 +120,16 @@ const AppTeamRoute = AppTeamRouteImport.update({
   path: '/team',
   getParentRoute: () => AppRoute,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEventsRoute = AdminEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AdminRoute,
+} as any)
 const InvitationsInvitationIdRoute = InvitationsInvitationIdRouteImport.update({
   id: '/invitations/$invitationId',
   path: '/invitations/$invitationId',
@@ -170,6 +192,27 @@ const AppUnitsUnitIdRoute = AppUnitsUnitIdRouteImport.update({
   path: '/units/$unitId',
   getParentRoute: () => AppRoute,
 } as any)
+const AdminCompaniesIndexRoute = AdminCompaniesIndexRouteImport.update({
+  id: '/companies/',
+  path: '/companies/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCompaniesOrganizationIdRoute =
+  AdminCompaniesOrganizationIdRouteImport.update({
+    id: '/companies/$organizationId',
+    path: '/companies/$organizationId',
+    getParentRoute: () => AdminRoute,
+  } as any)
+const AdminUsersIndexRoute = AdminUsersIndexRouteImport.update({
+  id: '/users/',
+  path: '/users/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminUsersUserIdRoute = AdminUsersUserIdRouteImport.update({
+  id: '/users/$userId',
+  path: '/users/$userId',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -190,6 +233,7 @@ const AppOwnershipsOwnershipIdPledgesPledgeIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/admin': typeof AdminRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -202,7 +246,9 @@ export interface FileRoutesByFullPath {
   '/portfolio': typeof AppPortfolioRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
+  '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
+  '/admin/': typeof AdminIndexRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -210,11 +256,15 @@ export interface FileRoutesByFullPath {
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
+  '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices/': typeof AppInvoicesIndexRoute
   '/leases/': typeof AppLeasesIndexRoute
   '/ownerships/': typeof AppOwnershipsIndexRoute
   '/tenants/': typeof AppTenantsIndexRoute
+  '/admin/companies/': typeof AdminCompaniesIndexRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
@@ -231,8 +281,10 @@ export interface FileRoutesByTo {
   '/portfolio': typeof AppPortfolioRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
+  '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/': typeof AppIndexRoute
+  '/admin': typeof AdminIndexRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -240,17 +292,22 @@ export interface FileRoutesByTo {
   '/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/units/$unitId': typeof AppUnitsUnitIdRoute
+  '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/invoices': typeof AppInvoicesIndexRoute
   '/leases': typeof AppLeasesIndexRoute
   '/ownerships': typeof AppOwnershipsIndexRoute
   '/tenants': typeof AppTenantsIndexRoute
+  '/admin/companies': typeof AdminCompaniesIndexRoute
+  '/admin/users': typeof AdminUsersIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/admin': typeof AdminRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -263,8 +320,10 @@ export interface FileRoutesById {
   '/_app/portfolio': typeof AppPortfolioRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
+  '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/_app/': typeof AppIndexRoute
+  '/admin/': typeof AdminIndexRoute
   '/_app/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/_app/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -272,11 +331,15 @@ export interface FileRoutesById {
   '/_app/properties/$propertyId': typeof AppPropertiesPropertyIdRoute
   '/_app/tenants/$tenantId': typeof AppTenantsTenantIdRoute
   '/_app/units/$unitId': typeof AppUnitsUnitIdRoute
+  '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
+  '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_app/invoices/': typeof AppInvoicesIndexRoute
   '/_app/leases/': typeof AppLeasesIndexRoute
   '/_app/ownerships/': typeof AppOwnershipsIndexRoute
   '/_app/tenants/': typeof AppTenantsIndexRoute
+  '/admin/companies/': typeof AdminCompaniesIndexRoute
+  '/admin/users/': typeof AdminUsersIndexRoute
   '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/_app/ownerships/$ownershipId_/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
@@ -284,6 +347,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
     | '/forgot-password'
     | '/login'
     | '/onboarding'
@@ -296,7 +360,9 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/settings'
     | '/team'
+    | '/admin/events'
     | '/invitations/$invitationId'
+    | '/admin/'
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
@@ -304,11 +370,15 @@ export interface FileRouteTypes {
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
+    | '/admin/companies/$organizationId'
+    | '/admin/users/$userId'
     | '/api/auth/$'
     | '/invoices/'
     | '/leases/'
     | '/ownerships/'
     | '/tenants/'
+    | '/admin/companies/'
+    | '/admin/users/'
     | '/ownerships/$ownershipId/extract'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
@@ -325,8 +395,10 @@ export interface FileRouteTypes {
     | '/portfolio'
     | '/settings'
     | '/team'
+    | '/admin/events'
     | '/invitations/$invitationId'
     | '/'
+    | '/admin'
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
@@ -334,16 +406,21 @@ export interface FileRouteTypes {
     | '/properties/$propertyId'
     | '/tenants/$tenantId'
     | '/units/$unitId'
+    | '/admin/companies/$organizationId'
+    | '/admin/users/$userId'
     | '/api/auth/$'
     | '/invoices'
     | '/leases'
     | '/ownerships'
     | '/tenants'
+    | '/admin/companies'
+    | '/admin/users'
     | '/ownerships/$ownershipId/extract'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   id:
     | '__root__'
     | '/_app'
+    | '/admin'
     | '/forgot-password'
     | '/login'
     | '/onboarding'
@@ -356,8 +433,10 @@ export interface FileRouteTypes {
     | '/_app/portfolio'
     | '/_app/settings'
     | '/_app/team'
+    | '/admin/events'
     | '/invitations/$invitationId'
     | '/_app/'
+    | '/admin/'
     | '/_app/credit-notes/$creditNoteId'
     | '/_app/invoices/$invoiceId'
     | '/_app/leases/$leaseId'
@@ -365,17 +444,22 @@ export interface FileRouteTypes {
     | '/_app/properties/$propertyId'
     | '/_app/tenants/$tenantId'
     | '/_app/units/$unitId'
+    | '/admin/companies/$organizationId'
+    | '/admin/users/$userId'
     | '/api/auth/$'
     | '/_app/invoices/'
     | '/_app/leases/'
     | '/_app/ownerships/'
     | '/_app/tenants/'
+    | '/admin/companies/'
+    | '/admin/users/'
     | '/_app/ownerships/$ownershipId_/extract'
     | '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  AdminRoute: typeof AdminRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -391,6 +475,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -484,6 +575,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppTeamRouteImport
       parentRoute: typeof AppRoute
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/events': {
+      id: '/admin/events'
+      path: '/events'
+      fullPath: '/admin/events'
+      preLoaderRoute: typeof AdminEventsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/invitations/$invitationId': {
       id: '/invitations/$invitationId'
       path: '/invitations/$invitationId'
@@ -568,6 +673,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUnitsUnitIdRouteImport
       parentRoute: typeof AppRoute
     }
+    '/admin/companies/': {
+      id: '/admin/companies/'
+      path: '/companies'
+      fullPath: '/admin/companies/'
+      preLoaderRoute: typeof AdminCompaniesIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/companies/$organizationId': {
+      id: '/admin/companies/$organizationId'
+      path: '/companies/$organizationId'
+      fullPath: '/admin/companies/$organizationId'
+      preLoaderRoute: typeof AdminCompaniesOrganizationIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users/': {
+      id: '/admin/users/'
+      path: '/users'
+      fullPath: '/admin/users/'
+      preLoaderRoute: typeof AdminUsersIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/users/$userId': {
+      id: '/admin/users/$userId'
+      path: '/users/$userId'
+      fullPath: '/admin/users/$userId'
+      preLoaderRoute: typeof AdminUsersUserIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -645,8 +778,29 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface AdminRouteChildren {
+  AdminEventsRoute: typeof AdminEventsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminCompaniesOrganizationIdRoute: typeof AdminCompaniesOrganizationIdRoute
+  AdminUsersUserIdRoute: typeof AdminUsersUserIdRoute
+  AdminCompaniesIndexRoute: typeof AdminCompaniesIndexRoute
+  AdminUsersIndexRoute: typeof AdminUsersIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminEventsRoute: AdminEventsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminCompaniesOrganizationIdRoute: AdminCompaniesOrganizationIdRoute,
+  AdminUsersUserIdRoute: AdminUsersUserIdRoute,
+  AdminCompaniesIndexRoute: AdminCompaniesIndexRoute,
+  AdminUsersIndexRoute: AdminUsersIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  AdminRoute: AdminRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,

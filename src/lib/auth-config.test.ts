@@ -11,7 +11,7 @@ import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { CurrentOrganization, PermissionChecker } from '#/server/services'
-import { type CompanyEvent, createAuth } from './auth-config'
+import { type AdminEvent, type CompanyEvent, createAuth } from './auth-config'
 import type { Permissions } from './permissions'
 
 const connections: Sqlite[] = []
@@ -71,12 +71,16 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
     })
     .run()
   const events: CompanyEvent[] = []
+  const adminEvents: AdminEvent[] = []
   const auth = createAuth(db as unknown as Db, {
     secret,
     baseURL: 'http://localhost:3000',
     deliverEmail: () => {},
     recordCompanyEvent: async (event) => {
       events.push(event)
+    },
+    recordAdminEvent: async (event) => {
+      adminEvents.push(event)
     },
     stripe: { client: new Stripe('sk_test_unused'), webhookSecret: '' },
     syncQuantity: async () => {},
@@ -86,9 +90,9 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
     origin: 'http://localhost:3000',
     'content-type': 'application/json',
   })
-  const post = (path: string, body: object) =>
+  const post = (path: string, body: object, plugin = 'organization') =>
     auth.handler(
-      new Request(`http://localhost:3000/api/auth/organization/${path}`, {
+      new Request(`http://localhost:3000/api/auth/${plugin}/${path}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -117,7 +121,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
         }),
       ),
     )
-  return { db, auth, headers, post, target, permissions, events }
+  return { db, auth, headers, post, target, permissions, events, adminEvents }
 }
 
 describe('Better Auth member endpoints', () => {
@@ -242,6 +246,52 @@ describe('Team changes for the audit log', () => {
     await f.post('update-member-role', { memberId: 'target', role: 'admin' })
     await f.post('remove-member', { memberIdOrEmail: 'target' })
     expect(f.events).toEqual([])
+  })
+})
+
+describe('Admins and impersonation', () => {
+  const makeAdmin = (f: Awaited<ReturnType<typeof fixture>>, id = 'actor') =>
+    f.db.update(schema.user).set({ role: 'admin' }).where(eq(schema.user.id, id)).run()
+
+  test('an admin can act as a user, which opens a marked session and is logged', async () => {
+    const f = await fixture()
+    makeAdmin(f)
+    const response = await f.post('impersonate-user', { userId: 'outsider' }, 'admin')
+    expect(response.status).toBe(200)
+    const sessions = f.db
+      .select()
+      .from(schema.session)
+      .where(eq(schema.session.userId, 'outsider'))
+      .all()
+    expect(sessions.map((s) => s.impersonatedBy)).toEqual(['actor'])
+    // Like any session, it starts in the user's own company.
+    expect(sessions[0].activeOrganizationId).toBe('another-company')
+    expect(f.adminEvents).toEqual([
+      {
+        actor: { id: 'actor', name: 'actor' },
+        action: 'impersonate',
+        targetUserId: 'outsider',
+        details: {},
+      },
+    ])
+  })
+
+  test('nobody else can, and admins are never impersonated', async () => {
+    const f = await fixture()
+    expect((await f.post('impersonate-user', { userId: 'outsider' }, 'admin')).status).toBe(403)
+    makeAdmin(f)
+    makeAdmin(f, 'target')
+    expect((await f.post('impersonate-user', { userId: 'target' }, 'admin')).status).toBe(403)
+    expect(f.adminEvents).toEqual([])
+  })
+
+  test('admins never set passwords, create, edit or delete users', async () => {
+    const f = await fixture()
+    makeAdmin(f)
+    for (const path of ['set-user-password', 'create-user', 'remove-user', 'update-user']) {
+      const response = await f.post(path, { userId: 'outsider', newPassword: 'x' }, 'admin')
+      expect(response.status).toBe(404)
+    }
   })
 })
 

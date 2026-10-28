@@ -211,6 +211,7 @@ try {
     const landlord = await seed()
     const brf = await seedBrf()
     await seedManager(landlord, brf)
+    await seedAdmin()
   }
 } finally {
   await dispose()
@@ -1422,6 +1423,26 @@ async function seed() {
  * bostadsrätter billed monthly by andelstal, one of them sold three months ago, and a hair salon
  * renting the commercial unit on a normal lease. Avier come from monthly runs like the landlord's.
  */
+/** An admin of Fastighet itself, for the admin dashboard at /admin. */
+async function seedAdmin() {
+  const now = new Date()
+  const admin = { id: id(), ...SEED_USERS.admin }
+  await db
+    .insert(schema.user)
+    .values({ ...admin, role: 'admin', emailVerified: true, createdAt: now, updatedAt: now })
+  await db.insert(schema.account).values({
+    id: id(),
+    accountId: admin.id,
+    providerId: 'credential',
+    userId: admin.id,
+    password: await hashPassword(SEED_PASSWORD),
+    createdAt: now,
+    updatedAt: now,
+  })
+  console.log(`Seeded admin:
+  login      ${admin.email} (the admin dashboard is at /admin)`)
+}
+
 async function seedBrf() {
   const today = stockholmDate(Date.now())
   const thisMonth = `${today.slice(0, 7)}-01`

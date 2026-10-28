@@ -114,6 +114,7 @@ function LoginPage() {
               ['owner', m.login_dev_owner()],
               ['brf', m.login_dev_brf()],
               ['manager', m.login_dev_manager()],
+              ['admin', m.login_dev_admin()],
             ] as const
           ).map(([user, label]) => (
             <Button

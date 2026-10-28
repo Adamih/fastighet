@@ -8,7 +8,13 @@ export class Database extends Context.Service<Database, Db>()('app/Database') {}
 
 export class CurrentUser extends Context.Service<
   CurrentUser,
-  { readonly id: string; readonly email: string; readonly name: string }
+  {
+    readonly id: string
+    readonly email: string
+    readonly name: string
+    /** The admin acting as this user (Better Auth's impersonation), if one is. */
+    readonly impersonatedBy?: { readonly id: string; readonly name: string } | null
+  }
 >()('app/CurrentUser') {}
 
 /**
@@ -43,6 +49,29 @@ export class KpiSource extends Context.Service<
   KpiSource,
   { readonly fetch: () => Promise<readonly { month: string; valueHundredths: number }[]> }
 >()('app/KpiSource') {}
+
+/**
+ * The signed-in admin in the admin dashboard (`runAdmin`). Only there: admin programs never run in
+ * a company, and an admin acting as someone else (impersonating) is not one.
+ */
+export class AdminUser extends Context.Service<
+  AdminUser,
+  { readonly id: string; readonly name: string; readonly email: string }
+>()('app/AdminUser') {}
+
+/**
+ * Better Auth's admin endpoints, bound to the admin's request by `runAdmin` (they check the admin
+ * role themselves too). A stub in tests.
+ */
+export class AdminAuth extends Context.Service<
+  AdminAuth,
+  {
+    readonly ban: (userId: string, reason: string, expiresInSeconds: number | null) => Promise<void>
+    readonly unban: (userId: string) => Promise<void>
+    readonly setAdmin: (userId: string, admin: boolean) => Promise<void>
+    readonly revokeSessions: (userId: string) => Promise<void>
+  }
+>()('app/AdminAuth') {}
 
 /**
  * Stripe for subscriptions, as far as programs need it: whether payment is set up, and keeping a

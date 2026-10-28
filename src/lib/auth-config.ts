@@ -2,7 +2,7 @@ import { tryGetCurrentAuthEndpointContext } from '@better-auth/core/context'
 import { stripe as stripePlugin } from '@better-auth/stripe'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { organization } from 'better-auth/plugins'
+import { admin, organization } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { and, asc, eq } from 'drizzle-orm'
 import type Stripe from 'stripe'
@@ -30,6 +30,8 @@ export interface CompanyEvent {
    */
   readonly actor: { readonly id: string; readonly name: string } | null
   readonly action: CompanyAction
+  /** The admin acting as the actor (impersonation), from the request's session. */
+  readonly impersonatedById?: string | null
   /** The user (or invitation) it concerns. */
   readonly entityId: string
   readonly details: Readonly<Record<string, string>>
@@ -37,6 +39,18 @@ export interface CompanyEvent {
 
 /** Records a team or subscription change. Must never throw: the change has already been made. */
 export type RecordCompanyEvent = (event: CompanyEvent) => Promise<void>
+
+/** An admin action for the admin log (`features/admin`); never throws. */
+export interface AdminEvent {
+  readonly actor: { readonly id: string; readonly name: string }
+  readonly action: 'impersonate'
+  readonly targetUserId: string
+  readonly details: Readonly<Record<string, string>>
+}
+export type RecordAdminEvent = (event: AdminEvent) => Promise<void>
+
+/** How long an admin's impersonation lasts before they are signed out of it. */
+export const IMPERSONATION_SECONDS = 60 * 60
 
 /** Sets a subscription's quantity to what the company has; see `features/billing`. */
 export type SyncQuantity = (organizationId: string) => Promise<void>
@@ -51,6 +65,14 @@ function requestUser() {
   return user ? { id: user.id, name: user.name } : null
 }
 
+/** The admin behind the request's session when it is an impersonation. */
+function requestImpersonator(): string | null {
+  const session = tryGetCurrentAuthEndpointContext()?.context.session?.session as
+    | { impersonatedBy?: string | null }
+    | undefined
+  return session?.impersonatedBy ?? null
+}
+
 const RESET_PASSWORD_TTL_SECONDS = 60 * 60
 
 // Kept free of `cloudflare:workers` so the Better Auth CLI can load it from Node.
@@ -61,12 +83,17 @@ export function createAuth(
     baseURL?: string
     deliverEmail: DeliverEmail
     recordCompanyEvent: RecordCompanyEvent
+    recordAdminEvent: RecordAdminEvent
     /** Stripe for subscriptions. Without a real key, checkout fails and the plan page says so. */
     stripe: { client: Stripe; webhookSecret: string }
     syncQuantity: SyncQuantity
   },
 ) {
-  const { deliverEmail, recordCompanyEvent, syncQuantity } = options
+  const { deliverEmail, recordAdminEvent, syncQuantity } = options
+  const recordCompanyEvent: RecordCompanyEvent = (event) => {
+    const by = requestImpersonator()
+    return options.recordCompanyEvent(by ? { ...event, impersonatedById: by } : event)
+  }
   const company = (organization: { id: string; name: string }) => ({
     id: organization.id,
     name: organization.name,
@@ -94,7 +121,15 @@ export function createAuth(
   return betterAuth({
     secret: options.secret,
     baseURL: options.baseURL,
-    disabledPaths: ['/organization/leave'],
+    disabledPaths: [
+      '/organization/leave',
+      // Admins work through the dashboard: they never create accounts, set passwords or delete
+      // users (whose records the audit log and accounting keep).
+      '/admin/create-user',
+      '/admin/set-user-password',
+      '/admin/remove-user',
+      '/admin/update-user',
+    ],
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     emailAndPassword: {
       enabled: true,
@@ -138,6 +173,22 @@ export function createAuth(
             return {
               data: { ...session, activeOrganizationId: membership?.organizationId ?? null },
             }
+          },
+          // An admin starting to act as someone goes to the admin log.
+          after: async (session) => {
+            const by = (session as { impersonatedBy?: string | null }).impersonatedBy
+            if (!by) return
+            const [admin] = await db
+              .select({ id: schema.user.id, name: schema.user.name })
+              .from(schema.user)
+              .where(eq(schema.user.id, by))
+            if (!admin) return
+            await recordAdminEvent({
+              actor: admin,
+              action: 'impersonate',
+              targetUserId: session.userId,
+              details: {},
+            })
           },
         },
       },
@@ -216,6 +267,13 @@ export function createAuth(
             }),
         },
       }),
+      // The admin dashboard (`/admin`) and impersonation. Admins are users with the role
+      // `admin` (set with `bun run admin:grant`); company roles are separate, on `member`.
+      admin({
+        impersonationSessionDuration: IMPERSONATION_SECONDS,
+        allowImpersonatingAdmins: false,
+        bannedUserMessage: 'Kontot är spärrat. Kontakta oss om du tror att det är fel.',
+      }),
       // Subscriptions: a company's paid tier is its Stripe subscription (`features/billing`).
       stripePlugin({
         stripeClient: options.stripe.client,
@@ -224,8 +282,10 @@ export function createAuth(
         subscription: {
           enabled: true,
           plans: () => stripePlans(options.stripe.client),
-          // Only the company's own owners and admins buy for it; a manager's staff never do.
-          authorizeReference: async ({ user, referenceId }) => {
+          // Only the company's own owners and admins buy for it; a manager's staff never do, and
+          // neither does an admin acting as one of them.
+          authorizeReference: async ({ user, session, referenceId }) => {
+            if ((session as { impersonatedBy?: string | null }).impersonatedBy) return false
             const [membership] = await db
               .select({ role: schema.member.role })
               .from(schema.member)

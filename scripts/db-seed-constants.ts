@@ -13,4 +13,6 @@ export const SEED_USERS = {
   managerStaff: { email: 'handlaggare@forvaltning.test', name: 'Hugo Handläggare' },
   /** Staff at the property manager: Brf Linden in full, Exempel Fastigheter read only. */
   managerViewer: { email: 'ekonom@forvaltning.test', name: 'Elin Ekonom' },
+  /** A Fastighet admin (the admin dashboard, impersonation); member of no company. */
+  admin: { email: 'admin@fastighet.test', name: 'Ada Admin' },
 } as const
