@@ -14,13 +14,13 @@ import { requirePermission } from '#/server/authorize'
 import { orgQuery, query } from '#/server/scoped'
 import { CurrentOrganization } from '#/server/services'
 import type { CompanyKind } from './company-kinds'
-import type { UpdateSettingsInput } from './schemas'
+import type { UpdateCompanyDetailsInput } from './schemas'
 
 /**
  * The seller details, without a permission check: invoices print them for anyone who may work
- * with invoices. The settings page itself goes through `getSettings`.
+ * with invoices. The Företagsuppgifter page itself goes through `getCompanyDetails`.
  */
-export const loadSettings = Effect.gen(function* () {
+export const loadCompanyDetails = Effect.gen(function* () {
   const organization = yield* CurrentOrganization
   const row = yield* orgQuery((db, organizationId) =>
     db.query.organizationSettings.findFirst({
@@ -46,14 +46,14 @@ export const loadSettings = Effect.gen(function* () {
   }
 })
 
-export type Settings = Effect.Success<typeof loadSettings>
+export type CompanyDetails = Effect.Success<typeof loadCompanyDetails>
 
 /**
  * What a BRF charges for pledges and sales (null: not charged) and the prisbasbelopp by year,
  * without a permission check: the pledge and sale flows use it under their own.
  */
 export const loadFeeTerms = Effect.gen(function* () {
-  const settings = yield* loadSettings
+  const settings = yield* loadCompanyDetails
   const amounts = yield* query((db) => db.select().from(priceBaseAmount))
   return {
     pledgeFeeBasisPoints: settings.pledgeFeeBasisPoints,
@@ -67,11 +67,11 @@ export const loadFeeTerms = Effect.gen(function* () {
 
 export type FeeTerms = Effect.Success<typeof loadFeeTerms>
 
-export const getSettings = requirePermission({ settings: ['read'] }).pipe(
-  Effect.andThen(loadSettings),
+export const getCompanyDetails = requirePermission({ settings: ['read'] }).pipe(
+  Effect.andThen(loadCompanyDetails),
 )
 
-export const updateSettings = (input: UpdateSettingsInput) =>
+export const updateCompanyDetails = (input: UpdateCompanyDetailsInput) =>
   Effect.gen(function* () {
     yield* requirePermission({ settings: ['manage'] })
     const values = {
@@ -98,7 +98,7 @@ export const updateSettings = (input: UpdateSettingsInput) =>
         .values({ organizationId, ...values })
         .onConflictDoUpdate({ target: organizationSettings.organizationId, set: values }),
     )
-    return yield* loadSettings
+    return yield* loadCompanyDetails
   })
 
 /** Sets the company type on its own, as onboarding does right after creating the company. */
@@ -111,5 +111,5 @@ export const setCompanyKind = (kind: CompanyKind) =>
         .values({ organizationId, kind })
         .onConflictDoUpdate({ target: organizationSettings.organizationId, set: { kind } }),
     )
-    return yield* loadSettings
+    return yield* loadCompanyDetails
   })

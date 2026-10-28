@@ -19,11 +19,11 @@ import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBookkeepingRouteImport } from './routes/_app/bookkeeping'
 import { Route as AppClientsRouteImport } from './routes/_app/clients'
+import { Route as AppCompanyDetailsRouteImport } from './routes/_app/company-details'
 import { Route as AppManagementRouteImport } from './routes/_app/management'
 import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
 import { Route as AppPlanRouteImport } from './routes/_app/plan'
 import { Route as AppPortfolioRouteImport } from './routes/_app/portfolio'
-import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminEventsRouteImport } from './routes/admin/events'
@@ -97,6 +97,11 @@ const AppClientsRoute = AppClientsRouteImport.update({
   path: '/clients',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCompanyDetailsRoute = AppCompanyDetailsRouteImport.update({
+  id: '/company-details',
+  path: '/company-details',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppManagementRoute = AppManagementRouteImport.update({
   id: '/management',
   path: '/management',
@@ -115,11 +120,6 @@ const AppPlanRoute = AppPlanRouteImport.update({
 const AppPortfolioRoute = AppPortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSettingsRoute = AppSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
 const AppTeamRoute = AppTeamRouteImport.update({
@@ -253,11 +253,11 @@ export interface FileRoutesByFullPath {
   '/sign-out': typeof SignOutRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
+  '/company-details': typeof AppCompanyDetailsRoute
   '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
   '/plan': typeof AppPlanRoute
   '/portfolio': typeof AppPortfolioRoute
-  '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
@@ -290,11 +290,11 @@ export interface FileRoutesByTo {
   '/sign-out': typeof SignOutRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
+  '/company-details': typeof AppCompanyDetailsRoute
   '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
   '/plan': typeof AppPlanRoute
   '/portfolio': typeof AppPortfolioRoute
-  '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
@@ -331,11 +331,11 @@ export interface FileRoutesById {
   '/sign-out': typeof SignOutRoute
   '/_app/bookkeeping': typeof AppBookkeepingRoute
   '/_app/clients': typeof AppClientsRoute
+  '/_app/company-details': typeof AppCompanyDetailsRoute
   '/_app/management': typeof AppManagementRoute
   '/_app/payments': typeof AppPaymentsRoute
   '/_app/plan': typeof AppPlanRoute
   '/_app/portfolio': typeof AppPortfolioRoute
-  '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
@@ -373,11 +373,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/bookkeeping'
     | '/clients'
+    | '/company-details'
     | '/management'
     | '/payments'
     | '/plan'
     | '/portfolio'
-    | '/settings'
     | '/team'
     | '/admin/events'
     | '/invitations/$invitationId'
@@ -410,11 +410,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/bookkeeping'
     | '/clients'
+    | '/company-details'
     | '/management'
     | '/payments'
     | '/plan'
     | '/portfolio'
-    | '/settings'
     | '/team'
     | '/admin/events'
     | '/invitations/$invitationId'
@@ -450,11 +450,11 @@ export interface FileRouteTypes {
     | '/sign-out'
     | '/_app/bookkeeping'
     | '/_app/clients'
+    | '/_app/company-details'
     | '/_app/management'
     | '/_app/payments'
     | '/_app/plan'
     | '/_app/portfolio'
-    | '/_app/settings'
     | '/_app/team'
     | '/admin/events'
     | '/invitations/$invitationId'
@@ -565,6 +565,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppClientsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/company-details': {
+      id: '/_app/company-details'
+      path: '/company-details'
+      fullPath: '/company-details'
+      preLoaderRoute: typeof AppCompanyDetailsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/management': {
       id: '/_app/management'
       path: '/management'
@@ -591,13 +598,6 @@ declare module '@tanstack/react-router' {
       path: '/portfolio'
       fullPath: '/portfolio'
       preLoaderRoute: typeof AppPortfolioRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/settings': {
-      id: '/_app/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/team': {
@@ -767,11 +767,11 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppBookkeepingRoute: typeof AppBookkeepingRoute
   AppClientsRoute: typeof AppClientsRoute
+  AppCompanyDetailsRoute: typeof AppCompanyDetailsRoute
   AppManagementRoute: typeof AppManagementRoute
   AppPaymentsRoute: typeof AppPaymentsRoute
   AppPlanRoute: typeof AppPlanRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
-  AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAccountPathRoute: typeof AppAccountPathRoute
@@ -793,11 +793,11 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppBookkeepingRoute: AppBookkeepingRoute,
   AppClientsRoute: AppClientsRoute,
+  AppCompanyDetailsRoute: AppCompanyDetailsRoute,
   AppManagementRoute: AppManagementRoute,
   AppPaymentsRoute: AppPaymentsRoute,
   AppPlanRoute: AppPlanRoute,
   AppPortfolioRoute: AppPortfolioRoute,
-  AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,
   AppIndexRoute: AppIndexRoute,
   AppAccountPathRoute: AppAccountPathRoute,

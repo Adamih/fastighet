@@ -128,8 +128,8 @@ export function InvoiceRunForm({
             <p className="text-sm">
               {rich(
                 (link) => m.invoice_run_needs_bankgiro({ link }),
-                <Link to="/settings" className="underline">
-                  {m.nav_settings()}
+                <Link to="/company-details" className="underline">
+                  {m.nav_company_details()}
                 </Link>,
               )}
             </p>

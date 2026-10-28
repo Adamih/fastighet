@@ -11,7 +11,7 @@ import {
 } from '#/db/schema'
 import { requireFeature } from '#/features/billing/program'
 import { periodsOverlap } from '#/features/leases/terms'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
 import { Conflict } from '#/server/errors'
@@ -188,7 +188,7 @@ export const exportSie = (period: ExportPeriodInput) =>
     yield* requireFeature('bookkeeping')
     yield* checkPeriod(period)
     const me = yield* CurrentUser
-    const seller = yield* loadSettings
+    const seller = yield* loadCompanyDetails
     const { accounts, financialYearStartMonth } = yield* getBookkeepingSettings
     const list = vouchers(yield* postingsIn(period), accounts)
     if (list.length === 0) {

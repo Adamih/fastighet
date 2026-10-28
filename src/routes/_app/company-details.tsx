@@ -15,8 +15,8 @@ import {
   companyKindLabels,
   companyKinds,
 } from '#/features/settings/company-kinds'
-import { settingsQuery, updateSettingsFn } from '#/features/settings/functions'
-import { UpdateSettingsInput } from '#/features/settings/schemas'
+import { companyDetailsQuery, updateCompanyDetailsFn } from '#/features/settings/functions'
+import { UpdateCompanyDetailsInput } from '#/features/settings/schemas'
 import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { useFormMutation } from '#/lib/form-mutation'
@@ -24,16 +24,16 @@ import { oreToInput } from '#/lib/money'
 import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
-export const Route = createFileRoute('/_app/settings')({
-  loader: ({ context }) => context.queryClient.ensureQueryData(settingsQuery()),
-  component: SettingsPage,
+export const Route = createFileRoute('/_app/company-details')({
+  loader: ({ context }) => context.queryClient.ensureQueryData(companyDetailsQuery()),
+  component: CompanyDetailsPage,
 })
 
-const validator = Schema.toStandardSchemaV1(UpdateSettingsInput)
+const validator = Schema.toStandardSchemaV1(UpdateCompanyDetailsInput)
 
-type Settings = typeof Route.types.loaderData
+type CompanyDetails = typeof Route.types.loaderData
 
-const toValues = (s: Settings) => ({
+const toValues = (s: CompanyDetails) => ({
   organizationNumber: s.organizationNumber ?? '',
   bankgiro: s.bankgiro ?? '',
   streetAddress: s.streetAddress ?? '',
@@ -54,20 +54,20 @@ type Values = ReturnType<typeof toValues>
 const sameValues = (a: Values, b: Values) =>
   (Object.keys(a) as (keyof Values)[]).every((k) => a[k] === b[k])
 
-function SettingsPage() {
+function CompanyDetailsPage() {
   const canEdit = useCan()({ settings: ['manage'] })
-  const { data: settings } = useSuspenseQuery(settingsQuery())
+  const { data: settings } = useSuspenseQuery(companyDetailsQuery())
   const queryClient = useQueryClient()
   const router = useRouter()
   const [baseline, setBaseline] = useState(() => toValues(settings))
   const [saved, setSaved] = useState(false)
 
   const save = useFormMutation({
-    mutationFn: updateSettingsFn,
+    mutationFn: updateCompanyDetailsFn,
     onSuccess: async (updated) => {
-      queryClient.setQueryData(settingsQuery().queryKey, updated)
+      queryClient.setQueryData(companyDetailsQuery().queryKey, updated)
       await queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true })
-      await queryClient.invalidateQueries({ queryKey: ['settings', 'fee-terms'] })
+      await queryClient.invalidateQueries({ queryKey: ['company-details', 'fee-terms'] })
       // The company type sets the navigation's wording, which comes from the route context.
       await router.invalidate()
     },
@@ -91,14 +91,14 @@ function SettingsPage() {
   return (
     <div className="grid max-w-4xl gap-6">
       <PageHeader
-        title={m.nav_settings()}
-        subtitle={m.settings_subtitle({ organization: settings.organizationName })}
+        title={m.nav_company_details()}
+        subtitle={m.company_details_subtitle({ organization: settings.organizationName })}
       />
 
       {!canEdit && (
         <p className="flex items-start gap-2.5 rounded-xl border bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground">
           <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          {m.settings_read_only()}
+          {m.company_details_read_only()}
         </p>
       )}
 
@@ -108,7 +108,10 @@ function SettingsPage() {
 
       <SubmissionForm form={form} disabled={!canEdit} method="post">
         <fieldset disabled={!canEdit} className="grid">
-          <Section title={m.tenant_kind_company()} description={m.settings_company_description()}>
+          <Section
+            title={m.tenant_kind_company()}
+            description={m.company_details_company_description()}
+          >
             <div className="grid gap-1.5">
               <span className="font-medium text-sm">{m.tenant_form_company_name()}</span>
               <span className="text-sm">{settings.organizationName}</span>
@@ -117,7 +120,7 @@ function SettingsPage() {
               <form.AppField name="kind">
                 {(field) => (
                   <field.SegmentedField
-                    label={m.settings_company_kind()}
+                    label={m.company_details_company_kind()}
                     showLabel
                     disabled={!canEdit}
                     options={companyKinds.map((kind) => ({
@@ -127,18 +130,20 @@ function SettingsPage() {
                   />
                 )}
               </form.AppField>
-              <p className="text-muted-foreground text-xs">{m.settings_company_kind_hint()}</p>
+              <p className="text-muted-foreground text-xs">
+                {m.company_details_company_kind_hint()}
+              </p>
             </div>
             <form.AppField name="organizationNumber">
               {(field) => (
                 <field.TextField
                   label={m.common_organization_number()}
-                  placeholder={m.settings_org_number_placeholder()}
+                  placeholder={m.company_details_org_number_placeholder()}
                   inputMode="numeric"
                   hint={
                     isValidOrganizationNumber(field.state.value) && (
                       <Note tone="ok">
-                        {m.settings_vat_number({ number: vatNumberFor(field.state.value) })}
+                        {m.company_details_vat_number({ number: vatNumberFor(field.state.value) })}
                       </Note>
                     )
                   }
@@ -150,24 +155,27 @@ function SettingsPage() {
                 {(field) => (
                   <field.SwitchField
                     disabled={!canEdit}
-                    label={m.settings_f_skatt()}
-                    description={m.settings_f_skatt_description()}
+                    label={m.company_details_f_skatt()}
+                    description={m.company_details_f_skatt_description()}
                   />
                 )}
               </form.AppField>
             </div>
           </Section>
 
-          <Section title={m.settings_payment()} description={m.settings_payment_description()}>
+          <Section
+            title={m.company_details_payment()}
+            description={m.company_details_payment_description()}
+          >
             <form.AppField name="bankgiro">
               {(field) => (
                 <field.TextField
-                  label={m.settings_bankgiro()}
-                  placeholder={m.settings_bankgiro_placeholder()}
+                  label={m.company_details_bankgiro()}
+                  placeholder={m.company_details_bankgiro_placeholder()}
                   inputMode="numeric"
                   hint={
                     !field.state.value.trim() && (
-                      <Note tone="warn">{m.settings_bankgiro_required()}</Note>
+                      <Note tone="warn">{m.company_details_bankgiro_required()}</Note>
                     )
                   }
                 />
@@ -175,14 +183,17 @@ function SettingsPage() {
             </form.AppField>
           </Section>
 
-          <Section title={m.settings_reminders()} description={m.settings_reminders_description()}>
+          <Section
+            title={m.company_details_reminders()}
+            description={m.company_details_reminders_description()}
+          >
             <form.AppField name="reminderFee">
               {(field) => (
                 <field.TextField
-                  label={<Optional>{m.settings_reminder_fee()}</Optional>}
+                  label={<Optional>{m.company_details_reminder_fee()}</Optional>}
                   placeholder="60"
                   inputMode="decimal"
-                  hint={m.settings_reminder_fee_hint()}
+                  hint={m.company_details_reminder_fee_hint()}
                 />
               )}
             </form.AppField>
@@ -190,15 +201,15 @@ function SettingsPage() {
               <form.AppField name="reminderIntervalDays">
                 {(field) => (
                   <field.TextField
-                    label={m.settings_reminder_interval()}
+                    label={m.company_details_reminder_interval()}
                     inputMode="numeric"
-                    hint={m.settings_reminder_interval_hint()}
+                    hint={m.company_details_reminder_interval_hint()}
                   />
                 )}
               </form.AppField>
               <form.AppField name="reminderDueDays">
                 {(field) => (
-                  <field.TextField label={m.settings_reminder_due()} inputMode="numeric" />
+                  <field.TextField label={m.company_details_reminder_due()} inputMode="numeric" />
                 )}
               </form.AppField>
             </div>
@@ -208,27 +219,27 @@ function SettingsPage() {
             {(kind) =>
               kind === 'brf' && (
                 <Section
-                  title={m.settings_brf_fees()}
-                  description={m.settings_brf_fees_description()}
+                  title={m.company_details_brf_fees()}
+                  description={m.company_details_brf_fees_description()}
                 >
                   <div className="grid gap-4 sm:grid-cols-2">
                     <form.AppField name="transferFee">
                       {(field) => (
                         <field.TextField
-                          label={<Optional>{m.settings_transfer_fee()}</Optional>}
+                          label={<Optional>{m.company_details_transfer_fee()}</Optional>}
                           placeholder="2,5"
                           inputMode="decimal"
-                          hint={m.settings_transfer_fee_hint()}
+                          hint={m.company_details_transfer_fee_hint()}
                         />
                       )}
                     </form.AppField>
                     <form.AppField name="pledgeFee">
                       {(field) => (
                         <field.TextField
-                          label={<Optional>{m.settings_pledge_fee()}</Optional>}
+                          label={<Optional>{m.company_details_pledge_fee()}</Optional>}
                           placeholder="1"
                           inputMode="decimal"
-                          hint={m.settings_pledge_fee_hint()}
+                          hint={m.company_details_pledge_fee_hint()}
                         />
                       )}
                     </form.AppField>
@@ -238,7 +249,10 @@ function SettingsPage() {
             }
           </form.Subscribe>
 
-          <Section title={m.settings_contact()} description={m.settings_contact_description()}>
+          <Section
+            title={m.company_details_contact()}
+            description={m.company_details_contact_description()}
+          >
             <form.AppField name="streetAddress">
               {(field) => (
                 <field.TextField label={m.common_street_address()} autoComplete="street-address" />
@@ -264,9 +278,9 @@ function SettingsPage() {
               <form.AppField name="email">
                 {(field) => (
                   <field.TextField
-                    label={m.settings_email()}
+                    label={m.company_details_email()}
                     type="email"
-                    placeholder={m.settings_email_placeholder()}
+                    placeholder={m.company_details_email_placeholder()}
                   />
                 )}
               </form.AppField>
@@ -278,7 +292,10 @@ function SettingsPage() {
             </div>
           </Section>
 
-          <Section title={m.settings_preview()} description={m.settings_preview_description()}>
+          <Section
+            title={m.company_details_preview()}
+            description={m.company_details_preview_description()}
+          >
             <form.Subscribe selector={(s) => s.values}>
               {(values) => <FooterPreview name={settings.organizationName} values={values} />}
             </form.Subscribe>
@@ -332,7 +349,7 @@ function SettingsPage() {
                 saved && (
                   <output className="mt-2 flex items-center gap-2 text-[13px] text-emerald-700 dark:text-emerald-300">
                     <Check aria-hidden="true" className="size-4" />
-                    {m.settings_saved()}
+                    {m.company_details_saved()}
                   </output>
                 )
               )
@@ -390,7 +407,7 @@ function Readiness({ values }: { values: Values }) {
   const ready = !firstMissing
   return (
     <section
-      aria-label={m.settings_readiness_label()}
+      aria-label={m.company_details_readiness_label()}
       className={cn(
         'flex items-center gap-3.5 rounded-xl border px-4 py-3',
         ready
@@ -406,8 +423,8 @@ function Readiness({ values }: { values: Values }) {
       <div className="grid min-w-0 flex-1 gap-0.5 text-[13px]">
         <span className="font-semibold">
           {ready
-            ? m.settings_ready()
-            : m.settings_readiness_progress({ done, total: items.length })}
+            ? m.company_details_ready()
+            : m.company_details_readiness_progress({ done, total: items.length })}
         </span>
         {firstMissing && <span>{firstMissing.missing}</span>}
       </div>
@@ -451,16 +468,16 @@ function FooterPreview({ name, values }: { name: string; values: Values }) {
         ))}
       </div>
       <div className="flex items-baseline justify-between gap-3 border-t border-dashed pt-3">
-        <span className="text-muted-foreground">{m.settings_bankgiro()}</span>
+        <span className="text-muted-foreground">{m.company_details_bankgiro()}</span>
         {values.bankgiro.trim() ? (
           <span className="font-medium tabular-nums">{values.bankgiro.trim()}</span>
         ) : (
           <span className="font-medium text-amber-700 dark:text-amber-300">
-            {m.settings_missing()}
+            {m.company_details_missing()}
           </span>
         )}
       </div>
-      <span className="text-muted-foreground text-xs">{m.settings_vat_footer_hint()}</span>
+      <span className="text-muted-foreground text-xs">{m.company_details_vat_footer_hint()}</span>
     </div>
   )
 }

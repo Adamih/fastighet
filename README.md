@@ -31,7 +31,7 @@ The seed creates Exempel Fastigheter AB with dates relative to today:
 
 `mise run db:seed` on its own refuses to run on a database that already has users.
 
-To start from scratch instead, run `mise run db:migrate:local`, sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Inställningar.
+To start from scratch instead, run `mise run db:migrate:local`, sign up at `/login`, create a company at `/onboarding`, then add properties and units. To send rent notices (`/invoices`), first enter a bankgiro number under Företagsuppgifter.
 
 Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `mise run dev` console. Open the verification, password-reset or invitation link from there.
 

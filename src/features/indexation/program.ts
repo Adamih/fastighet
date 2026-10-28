@@ -18,7 +18,7 @@ import {
 import { invoiceRecipient } from '#/features/agreements/parties'
 import { inForce, inForceOn } from '#/features/agreements/periods'
 import { requireFeature } from '#/features/billing/program'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
@@ -338,7 +338,7 @@ export const runIndexation = (year: number, options: { notify: boolean } = { not
       })
     }
     const on = yield* today
-    const seller = options.notify ? yield* loadSettings : null
+    const seller = options.notify ? yield* loadCompanyDetails : null
     let adjusted = 0
     const notices = { sent: 0, noEmail: 0, failed: 0 }
     for (const r of rows) {

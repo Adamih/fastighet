@@ -36,7 +36,7 @@ import {
   pledgesFor,
   releaseStatements,
 } from '#/features/pledges/program'
-import { loadFeeTerms, loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails, loadFeeTerms } from '#/features/settings/program'
 import { stockholmDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -624,7 +624,7 @@ export const ownershipExtract = (input: {
     }
     const pledges =
       (yield* pledgesFor([entry.ownership.id], input.onDate)).get(entry.ownership.id) ?? []
-    const seller = yield* loadSettings
+    const seller = yield* loadCompanyDetails
     const me = yield* CurrentUser
     const home = yield* HomeOrganization
     const company = yield* CurrentOrganization

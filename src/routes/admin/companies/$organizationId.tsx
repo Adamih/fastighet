@@ -46,7 +46,7 @@ function CompanyPage() {
             facts={[
               [m.admin_created(), stockholmDate(company.createdAt)],
               [m.common_organization_number(), company.organizationNumber ?? '–'],
-              [m.settings_email(), company.email ?? '–'],
+              [m.company_details_email(), company.email ?? '–'],
               [m.admin_usage(), m.admin_usage_value({ ...company.usage })],
             ]}
           />

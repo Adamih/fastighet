@@ -93,7 +93,7 @@ export const ownershipExtractQuery = (input: OwnershipExtractInput) =>
 export const feeTermsFn = createServerFn({ method: 'GET' }).handler(() => runApp(getFeeTerms))
 
 export const feeTermsQuery = () =>
-  queryOptions({ queryKey: ['settings', 'fee-terms'], queryFn: () => feeTermsFn() })
+  queryOptions({ queryKey: ['company-details', 'fee-terms'], queryFn: () => feeTermsFn() })
 
 export const ownershipsQuery = () =>
   queryOptions({ queryKey: ['ownerships'], queryFn: () => listOwnershipsFn() })

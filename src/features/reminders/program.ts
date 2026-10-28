@@ -5,7 +5,7 @@ import { getInvoice } from '#/features/invoicing/program'
 import { periodLabel } from '#/features/invoicing/rules'
 import { reminderFeeEntries, statusFromMoney } from '#/features/ledger/postings'
 import { allInvoiceMoney, postingStatements } from '#/features/ledger/program'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -27,7 +27,7 @@ import {
 // an avi owes when there is a fee, so it needs invoice:manage.
 const manage: Permissions = { invoice: ['manage'] }
 
-const reminderSettings = Effect.map(loadSettings, (s) => ({
+const reminderSettings = Effect.map(loadCompanyDetails, (s) => ({
   reminderFeeOre: s.reminderFeeOre,
   reminderIntervalDays: s.reminderIntervalDays,
   reminderDueDays: s.reminderDueDays,
@@ -96,7 +96,7 @@ export const sendReminder = (invoiceId: string) =>
     const problem = reminderProblem(inv, inv.reminders, settings, on)
     if (problem) return yield* new Conflict({ message: problemMessages[problem] })
     if (!inv.seller.bankgiro || !inv.recipientEmail) {
-      return yield* new Conflict({ message: 'Ange bankgironummer under Inställningar först' })
+      return yield* new Conflict({ message: 'Ange bankgironummer under Företagsuppgifter först' })
     }
     const feeOre = reminderFee(settings, inv.reminders)
     const owedOre = inv.owedOre + feeOre

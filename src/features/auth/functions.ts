@@ -2,7 +2,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { Effect, Schema } from 'effect'
 import { tierOf } from '#/features/billing/store'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { auth } from '#/lib/auth'
 import { managedCompanies } from '#/server/focus'
 import { getSessionOrNull, hasAnyMembership, runApp } from '#/server/run'
@@ -42,7 +42,7 @@ export const getAppContextFn = createServerFn({ method: 'GET' }).handler(() =>
           { id: home.id, name: home.name, managed: false },
           ...managed.map((c) => ({ id: c.id, name: c.name, managed: true })),
         ],
-        companyKind: (yield* loadSettings).kind,
+        companyKind: (yield* loadCompanyDetails).kind,
         /** The tier of the company in focus, and of the user's own company (manager features). */
         tier: yield* query((db) => tierOf(db, organization.id)),
         homeTier: yield* query((db) => tierOf(db, home.id)),

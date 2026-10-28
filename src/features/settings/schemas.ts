@@ -13,7 +13,7 @@ const FeePercent = (kind: BrfFeeKind, message: string) =>
     Schema.makeFilter((s: string) => feePercentProblem(kind, s) === null, { message }),
   )
 
-export const UpdateSettingsInput = Schema.Struct({
+export const UpdateCompanyDetailsInput = Schema.Struct({
   organizationNumber: Schema.String.check(
     Schema.makeFilter((s: string) => s.trim() === '' || isValidOrganizationNumber(s), {
       message: 'Ogiltigt organisationsnummer',
@@ -55,6 +55,6 @@ export const UpdateSettingsInput = Schema.Struct({
   pledgeFee: FeePercent('pledge_fee', 'Ange högst 1 % av prisbasbeloppet, eller lämna tomt'),
   transferFee: FeePercent('transfer_fee', 'Ange högst 2,5 % av prisbasbeloppet, eller lämna tomt'),
 })
-export type UpdateSettingsInput = typeof UpdateSettingsInput.Type
+export type UpdateCompanyDetailsInput = typeof UpdateCompanyDetailsInput.Type
 
 export const SetCompanyKindInput = Schema.Struct({ kind: Schema.Literals(companyKinds) })

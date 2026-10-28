@@ -33,7 +33,7 @@ import {
   reversalStatements,
 } from '#/features/ledger/program'
 import { undoPaymentStatements } from '#/features/payments/program'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { stockholmDate } from '#/lib/dates'
@@ -135,7 +135,7 @@ export const previewInvoiceRun = (month: string) =>
   Effect.gen(function* () {
     yield* requirePermission(runInvoices)
     const issueDate = yield* today
-    const settings = yield* loadSettings
+    const settings = yield* loadCompanyDetails
 
     const agreements: BillingRow[] = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findMany({
@@ -199,7 +199,7 @@ export const createInvoiceRun = (input: CreateInvoiceRunInput) =>
     const preview = yield* previewInvoiceRun(input.month)
     if (!preview.canInvoice) {
       return yield* new Conflict({
-        message: 'Ange bankgironummer under Inställningar innan du skapar avier.',
+        message: 'Ange bankgironummer under Företagsuppgifter innan du skapar avier.',
       })
     }
     const pending = preview.rows.filter((r) => !r.alreadyInvoiced)
@@ -393,7 +393,7 @@ export const getInvoice = (invoiceId: string) =>
       }),
     )
     if (!row) return yield* new NotFound({ entity: 'invoice', id: invoiceId })
-    const seller = yield* loadSettings
+    const seller = yield* loadCompanyDetails
     const money = (yield* invoiceMoneyFor([row.id])).get(row.id) as InvoiceMoney
     // Payments on the avi, from the ledger: bank payments matched to it and payments registered
     // by hand. Listed only for those who may read payments.
@@ -464,7 +464,7 @@ export const emailInvoice = (invoiceId: string, options: { skipWithoutEmail?: bo
       return yield* new Conflict({ message: 'Hyresgästen har ingen e-postadress' })
     }
     if (!inv.seller.bankgiro) {
-      return yield* new Conflict({ message: 'Ange bankgironummer under Inställningar först' })
+      return yield* new Conflict({ message: 'Ange bankgironummer under Företagsuppgifter först' })
     }
 
     yield* sendEmail({
@@ -737,7 +737,7 @@ export const getCreditNote = (creditNoteId: string) =>
       /** Whether the credit went (in part) to the party's credit balance: the avi had been paid. */
       toCredit: money.toCreditOre > 0,
       invoiceMoney: money,
-      seller: yield* loadSettings,
+      seller: yield* loadCompanyDetails,
     }
   })
 
@@ -803,7 +803,7 @@ export const previewReissue = (invoiceId: string) =>
     yield* requirePermission(reissue)
     const inv = yield* getInvoice(invoiceId)
     const issueDate = yield* today
-    const settings = yield* loadSettings
+    const settings = yield* loadCompanyDetails
     const billed: BillingRow | undefined = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findFirst({
         where: and(eq(agreement.id, inv.agreementId), eq(agreement.organizationId, organizationId)),
@@ -862,7 +862,7 @@ export const reissueInvoice = (invoiceId: string) =>
     if (preview.problem) return yield* new Conflict({ message: preview.problem })
     if (!preview.canInvoice) {
       return yield* new Conflict({
-        message: 'Ange bankgironummer under Inställningar innan du skapar avier.',
+        message: 'Ange bankgironummer under Företagsuppgifter innan du skapar avier.',
       })
     }
     const [{ maxNumber }] = yield* orgQuery((db, organizationId) =>

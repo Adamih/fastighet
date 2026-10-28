@@ -3,7 +3,7 @@ import { isValidOrganizationNumber } from '#/features/tenants/organization-numbe
 import { m } from '#/paraglide/messages'
 
 // Pure rules for the seller details printed on invoices. Shared by the server (emails and
-// printed invoices) and the settings page (preview and readiness check).
+// printed invoices) and the Företagsuppgifter page (preview and readiness check).
 
 export interface SellerDetails {
   readonly organizationName: string
@@ -33,7 +33,7 @@ export function sellerDetails(seller: SellerDetails, hasVat: boolean): string[] 
   ].filter(Boolean)
 }
 
-/** The settings form as typed: every text field is a string, possibly blank. */
+/** The Företagsuppgifter form as typed: every text field is a string, possibly blank. */
 export interface SettingsDraft {
   readonly organizationNumber: string
   readonly bankgiro: string
@@ -52,28 +52,28 @@ export interface ReadinessItem {
 
 const filled = (value: string) => value.trim() !== ''
 
-/** What invoices need from the settings, most important first. */
+/** What invoices need from the company details, most important first. */
 export function settingsReadiness(draft: SettingsDraft): ReadinessItem[] {
   return [
     {
       key: 'bankgiro',
       done: isValidBankgiro(draft.bankgiro),
-      missing: m.settings_missing_bankgiro(),
+      missing: m.company_details_missing_bankgiro(),
     },
     {
       key: 'organizationNumber',
       done: isValidOrganizationNumber(draft.organizationNumber),
-      missing: m.settings_missing_organization_number(),
+      missing: m.company_details_missing_organization_number(),
     },
     {
       key: 'address',
       done: filled(draft.streetAddress) && filled(draft.postalCode) && filled(draft.city),
-      missing: m.settings_missing_address(),
+      missing: m.company_details_missing_address(),
     },
     {
       key: 'email',
       done: filled(draft.email),
-      missing: m.settings_missing_email(),
+      missing: m.company_details_missing_email(),
     },
   ]
 }

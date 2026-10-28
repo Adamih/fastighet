@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
 import { pledge } from '#/db/schema'
 import { registerEntry } from '#/features/ownerships/program'
-import { loadSettings } from '#/features/settings/program'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { maxDate, minDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -48,7 +48,7 @@ export const pledgeConfirmation = (input: PledgeConfirmationInput) =>
     if (input.kind === 'released' && !p.releasedOn) {
       return yield* new Conflict({ message: 'Pantsättningen är inte avregistrerad' })
     }
-    const seller = yield* loadSettings
+    const seller = yield* loadCompanyDetails
     const a = entry.apartment
     const document: ConfirmationDocument = {
       kind: input.kind,
