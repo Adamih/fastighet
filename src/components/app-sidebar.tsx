@@ -1,4 +1,10 @@
-import { Link, useRouteContext, useRouter, useRouterState } from '@tanstack/react-router'
+import {
+  Link,
+  type LinkProps,
+  useRouteContext,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router'
 import {
   Banknote,
   BookOpenCheck,
@@ -31,6 +37,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -46,96 +53,11 @@ import { companyTerms } from '#/features/settings/terminology'
 import type { Permissions } from '#/lib/permissions'
 import { m } from '#/paraglide/messages'
 
-const navigation = [
-  {
-    title: m.nav_portfolio,
-    to: '/portfolio',
-    icon: LayoutGrid,
-    permission: undefined,
-    own: true,
-    feature: 'portfolio',
-    showIf: (app: { companies: readonly unknown[] }) => app.companies.length > 1,
-  },
-  {
-    title: m.nav_properties,
-    to: '/',
-    icon: Building2,
-    permission: { property: ['read'] },
-    except: 'manager',
-  },
-  {
-    title: (kind: CompanyKind) => companyTerms(kind).parties,
-    to: '/tenants',
-    icon: Users,
-    permission: { tenant: ['read'] },
-    except: 'manager',
-  },
-  {
-    title: m.nav_ownerships,
-    to: '/ownerships',
-    icon: KeyRound,
-    permission: { lease: ['read'] },
-    only: 'brf',
-  },
-  {
-    title: m.nav_leases,
-    to: '/leases',
-    icon: FileText,
-    permission: { lease: ['read'] },
-    except: 'manager',
-  },
-  {
-    title: m.nav_invoices,
-    to: '/invoices',
-    icon: Receipt,
-    permission: { invoice: ['read'] },
-    except: 'manager',
-  },
-  {
-    title: m.nav_payments,
-    to: '/payments',
-    icon: Banknote,
-    permission: { payment: ['read'] },
-    except: 'manager',
-  },
-  {
-    title: m.nav_bookkeeping,
-    to: '/bookkeeping',
-    icon: BookOpenCheck,
-    permission: { bookkeeping: ['read'] },
-    except: 'manager',
-  },
-  { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined, own: true },
-  {
-    title: m.nav_clients,
-    to: '/clients',
-    icon: Briefcase,
-    permission: { client: ['read'] },
-    own: true,
-    feature: 'clients',
-    // Members see it once their company manages someone; owners and admins can start there.
-    showIf: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) =>
-      app.companies.length > 1 || can({ client: ['manage'] }),
-  },
-  {
-    title: m.nav_managers,
-    to: '/management',
-    icon: Handshake,
-    permission: { grant: ['read'] },
-    own: true,
-  },
-  {
-    title: m.nav_plan,
-    to: '/plan',
-    icon: CreditCard,
-    permission: { settings: ['read'] },
-    own: true,
-  },
-  { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
-] as const satisfies readonly {
+type NavItem = {
   /** Some labels follow the company type (Hyresgäster or Medlemmar). */
   title: (kind: CompanyKind) => string
-  to: string
+  /** A route of the app, so a renamed page fails the typecheck here. */
+  to: NonNullable<LinkProps['to']>
   icon: typeof Building2
   permission: Permissions | undefined
   /** Shown only for this company type. */
@@ -147,7 +69,125 @@ const navigation = [
   /** Shown only in the user's own company, not in one their company manages. */
   own?: boolean
   showIf?: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) => boolean
-}[]
+}
+
+/**
+ * The menu in groups that follow the work: the overview across companies, the register (what the
+ * company owns and who is on its agreements), the money, and the company itself. A group with
+ * nothing to show for the user, company type, tier or company in focus is left out.
+ */
+const navigation: readonly { label: (() => string) | null; items: readonly NavItem[] }[] = [
+  {
+    label: null,
+    items: [
+      {
+        title: m.nav_portfolio,
+        to: '/portfolio',
+        icon: LayoutGrid,
+        permission: undefined,
+        own: true,
+        feature: 'portfolio',
+        showIf: (app: { companies: readonly unknown[] }) => app.companies.length > 1,
+      },
+    ],
+  },
+  {
+    label: m.nav_group_register,
+    items: [
+      {
+        title: m.nav_properties,
+        to: '/',
+        icon: Building2,
+        permission: { property: ['read'] },
+        except: 'manager',
+      },
+      {
+        title: (kind: CompanyKind) => companyTerms(kind).parties,
+        to: '/tenants',
+        icon: Users,
+        permission: { tenant: ['read'] },
+        except: 'manager',
+      },
+      {
+        title: m.nav_ownerships,
+        to: '/ownerships',
+        icon: KeyRound,
+        permission: { lease: ['read'] },
+        only: 'brf',
+      },
+      {
+        title: m.nav_leases,
+        to: '/leases',
+        icon: FileText,
+        permission: { lease: ['read'] },
+        except: 'manager',
+      },
+    ],
+  },
+  {
+    label: m.nav_group_finance,
+    items: [
+      {
+        title: m.nav_invoices,
+        to: '/invoices',
+        icon: Receipt,
+        permission: { invoice: ['read'] },
+        except: 'manager',
+      },
+      {
+        title: m.nav_payments,
+        to: '/payments',
+        icon: Banknote,
+        permission: { payment: ['read'] },
+        except: 'manager',
+      },
+      {
+        title: m.nav_bookkeeping,
+        to: '/bookkeeping',
+        icon: BookOpenCheck,
+        permission: { bookkeeping: ['read'] },
+        except: 'manager',
+      },
+    ],
+  },
+  {
+    label: m.nav_group_company,
+    items: [
+      { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined, own: true },
+      {
+        title: m.nav_clients,
+        to: '/clients',
+        icon: Briefcase,
+        permission: { client: ['read'] },
+        own: true,
+        feature: 'clients',
+        // Members see it once their company manages someone; owners and admins can start there.
+        showIf: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) =>
+          app.companies.length > 1 || can({ client: ['manage'] }),
+      },
+      {
+        title: m.nav_managers,
+        to: '/management',
+        icon: Handshake,
+        permission: { grant: ['read'] },
+        own: true,
+      },
+      {
+        title: m.nav_plan,
+        to: '/plan',
+        icon: CreditCard,
+        permission: { settings: ['read'] },
+        own: true,
+      },
+      {
+        title: m.nav_settings,
+        to: '/settings',
+        icon: Settings,
+        permission: { settings: ['read'] },
+      },
+    ],
+  },
+]
 
 export function AppSidebar() {
   const { app } = useRouteContext({ from: '/_app' })
@@ -155,6 +195,13 @@ export function AppSidebar() {
   const plan = usePlan()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { setOpenMobile } = useSidebar()
+  const visible = (item: NavItem) =>
+    !(item.permission && !can(item.permission)) &&
+    (!item.only || item.only === app.companyKind) &&
+    item.except !== app.companyKind &&
+    (!item.feature || plan.allows(item.feature)) &&
+    !(item.own && app.organization.grant) &&
+    (!item.showIf || item.showIf(app, can))
 
   return (
     <Sidebar>
@@ -166,46 +213,46 @@ export function AppSidebar() {
         )}
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <nav aria-label={m.nav_main_label()}>
-              <SidebarMenu>
-                {navigation.map((item) => {
-                  if (item.permission && !can(item.permission)) return null
-                  if ('only' in item && item.only !== app.companyKind) return null
-                  if ('except' in item && item.except === app.companyKind) return null
-                  if ('feature' in item && !plan.allows(item.feature)) return null
-                  if ('own' in item && item.own && app.organization.grant) return null
-                  if ('showIf' in item && !item.showIf(app, can)) return null
-                  const active =
-                    item.to === '/'
-                      ? pathname === '/' || /^\/(properties|units)\//.test(pathname)
-                      : pathname === item.to || pathname.startsWith(`${item.to}/`)
-
-                  return (
-                    <SidebarMenuItem key={item.to}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={active}
-                        className="h-11 text-sidebar-foreground"
-                      >
-                        <Link
-                          to={item.to}
-                          aria-current={active ? 'page' : undefined}
-                          activeOptions={{ exact: item.to === '/' }}
-                          onClick={() => setOpenMobile(false)}
-                        >
-                          <item.icon aria-hidden="true" />
-                          <span>{item.title(app.companyKind)}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
-              </SidebarMenu>
-            </nav>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <nav aria-label={m.nav_main_label()}>
+          {navigation.map((group) => {
+            const items = group.items.filter(visible)
+            if (items.length === 0) return null
+            return (
+              <SidebarGroup key={group.label?.() ?? 'overview'}>
+                {group.label && <SidebarGroupLabel>{group.label()}</SidebarGroupLabel>}
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {items.map((item) => {
+                      const active =
+                        item.to === '/'
+                          ? pathname === '/' || /^\/(properties|units)\//.test(pathname)
+                          : pathname === item.to || pathname.startsWith(`${item.to}/`)
+                      return (
+                        <SidebarMenuItem key={item.to}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={active}
+                            className="h-11 text-sidebar-foreground"
+                          >
+                            <Link
+                              to={item.to}
+                              aria-current={active ? 'page' : undefined}
+                              activeOptions={{ exact: item.to === '/' }}
+                              onClick={() => setOpenMobile(false)}
+                            >
+                              <item.icon aria-hidden="true" />
+                              <span>{item.title(app.companyKind)}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      )
+                    })}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )
+          })}
+        </nav>
       </SidebarContent>
       <SidebarSeparator className="mx-3 data-[orientation=horizontal]:w-auto" />
       <SidebarFooter className="p-3">
