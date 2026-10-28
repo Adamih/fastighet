@@ -11,6 +11,7 @@ import {
   organization,
   user,
 } from '#/db/schema'
+import { requireFeature } from '#/features/billing/program'
 import { stockholmDate } from '#/lib/dates'
 import {
   cleanGrant,
@@ -175,6 +176,7 @@ export const listClients = Effect.gen(function* () {
 export const requestAccess = (input: RequestAccessInput, origin: string) =>
   Effect.gen(function* () {
     const org = yield* ownCompany('client', 'manage')
+    yield* requireFeature('clients')
     const me = yield* CurrentUser
     const grant = grantFromLevels(input.levels)
     if (isEmptyGrant(grant)) return yield* new Conflict({ message: 'Välj minst en behörighet.' })
@@ -256,6 +258,7 @@ export const withdrawRequest = (requestId: string) =>
 export const assignStaff = (input: AssignStaffInput) =>
   Effect.gen(function* () {
     const org = yield* ownCompany('client', 'manage')
+    yield* requireFeature('clients')
     const [grant] = yield* query((db) =>
       db
         .select({ id: managementGrant.id })

@@ -57,6 +57,13 @@
       "when": 1793101524787,
       "tag": "0007_brf_fees",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793196947991,
+      "tag": "0008_subscriptions",
+      "breakpoints": true
     }
   ]
 }

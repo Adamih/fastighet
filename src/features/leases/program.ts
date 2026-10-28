@@ -8,7 +8,7 @@ import {
   type indexClause,
   leaseTerms,
   party,
-  type unit,
+  unit,
 } from '#/db/schema'
 import {
   type ChangePlanProblem,
@@ -30,6 +30,7 @@ import {
   correctOpenTerms,
   invoiceHistory,
 } from '#/features/agreements/program'
+import { requireFeature } from '#/features/billing/program'
 import { checkClauseAllows, indexAdjustments } from '#/features/indexation/program'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -240,9 +241,40 @@ const checkParties = (
     return result.parties
   })
 
+/**
+ * What the company's tier says about a lease: any new lease needs `leases` (a BRF's lettings), and
+ * VAT or a lokal needs `commercial`. On an existing lease only what a change adds counts, so a
+ * company on a smaller tier can still correct the leases it has.
+ */
+const requireLeasePlan = (
+  terms: { readonly vat: boolean; readonly unitIds: readonly string[] },
+  current?: { readonly vat: boolean; readonly unitIds: readonly string[] },
+) =>
+  Effect.gen(function* () {
+    if (!current) yield* requireFeature('leases')
+    const added = terms.unitIds.filter((id) => !current?.unitIds.includes(id))
+    const premises =
+      added.length === 0
+        ? []
+        : yield* orgQuery((db, organizationId) =>
+            db
+              .select({ id: unit.id })
+              .from(unit)
+              .where(
+                and(
+                  eq(unit.organizationId, organizationId),
+                  inArray(unit.id, added),
+                  eq(unit.kind, 'commercial'),
+                ),
+              ),
+          )
+    if ((terms.vat && !current?.vat) || premises.length > 0) yield* requireFeature('commercial')
+  })
+
 export const createLease = (input: CreateLeaseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
+    yield* requireLeasePlan(input)
     const extensionMonths = input.termEndDate ? input.extensionMonths : null
 
     const owner = yield* orgQuery((db, organizationId) =>
@@ -319,6 +351,10 @@ export const updateLease = (input: UpdateLeaseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const current = yield* getLease(input.leaseId)
+    yield* requireLeasePlan(input, {
+      vat: current.vat,
+      unitIds: current.unitRows.map((u) => u.unitId),
+    })
     const extensionMonths = input.termEndDate ? input.extensionMonths : null
 
     const history = yield* invoiceHistory(current.id)
@@ -510,6 +546,8 @@ export const changeLeaseFrom = (input: ChangeLeaseFromInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const current = yield* getLease(input.leaseId)
+    const before = { vat: current.vat, unitIds: current.unitRows.map((u) => u.unitId) }
+    yield* requireLeasePlan({ vat: current.vat, unitIds: input.unitIds }, before)
     const parties = yield* checkParties(current.tenant.id, input)
     const partyKey = (p: { partyId: string; role: string; receivesInvoices: boolean }) =>
       `${p.partyId}:${p.role}:${p.receivesInvoices ? 1 : 0}`

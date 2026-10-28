@@ -11,6 +11,8 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { useCan } from '#/features/auth/use-can'
+import { PlanHint } from '#/features/billing/plan-hint'
+import { usePlan } from '#/features/billing/use-plan'
 import { useIndexationDrawer } from '#/features/indexation/indexation-form'
 import { LeaseStatusBadge } from '#/features/leases/components'
 import { leasesQuery } from '#/features/leases/functions'
@@ -78,14 +80,17 @@ const toneBar: Record<TimelineTone, string> = {
 
 function LeasesPage() {
   const can = useCan()
-  const canCreate = can({ lease: ['manage'], tenant: ['read'], property: ['read'] })
+  const plan = usePlan()
+  const mayManage = can({ lease: ['manage'], tenant: ['read'], property: ['read'] })
+  const canCreate = mayManage && plan.allows('leases')
   const canEdit = can({ lease: ['manage'], property: ['read'] })
   const filter = Route.useSearch().status ?? 'all'
   const { data: leases } = useSuspenseQuery(leasesQuery())
   const [query, setQuery] = useState('')
   const addLease = useAddLeaseDrawer()
   const indexation = useIndexationDrawer()
-  const canIndex = can({ lease: ['manage'] }) && leases.some((l) => l.indexClause)
+  const canIndex =
+    can({ lease: ['manage'] }) && plan.allows('commercial') && leases.some((l) => l.indexClause)
   const today = stockholmDate(Date.now())
   const overview = leaseOverview(leases, today)
 
@@ -143,6 +148,7 @@ function LeasesPage() {
           </label>
         </div>
       </header>
+      {mayManage && <PlanHint feature="leases" />}
 
       <Summary overview={overview} />
 

@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { requireFeature } from '#/features/billing/program'
 import { listInvoices } from '#/features/invoicing/program'
 import { listPayments } from '#/features/payments/program'
 import { listUnits } from '#/features/properties/program'
@@ -56,6 +57,7 @@ const companySummary = Effect.gen(function* () {
 
 export const portfolio = Effect.gen(function* () {
   yield* requireOwnCompany
+  yield* requireFeature('portfolio')
   const user = yield* CurrentUser
   const home = yield* HomeOrganization
   const companies = [{ ...home, grant: null }, ...(yield* managedCompanies(user.id, home))]

@@ -17,6 +17,7 @@ import {
 } from '#/features/agreements/charges'
 import { invoiceRecipient } from '#/features/agreements/parties'
 import { inForce, inForceOn } from '#/features/agreements/periods'
+import { requireFeature } from '#/features/billing/program'
 import { loadSettings } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
@@ -79,6 +80,7 @@ const leaseForClause = (leaseId: string) =>
 export const setIndexClause = (input: IndexClauseInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
+    yield* requireFeature('commercial')
     const lease = yield* leaseForClause(input.leaseId)
     const problem = clauseProblem(lease)
     if (problem) return yield* new Conflict({ message: clauseProblemMessages[problem] })
@@ -317,6 +319,7 @@ export type IndexationRow = Effect.Success<ReturnType<typeof indexationPreview>>
 export const runIndexation = (year: number, options: { notify: boolean } = { notify: false }) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
+    yield* requireFeature('commercial')
     const rows = yield* plan(year)
     const missing = [
       ...new Set(

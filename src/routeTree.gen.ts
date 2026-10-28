@@ -19,6 +19,7 @@ import { Route as AppBookkeepingRouteImport } from './routes/_app/bookkeeping'
 import { Route as AppClientsRouteImport } from './routes/_app/clients'
 import { Route as AppManagementRouteImport } from './routes/_app/management'
 import { Route as AppPaymentsRouteImport } from './routes/_app/payments'
+import { Route as AppPlanRouteImport } from './routes/_app/plan'
 import { Route as AppPortfolioRouteImport } from './routes/_app/portfolio'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppTeamRouteImport } from './routes/_app/team'
@@ -85,6 +86,11 @@ const AppManagementRoute = AppManagementRouteImport.update({
 const AppPaymentsRoute = AppPaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlanRoute = AppPlanRouteImport.update({
+  id: '/plan',
+  path: '/plan',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPortfolioRoute = AppPortfolioRouteImport.update({
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/clients': typeof AppClientsRoute
   '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
+  '/plan': typeof AppPlanRoute
   '/portfolio': typeof AppPortfolioRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/clients': typeof AppClientsRoute
   '/management': typeof AppManagementRoute
   '/payments': typeof AppPaymentsRoute
+  '/plan': typeof AppPlanRoute
   '/portfolio': typeof AppPortfolioRoute
   '/settings': typeof AppSettingsRoute
   '/team': typeof AppTeamRoute
@@ -251,6 +259,7 @@ export interface FileRoutesById {
   '/_app/clients': typeof AppClientsRoute
   '/_app/management': typeof AppManagementRoute
   '/_app/payments': typeof AppPaymentsRoute
+  '/_app/plan': typeof AppPlanRoute
   '/_app/portfolio': typeof AppPortfolioRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/team': typeof AppTeamRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/clients'
     | '/management'
     | '/payments'
+    | '/plan'
     | '/portfolio'
     | '/settings'
     | '/team'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/clients'
     | '/management'
     | '/payments'
+    | '/plan'
     | '/portfolio'
     | '/settings'
     | '/team'
@@ -341,6 +352,7 @@ export interface FileRouteTypes {
     | '/_app/clients'
     | '/_app/management'
     | '/_app/payments'
+    | '/_app/plan'
     | '/_app/portfolio'
     | '/_app/settings'
     | '/_app/team'
@@ -442,6 +454,13 @@ declare module '@tanstack/react-router' {
       path: '/payments'
       fullPath: '/payments'
       preLoaderRoute: typeof AppPaymentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/plan': {
+      id: '/_app/plan'
+      path: '/plan'
+      fullPath: '/plan'
+      preLoaderRoute: typeof AppPlanRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/portfolio': {
@@ -578,6 +597,7 @@ interface AppRouteChildren {
   AppClientsRoute: typeof AppClientsRoute
   AppManagementRoute: typeof AppManagementRoute
   AppPaymentsRoute: typeof AppPaymentsRoute
+  AppPlanRoute: typeof AppPlanRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
@@ -602,6 +622,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppClientsRoute: AppClientsRoute,
   AppManagementRoute: AppManagementRoute,
   AppPaymentsRoute: AppPaymentsRoute,
+  AppPlanRoute: AppPlanRoute,
   AppPortfolioRoute: AppPortfolioRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,

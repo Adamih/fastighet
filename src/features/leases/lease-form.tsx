@@ -7,6 +7,8 @@ import { QueryError } from '#/components/query-error'
 import { SubmissionForm } from '#/components/submission-form'
 import { UnitsField } from '#/features/agreements/units-field'
 import { useCan } from '#/features/auth/use-can'
+import { PlanHint } from '#/features/billing/plan-hint'
+import { usePlan } from '#/features/billing/use-plan'
 import { unitsQuery } from '#/features/properties/functions'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import { tenantsQuery } from '#/features/tenants/functions'
@@ -88,6 +90,7 @@ export function LeaseForm({
   onSubmit: (value: LeaseFormValues) => Promise<unknown>
 }) {
   const drawer = useFormDrawerContext()
+  const commercial = usePlan().allows('commercial')
   const form = useAppForm({
     defaultValues: {
       tenantId: defaultValues.tenantId,
@@ -286,9 +289,12 @@ export function LeaseForm({
               <field.SwitchField
                 label={m.lease_form_vat()}
                 description={m.lease_form_vat_description()}
+                // VAT is commercial letting; a lease that already has it can keep it.
+                disabled={!commercial && !defaultValues.vat}
               />
             )}
           </form.AppField>
+          {!defaultValues.vat && <PlanHint feature="commercial" />}
         </section>
 
         <form.AppForm>

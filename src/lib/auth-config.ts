@@ -1,12 +1,16 @@
 import { tryGetCurrentAuthEndpointContext } from '@better-auth/core/context'
+import { stripe as stripePlugin } from '@better-auth/stripe'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { organization } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
+import type Stripe from 'stripe'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
-import type { TeamAction } from '#/features/audit/actions'
+import type { CompanyAction } from '#/features/audit/actions'
+import { stripePlans, tierOf } from '#/features/billing/store'
+import { tiers } from '#/features/billing/tiers'
 import { stockholmDate } from '#/lib/dates'
 import { ac, roles } from '#/lib/permissions'
 import type { AnyEmail } from '#/server/mail/mailer'
@@ -17,19 +21,25 @@ import type { AnyEmail } from '#/server/mail/mailer'
  */
 export type DeliverEmail = (email: AnyEmail) => void
 
-/** A team change for the company's audit log. */
-export interface TeamEvent {
+/** A team or subscription change for the company's audit log. */
+export interface CompanyEvent {
   readonly organization: { readonly id: string; readonly name: string }
-  /** Who did it; null when Better Auth's request had no session (never expected). */
+  /**
+   * Who did it; null for Stripe's webhooks, or when Better Auth's request had no session (never
+   * expected for team changes).
+   */
   readonly actor: { readonly id: string; readonly name: string } | null
-  readonly action: TeamAction
+  readonly action: CompanyAction
   /** The user (or invitation) it concerns. */
   readonly entityId: string
   readonly details: Readonly<Record<string, string>>
 }
 
-/** Records a team change. Must never throw: Better Auth has already made the change. */
-export type RecordTeamEvent = (event: TeamEvent) => Promise<void>
+/** Records a team or subscription change. Must never throw: the change has already been made. */
+export type RecordCompanyEvent = (event: CompanyEvent) => Promise<void>
+
+/** Sets a subscription's quantity to what the company has; see `features/billing`. */
+export type SyncQuantity = (organizationId: string) => Promise<void>
 
 /**
  * The signed-in user of the Better Auth request being handled, for hooks that only say whom a
@@ -50,15 +60,36 @@ export function createAuth(
     secret?: string
     baseURL?: string
     deliverEmail: DeliverEmail
-    recordTeamEvent: RecordTeamEvent
+    recordCompanyEvent: RecordCompanyEvent
+    /** Stripe for subscriptions. Without a real key, checkout fails and the plan page says so. */
+    stripe: { client: Stripe; webhookSecret: string }
+    syncQuantity: SyncQuantity
   },
 ) {
-  const { deliverEmail, recordTeamEvent } = options
+  const { deliverEmail, recordCompanyEvent, syncQuantity } = options
   const company = (organization: { id: string; name: string }) => ({
     id: organization.id,
     name: organization.name,
   })
   const person = (user: { id: string; name: string }) => ({ id: user.id, name: user.name })
+  /** A subscription change from Stripe's webhook, for the company's audit log. */
+  const subscriptionEvent = async (
+    action: CompanyAction,
+    subscription: { id: string; referenceId: string; plan: string },
+  ) => {
+    const [company] = await db
+      .select({ id: schema.organization.id, name: schema.organization.name })
+      .from(schema.organization)
+      .where(eq(schema.organization.id, subscription.referenceId))
+    if (!company) return
+    await recordCompanyEvent({
+      organization: company,
+      actor: null,
+      action,
+      entityId: subscription.id,
+      details: { plan: subscription.plan },
+    })
+  }
 
   return betterAuth({
     secret: options.secret,
@@ -118,6 +149,9 @@ export function createAuth(
         roles,
         creatorRole: 'owner',
         requireEmailVerificationOnInvitation: true,
+        // The tier's backstop (a free manager has two users), else Better Auth's default.
+        membershipLimit: async (_user, organization) =>
+          tiers[await tierOf(db, organization.id)].limits.members ?? 100,
         sendInvitationEmail: async (data) =>
           deliverEmail({
             to: data.email,
@@ -132,7 +166,7 @@ export function createAuth(
         // Team changes for the company's audit log. Role keys are stored, never role names.
         organizationHooks: {
           afterCreateInvitation: ({ invitation, inviter, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: person(inviter),
               action: 'team.invite',
@@ -140,7 +174,7 @@ export function createAuth(
               details: { email: invitation.email, role: invitation.role },
             }),
           afterCancelInvitation: ({ invitation, cancelledBy, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: person(cancelledBy),
               action: 'team.cancel_invitation',
@@ -148,7 +182,7 @@ export function createAuth(
               details: { email: invitation.email },
             }),
           afterAcceptInvitation: ({ member, user, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: person(user),
               action: 'team.join',
@@ -156,7 +190,7 @@ export function createAuth(
               details: { name: user.name, role: member.role },
             }),
           afterRejectInvitation: ({ invitation, user, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: person(user),
               action: 'team.reject_invitation',
@@ -165,7 +199,7 @@ export function createAuth(
             }),
           // These two say only whom the change concerns; the actor is the request's user.
           afterUpdateMemberRole: ({ member, previousRole, user, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: requestUser(),
               action: 'team.change_role',
@@ -173,13 +207,58 @@ export function createAuth(
               details: { name: user.name, role: member.role, previousRole },
             }),
           afterRemoveMember: ({ member, user, organization }) =>
-            recordTeamEvent({
+            recordCompanyEvent({
               organization: company(organization),
               actor: requestUser(),
               action: 'team.remove',
               entityId: user.id,
               details: { name: user.name, role: member.role },
             }),
+        },
+      }),
+      // Subscriptions: a company's paid tier is its Stripe subscription (`features/billing`).
+      stripePlugin({
+        stripeClient: options.stripe.client,
+        stripeWebhookSecret: options.stripe.webhookSecret,
+        organization: { enabled: true },
+        subscription: {
+          enabled: true,
+          plans: () => stripePlans(options.stripe.client),
+          // Only the company's own owners and admins buy for it; a manager's staff never do.
+          authorizeReference: async ({ user, referenceId }) => {
+            const [membership] = await db
+              .select({ role: schema.member.role })
+              .from(schema.member)
+              .where(
+                and(
+                  eq(schema.member.userId, user.id),
+                  eq(schema.member.organizationId, referenceId),
+                ),
+              )
+            const roles = membership?.role.split(',') ?? []
+            return roles.includes('owner') || roles.includes('admin')
+          },
+          getCheckoutSessionParams: () => ({
+            params: {
+              locale: 'sv',
+              billing_address_collection: 'required',
+              tax_id_collection: { enabled: true },
+            },
+          }),
+          // Checkout takes the quantity from the browser; set it to what the company has.
+          onSubscriptionComplete: async ({ subscription }) => {
+            await syncQuantity(subscription.referenceId)
+            await subscriptionEvent('billing.subscribe', subscription)
+          },
+          // Sales tiers are set up in Stripe's dashboard.
+          onSubscriptionCreated: async ({ subscription }) => {
+            await syncQuantity(subscription.referenceId)
+            await subscriptionEvent('billing.subscribe', subscription)
+          },
+          onSubscriptionCancel: ({ subscription }) =>
+            subscriptionEvent('billing.cancel', subscription),
+          onSubscriptionDeleted: ({ subscription }) =>
+            subscriptionEvent('billing.end', subscription),
         },
       }),
       // Must stay last so it can forward Set-Cookie headers from the other plugins.

@@ -4,6 +4,7 @@ import {
   BookOpenCheck,
   Briefcase,
   Building2,
+  CreditCard,
   FileText,
   Handshake,
   KeyRound,
@@ -38,6 +39,8 @@ import {
   useSidebar,
 } from '#/components/ui/sidebar'
 import { useCan } from '#/features/auth/use-can'
+import type { PlanFeature } from '#/features/billing/tiers'
+import { usePlan } from '#/features/billing/use-plan'
 import type { CompanyKind } from '#/features/settings/company-kinds'
 import { companyTerms } from '#/features/settings/terminology'
 import { authClient } from '#/lib/auth-client'
@@ -52,14 +55,22 @@ const navigation = [
     icon: LayoutGrid,
     permission: undefined,
     own: true,
+    feature: 'portfolio',
     showIf: (app: { companies: readonly unknown[] }) => app.companies.length > 1,
   },
-  { title: m.nav_properties, to: '/', icon: Building2, permission: { property: ['read'] } },
+  {
+    title: m.nav_properties,
+    to: '/',
+    icon: Building2,
+    permission: { property: ['read'] },
+    except: 'manager',
+  },
   {
     title: (kind: CompanyKind) => companyTerms(kind).parties,
     to: '/tenants',
     icon: Users,
     permission: { tenant: ['read'] },
+    except: 'manager',
   },
   {
     title: m.nav_ownerships,
@@ -68,14 +79,33 @@ const navigation = [
     permission: { lease: ['read'] },
     only: 'brf',
   },
-  { title: m.nav_leases, to: '/leases', icon: FileText, permission: { lease: ['read'] } },
-  { title: m.nav_invoices, to: '/invoices', icon: Receipt, permission: { invoice: ['read'] } },
-  { title: m.nav_payments, to: '/payments', icon: Banknote, permission: { payment: ['read'] } },
+  {
+    title: m.nav_leases,
+    to: '/leases',
+    icon: FileText,
+    permission: { lease: ['read'] },
+    except: 'manager',
+  },
+  {
+    title: m.nav_invoices,
+    to: '/invoices',
+    icon: Receipt,
+    permission: { invoice: ['read'] },
+    except: 'manager',
+  },
+  {
+    title: m.nav_payments,
+    to: '/payments',
+    icon: Banknote,
+    permission: { payment: ['read'] },
+    except: 'manager',
+  },
   {
     title: m.nav_bookkeeping,
     to: '/bookkeeping',
     icon: BookOpenCheck,
     permission: { bookkeeping: ['read'] },
+    except: 'manager',
   },
   { title: m.nav_team, to: '/team', icon: UserRoundCog, permission: undefined, own: true },
   {
@@ -84,6 +114,7 @@ const navigation = [
     icon: Briefcase,
     permission: { client: ['read'] },
     own: true,
+    feature: 'clients',
     // Members see it once their company manages someone; owners and admins can start there.
     showIf: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) =>
       app.companies.length > 1 || can({ client: ['manage'] }),
@@ -95,6 +126,13 @@ const navigation = [
     permission: { grant: ['read'] },
     own: true,
   },
+  {
+    title: m.nav_plan,
+    to: '/plan',
+    icon: CreditCard,
+    permission: { settings: ['read'] },
+    own: true,
+  },
   { title: m.nav_settings, to: '/settings', icon: Settings, permission: { settings: ['read'] } },
 ] as const satisfies readonly {
   /** Some labels follow the company type (Hyresgäster or Medlemmar). */
@@ -104,6 +142,10 @@ const navigation = [
   permission: Permissions | undefined
   /** Shown only for this company type. */
   only?: CompanyKind
+  /** Not shown for this company type (a manager has no properties of its own). */
+  except?: CompanyKind
+  /** Shown only when the tier includes it. */
+  feature?: PlanFeature
   /** Shown only in the user's own company, not in one their company manages. */
   own?: boolean
   showIf?: (app: { companies: readonly unknown[] }, can: (p: Permissions) => boolean) => boolean
@@ -112,6 +154,7 @@ const navigation = [
 export function AppSidebar() {
   const { app } = useRouteContext({ from: '/_app' })
   const can = useCan()
+  const plan = usePlan()
   const router = useRouter()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { setOpenMobile } = useSidebar()
@@ -135,6 +178,8 @@ export function AppSidebar() {
                 {navigation.map((item) => {
                   if (item.permission && !can(item.permission)) return null
                   if ('only' in item && item.only !== app.companyKind) return null
+                  if ('except' in item && item.except === app.companyKind) return null
+                  if ('feature' in item && !plan.allows(item.feature)) return null
                   if ('own' in item && item.own && app.organization.grant) return null
                   if ('showIf' in item && !item.showIf(app, can)) return null
                   const active =

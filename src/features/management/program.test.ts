@@ -43,6 +43,8 @@ function setup() {
       ('m0', 'org', 'user', 'owner', ${now}),
       ('m1', 'mgr', 'boss', 'owner', ${now}), ('m2', 'mgr', 'anna-m', 'member', ${now}),
       ('m3', 'mgr', 'bo', 'member', ${now}), ('m4', 'other', 'stranger', 'owner', ${now});
+    INSERT INTO organization_settings (organization_id, kind, plan_override) VALUES
+      ('mgr', 'manager', 'manager_pro');
   `)
   const mgrHome = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
   const asBoss = h.runAs({ user: 'boss', home: mgrHome })
@@ -168,7 +170,10 @@ test('who at the manager reaches the company, and with which role', async () => 
 test("grants don't chain", async () => {
   const h = setup()
   await grantAccess(h)
-  // 'org' manages 'chain' too.
+  // 'org' manages 'chain' too, as a manager itself.
+  h.sqlite.exec(
+    "UPDATE organization_settings SET kind = 'manager', plan_override = 'manager_pro' WHERE organization_id = 'org'",
+  )
   const asChainOwner = h.runAs({ home: { id: 'chain', name: 'Kedja', role: 'owner' } })
   const { code } = await h.run(
     requestAccess({ label: 'Kedja', email: '', levels: full }, 'http://x'),

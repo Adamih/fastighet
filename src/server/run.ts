@@ -5,10 +5,12 @@ import { Cause, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable } from '#/db/schema'
 import type { Audit } from '#/features/audit/actions'
+import { syncQuantity } from '#/features/billing/store'
 import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
+import { stripe, stripeConfigured } from '#/lib/stripe'
 import { m } from '#/paraglide/messages'
 import { recordAudit } from './audit'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
@@ -18,6 +20,7 @@ import { mailer } from './mail/provider'
 import { query } from './scoped'
 import {
   type AppServices,
+  Billing,
   CurrentOrganization,
   CurrentUser,
   Database,
@@ -156,6 +159,10 @@ export async function runApp<A, E>(
     Effect.provideService(Database, db),
     Effect.provideService(Mailer, mailer),
     Effect.provideService(KpiSource, { fetch: fetchKpiFromScb }),
+    Effect.provideService(Billing, {
+      configured: stripeConfigured,
+      syncQuantity: (organizationId) => syncQuantity(db, stripe, organizationId),
+    }),
     Effect.runPromiseExit,
   )
 

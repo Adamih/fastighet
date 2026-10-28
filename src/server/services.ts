@@ -45,6 +45,18 @@ export class KpiSource extends Context.Service<
 >()('app/KpiSource') {}
 
 /**
+ * Stripe for subscriptions, as far as programs need it: whether payment is set up, and keeping a
+ * subscription's quantity in step with the company (`features/billing/store.ts`). A stub in tests.
+ */
+export class Billing extends Context.Service<
+  Billing,
+  {
+    readonly configured: boolean
+    readonly syncQuantity: (organizationId: string) => Promise<void>
+  }
+>()('app/Billing') {}
+
+/**
  * Told by `once()` when a request only replays the stored result of an earlier one, so `runApp`
  * doesn't record the write in the audit log again. Outside `runApp` it does nothing.
  */
@@ -61,3 +73,4 @@ export type AppServices =
   | Mailer
   | PermissionChecker
   | KpiSource
+  | Billing

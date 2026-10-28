@@ -18,6 +18,8 @@ import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
 import { Label } from '#/components/ui/label'
 import { useCan } from '#/features/auth/use-can'
+import { PlanHint } from '#/features/billing/plan-hint'
+import { usePlan } from '#/features/billing/use-plan'
 import { type AccountKey, accountKeys } from '#/features/bookkeeping/accounts'
 import {
   bookkeepingExportsQuery,
@@ -160,6 +162,7 @@ function download(fileName: string, base64: string) {
 function Preview({ period }: { period: Period }) {
   const queryClient = useQueryClient()
   const preview = useQuery(previewExportQuery(period))
+  const inPlan = usePlan().allows('bookkeeping')
   const exportFile = useMutation({
     mutationFn: () => exportSieFn({ data: period }),
     onSuccess: async (file) => {
@@ -235,10 +238,11 @@ function Preview({ period }: { period: Period }) {
         </>
       )}
       {exportFile.error && <p className="text-destructive text-sm">{exportFile.error.message}</p>}
+      <PlanHint feature="bookkeeping" />
       <Button
         type="button"
         className="h-11 w-full sm:h-9 sm:w-fit"
-        disabled={data.voucherCount === 0 || exportFile.isPending}
+        disabled={!inPlan || data.voucherCount === 0 || exportFile.isPending}
         onClick={() => exportFile.mutate()}
       >
         <Download aria-hidden="true" />
@@ -292,7 +296,9 @@ const months = Array.from({ length: 12 }, (_, i) => ({
 const validator = Schema.toStandardSchemaV1(UpdateBookkeepingSettingsInput)
 
 function AccountsForm() {
-  const canEdit = useCan()({ bookkeeping: ['manage'] })
+  const can = useCan()
+  const plan = usePlan()
+  const canEdit = can({ bookkeeping: ['manage'] }) && plan.allows('bookkeeping')
   const queryClient = useQueryClient()
   const { data: settings } = useSuspenseQuery(bookkeepingSettingsQuery())
   const [saved, setSaved] = useState(false)

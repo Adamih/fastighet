@@ -1,5 +1,5 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, redirect } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import {
   desktopTableClass,
@@ -17,6 +17,10 @@ import { cn } from '#/lib/utils'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/')({
+  // A property manager has no properties of its own; it starts with its clients.
+  beforeLoad: ({ context }) => {
+    if (context.app.companyKind === 'manager') throw redirect({ to: '/clients' })
+  },
   loader: ({ context }) => context.queryClient.ensureQueryData(propertiesQuery()),
   component: PropertiesPage,
 })

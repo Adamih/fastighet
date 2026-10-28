@@ -6,11 +6,12 @@ import { makeSignature } from 'better-auth/crypto'
 import { eq } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { Effect } from 'effect'
+import Stripe from 'stripe'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { CurrentOrganization, PermissionChecker } from '#/server/services'
-import { createAuth, type TeamEvent } from './auth-config'
+import { type CompanyEvent, createAuth } from './auth-config'
 import type { Permissions } from './permissions'
 
 const connections: Sqlite[] = []
@@ -69,14 +70,16 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
       updatedAt: now,
     })
     .run()
-  const events: TeamEvent[] = []
+  const events: CompanyEvent[] = []
   const auth = createAuth(db as unknown as Db, {
     secret,
     baseURL: 'http://localhost:3000',
     deliverEmail: () => {},
-    recordTeamEvent: async (event) => {
+    recordCompanyEvent: async (event) => {
       events.push(event)
     },
+    stripe: { client: new Stripe('sk_test_unused'), webhookSecret: '' },
+    syncQuantity: async () => {},
   })
   const headers = new Headers({
     cookie: `better-auth.session_token=${encodeURIComponent(`${token}.${await makeSignature(token, secret)}`)}`,

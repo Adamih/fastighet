@@ -9,6 +9,7 @@ import {
   payment,
   posting,
 } from '#/db/schema'
+import { requireFeature } from '#/features/billing/program'
 import { periodsOverlap } from '#/features/leases/terms'
 import { loadSettings } from '#/features/settings/program'
 import type { Permissions } from '#/lib/permissions'
@@ -45,6 +46,7 @@ export const getBookkeepingSettings = Effect.gen(function* () {
 export const updateBookkeepingSettings = (input: UpdateBookkeepingSettingsInput) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
+    yield* requireFeature('bookkeeping')
     // Only numbers that differ from BAS are stored, so a later change of defaults reaches them.
     const custom = Object.fromEntries(
       accountKeys.flatMap((key: AccountKey) => {
@@ -183,6 +185,7 @@ const toBase64 = (bytes: Uint8Array) => {
 export const exportSie = (period: ExportPeriodInput) =>
   Effect.gen(function* () {
     yield* requirePermission(read)
+    yield* requireFeature('bookkeeping')
     yield* checkPeriod(period)
     const me = yield* CurrentUser
     const seller = yield* loadSettings

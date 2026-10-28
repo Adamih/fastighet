@@ -6,6 +6,7 @@ import { rentFields, shownRows, viewDate } from '#/features/agreements/current'
 import { joinNames, primaryParty } from '#/features/agreements/parties'
 import { inForce } from '#/features/agreements/periods'
 import { agreementTerms } from '#/features/agreements/terms'
+import { requireRoomForUnit, syncPlanQuantity } from '#/features/billing/program'
 import { leaseStatus, occupyingLease } from '#/features/leases/terms'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -164,6 +165,7 @@ export const createProperty = (input: CreatePropertyInput) =>
         .values({ organizationId, ...values })
         .returning(),
     )
+    yield* syncPlanQuantity
     return created
   })
 
@@ -215,6 +217,7 @@ export const deleteProperty = (propertyId: string) =>
         .delete(property)
         .where(and(eq(property.id, current.id), eq(property.organizationId, organizationId))),
     )
+    yield* syncPlanQuantity
   })
 
 export const getUnit = (unitId: string) =>
@@ -280,12 +283,14 @@ export const updateUnit = (input: UpdateUnitInput) =>
       }),
     )
     if (clash) return yield* new Conflict({ message: `Objekt ${label} finns redan på fastigheten` })
+    if (billable(input.kind) && !billable(current.kind)) yield* requireRoomForUnit
     yield* orgQuery((db, organizationId) =>
       db
         .update(unit)
         .set({ kind: input.kind, label, areaSqm: input.areaSqm })
         .where(and(eq(unit.id, current.id), eq(unit.organizationId, organizationId))),
     )
+    if (input.kind !== current.kind) yield* syncPlanQuantity
     return yield* getUnit(current.id)
   })
 
@@ -301,8 +306,12 @@ export const deleteUnit = (unitId: string) =>
     yield* orgQuery((db, organizationId) =>
       db.delete(unit).where(and(eq(unit.id, current.id), eq(unit.organizationId, organizationId))),
     )
+    yield* syncPlanQuantity
     return { propertyId: current.propertyId }
   })
+
+/** Apartments and premises count towards a tier's price and backstop; parking and storage don't. */
+const billable = (kind: string) => kind === 'apartment' || kind === 'commercial'
 
 export const createUnit = (input: CreateUnitInput) =>
   Effect.gen(function* () {
@@ -313,6 +322,7 @@ export const createUnit = (input: CreateUnitInput) =>
     if (parent.units.some((u) => u.label === label)) {
       return yield* new Conflict({ message: `Objekt ${label} finns redan på fastigheten` })
     }
+    if (billable(input.kind)) yield* requireRoomForUnit
 
     const [created] = yield* orgQuery((db, organizationId) =>
       db
@@ -326,5 +336,6 @@ export const createUnit = (input: CreateUnitInput) =>
         })
         .returning(),
     )
+    yield* syncPlanQuantity
     return created
   })

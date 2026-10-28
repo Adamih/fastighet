@@ -1,2 +1,6 @@
 # Copy to .dev.vars for local dev. Generate with: openssl rand -base64 32
 BETTER_AUTH_SECRET=
+# Optional: Stripe test-mode keys for subscriptions. Without them the plan page says payment
+# isn't set up. Forward webhooks with: stripe listen --forward-to localhost:3000/api/auth/stripe/webhook
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=

@@ -9,6 +9,7 @@ import type { Grant } from '#/lib/managed-access'
 import { Mailer } from '#/server/mail/mailer'
 import { makeMockMailer } from '#/server/mail/mock'
 import {
+  Billing,
   CurrentOrganization,
   CurrentUser,
   Database,
@@ -55,6 +56,8 @@ export function harness() {
   const { mailer, outbox } = makeMockMailer({ from: 'Test <no-reply@example.test>' })
   // New KPI months "from SCB": tests push to it before a program syncs.
   const kpiFeed: { month: string; valueHundredths: number }[] = []
+  // Companies whose subscription quantity a program asked to sync, instead of calling Stripe.
+  const quantitySyncs: string[] = []
   // `runAs` runs as someone else, e.g. a manager's staff in a company their company manages.
   const runAs =
     (as: {
@@ -79,6 +82,12 @@ export function harness() {
           Effect.provideService(PermissionChecker, { check: async () => true }),
           Effect.provideService(Mailer, mailer),
           Effect.provideService(KpiSource, { fetch: async () => kpiFeed }),
+          Effect.provideService(Billing, {
+            configured: false,
+            syncQuantity: async (organizationId) => {
+              quantitySyncs.push(organizationId)
+            },
+          }),
         ) as Effect.Effect<A, E, never>,
       )
     }
@@ -88,7 +97,9 @@ export function harness() {
     INSERT INTO organization (id, name, slug, created_at) VALUES ('org', 'Test', 'test', ${now});
     INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
       VALUES ('user', 'u', 'u@example.test', 1, ${now}, ${now});
-    INSERT INTO organization_settings (organization_id, bankgiro) VALUES ('org', '990-0002');
+    -- Tests run on the top tier unless they test the tiers.
+    INSERT INTO organization_settings (organization_id, bankgiro, plan_override)
+      VALUES ('org', '990-0002', 'landlord_pro');
     INSERT INTO property (id, organization_id, designation) VALUES ('p', 'org', 'Uppsala 1:1');
     INSERT INTO unit (id, organization_id, property_id, kind, label) VALUES
       ('u1', 'org', 'p', 'apartment', '1001'), ('f1', 'org', 'p', 'storage', 'F1'),
@@ -97,7 +108,7 @@ export function harness() {
       ('anna', 'org', 'person', 'Anna'), ('erik', 'org', 'person', 'Erik'),
       ('maja', 'org', 'person', 'Maja');
   `)
-  return { run, runAs, sqlite, outbox, kpiFeed }
+  return { run, runAs, sqlite, outbox, kpiFeed, quantitySyncs }
 }
 
 /** The failure message of a program that should fail. */

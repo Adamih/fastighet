@@ -85,6 +85,10 @@ export const auditActions = {
   'team.reject_invitation': action(m.audit_team_reject_invitation, 'invitation'),
   'team.change_role': action(m.audit_team_change_role, 'user'),
   'team.remove': action(m.audit_team_remove, 'user'),
+  // Subscription changes, recorded by Better Auth's Stripe plugin hooks (Stripe's webhooks).
+  'billing.subscribe': action(m.audit_billing_subscribe),
+  'billing.cancel': action(m.audit_billing_cancel),
+  'billing.end': action(m.audit_billing_end),
 } as const
 
 export type AuditAction = keyof typeof auditActions
@@ -101,7 +105,8 @@ export interface Audit {
   readonly details?: Readonly<Record<string, string>>
 }
 
-export type TeamAction = Extract<AuditAction, `team.${string}`>
+/** What Better Auth's hooks record: team and subscription changes. */
+export type CompanyAction = Extract<AuditAction, `team.${string}` | `billing.${string}`>
 
 export const audit = (action: AuditAction, entityId?: string | null): Audit => ({
   action,

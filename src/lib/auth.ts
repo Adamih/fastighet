@@ -2,10 +2,12 @@ import { env, waitUntil } from 'cloudflare:workers'
 import { Effect } from 'effect'
 import { db } from '#/db'
 import { auditEvent } from '#/db/schema'
+import { syncQuantity } from '#/features/billing/store'
 import { auditValues } from '#/server/audit'
 import { Mailer, sendEmail } from '#/server/mail/mailer'
 import { mailer } from '#/server/mail/provider'
-import { createAuth, type DeliverEmail, type RecordTeamEvent } from './auth-config'
+import { createAuth, type DeliverEmail, type RecordCompanyEvent } from './auth-config'
+import { stripe, stripeWebhookSecret } from './stripe'
 
 // waitUntil keeps the Worker alive until the email is handed off, after the response is sent.
 const deliverEmail: DeliverEmail = (email) =>
@@ -21,10 +23,10 @@ const deliverEmail: DeliverEmail = (email) =>
   )
 
 /**
- * Team changes go to the company's audit log like other writes, with the company itself as the
- * acting company: only its own members can change its team.
+ * Team and subscription changes go to the company's audit log like other writes, with the company
+ * itself as the acting company: only its own members can change its team or plan.
  */
-const recordTeamEvent: RecordTeamEvent = async (event) => {
+const recordCompanyEvent: RecordCompanyEvent = async (event) => {
   try {
     const values = auditValues(
       {
@@ -38,7 +40,7 @@ const recordTeamEvent: RecordTeamEvent = async (event) => {
       .insert(auditEvent)
       .values(event.actor ? values : { ...values, userId: null, userName: '' })
   } catch (cause) {
-    console.error('Could not record team audit event', cause)
+    console.error('Could not record company audit event', cause)
   }
 }
 
@@ -46,5 +48,11 @@ export const auth = createAuth(db, {
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   deliverEmail,
-  recordTeamEvent,
+  recordCompanyEvent,
+  stripe: { client: stripe, webhookSecret: stripeWebhookSecret },
+  // Never fails the webhook: a quantity left behind is corrected by the next change.
+  syncQuantity: (organizationId) =>
+    syncQuantity(db, stripe, organizationId).catch((cause) =>
+      console.error('Could not sync the subscription quantity', cause),
+    ),
 })

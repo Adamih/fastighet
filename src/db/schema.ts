@@ -483,6 +483,9 @@ export const organizationSettings = sqliteTable('organization_settings', {
   // (100 = 1 %), within the legal caps; null when the bylaws don't charge it. See
   // `features/ownerships/fees.ts`.
   pledgeFeeBasisPoints: integer('pledge_fee_basis_points'),
+  // A tier we set ourselves (`features/billing/tiers.ts`): a sales deal invoiced outside Stripe,
+  // a pilot. It wins over the Stripe subscription; null means the subscription decides.
+  planOverride: text('plan_override'),
   transferFeeBasisPoints: integer('transfer_fee_basis_points'),
 })
 

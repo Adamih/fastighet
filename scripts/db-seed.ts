@@ -265,6 +265,8 @@ async function seed() {
     fSkatt: true,
     // A 60 kr reminder fee is agreed in every lease.
     reminderFeeOre: 6_000,
+    // Commercial leases with index clauses: Fastighetsbolag, agreed with sales.
+    planOverride: 'landlord_pro',
   })
   const orgId = org.id
 
@@ -1498,6 +1500,17 @@ async function seedBrf() {
   const salonUnit = unit('commercial', '0101', 62, null)
   const storage = unit('storage', 'F1', 5, null)
   await insertAll(schema.unit, [...flats, salonUnit, storage])
+  // The salon is let out, so the förening pays for Förening Plus (as if bought through Stripe).
+  await db.insert(schema.subscription).values({
+    id: id(),
+    plan: 'brf_plus',
+    referenceId: orgId,
+    status: 'active',
+    periodStart: new Date(`${thisMonth}T00:00:00Z`),
+    periodEnd: new Date(`${addMonths(thisMonth, 1)}T00:00:00Z`),
+    seats: flats.length,
+    billingInterval: 'month',
+  })
 
   // Members. Couples own together, mostly half each; Lina and Omar 60/40.
   const person = (name: string, email: string | null) => ({
@@ -2059,6 +2072,9 @@ async function seedManager(
     postalCode: '75321',
     city: 'Uppsala',
     email: 'kund@forvaltning.test',
+    kind: 'manager',
+    // Alla bolag needs Förvaltare.
+    planOverride: 'manager',
   })
 
   // Approved requests, as if each owner had entered the manager's code.

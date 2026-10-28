@@ -5,6 +5,8 @@ import { useAppForm } from '#/components/form'
 import { useFormDrawer, useFormDrawerContext } from '#/components/form-drawer'
 import { SubmissionForm } from '#/components/submission-form'
 import { Button } from '#/components/ui/button'
+import { PlanHint } from '#/features/billing/plan-hint'
+import { usePlan } from '#/features/billing/use-plan'
 import type { UnitKind } from '#/features/properties/unit-kinds'
 import { stockholmDate } from '#/lib/dates'
 import { useFormMutation } from '#/lib/form-mutation'
@@ -169,6 +171,7 @@ function useIndexClauseDrawer(lease: ClauseLease) {
 export function IndexClausePanel({ lease, canManage }: { lease: ClauseLease; canManage: boolean }) {
   const queryClient = useQueryClient()
   const drawer = useIndexClauseDrawer(lease)
+  const inPlan = usePlan().allows('commercial')
   const remove = useMutation({
     mutationFn: () => removeIndexClauseFn({ data: { leaseId: lease.id } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['leases'] }),
@@ -183,6 +186,7 @@ export function IndexClausePanel({ lease, canManage }: { lease: ClauseLease; can
       title={m.index_clause_title()}
       action={
         canManage &&
+        inPlan &&
         !problem && (
           <Button variant="ghost" size="sm" onClick={drawer.open}>
             {clause ? <Pencil aria-hidden="true" /> : <Plus aria-hidden="true" />}
@@ -226,6 +230,7 @@ export function IndexClausePanel({ lease, canManage }: { lease: ClauseLease; can
       {clause && problem && (
         <p className="text-[13px] text-destructive">{problemText[problem]()}</p>
       )}
+      {canManage && !problem && <PlanHint feature="commercial" />}
       {clause && canManage && lease.indexAdjustments.length === 0 && (
         <div>
           <Button
