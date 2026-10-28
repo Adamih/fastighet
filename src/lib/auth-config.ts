@@ -147,6 +147,19 @@ export function createAuth(
           },
         }),
     },
+    user: {
+      // From account settings: the current address approves first, then the new one is
+      // confirmed (`sendVerificationEmail`), so a stolen session can't move the account.
+      changeEmail: {
+        enabled: true,
+        sendChangeEmailConfirmation: async ({ user, newEmail, url }) =>
+          deliverEmail({
+            to: user.email,
+            template: 'confirmEmailChange',
+            props: { name: user.name, newEmail, confirmUrl: url },
+          }),
+      },
+    },
     emailVerification: {
       sendOnSignUp: true,
       // An unverified user who tries to sign in gets a fresh link instead of a dead end.

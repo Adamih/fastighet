@@ -15,6 +15,7 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SignOutRouteImport } from './routes/sign-out'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBookkeepingRouteImport } from './routes/_app/bookkeeping'
 import { Route as AppClientsRouteImport } from './routes/_app/clients'
@@ -27,6 +28,7 @@ import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminEventsRouteImport } from './routes/admin/events'
 import { Route as InvitationsInvitationIdRouteImport } from './routes/invitations/$invitationId'
+import { Route as AppAccountPathRouteImport } from './routes/_app/account/$path'
 import { Route as AppCreditNotesCreditNoteIdRouteImport } from './routes/_app/credit-notes/$creditNoteId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
 import { Route as AppInvoicesInvoiceIdRouteImport } from './routes/_app/invoices/$invoiceId'
@@ -73,6 +75,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignOutRoute = SignOutRouteImport.update({
+  id: '/sign-out',
+  path: '/sign-out',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -134,6 +141,11 @@ const InvitationsInvitationIdRoute = InvitationsInvitationIdRouteImport.update({
   id: '/invitations/$invitationId',
   path: '/invitations/$invitationId',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppAccountPathRoute = AppAccountPathRouteImport.update({
+  id: '/account/$path',
+  path: '/account/$path',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppCreditNotesCreditNoteIdRoute =
   AppCreditNotesCreditNoteIdRouteImport.update({
@@ -238,6 +250,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sign-out': typeof SignOutRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
   '/management': typeof AppManagementRoute
@@ -249,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/admin/': typeof AdminIndexRoute
+  '/account/$path': typeof AppAccountPathRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -273,6 +287,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sign-out': typeof SignOutRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
   '/management': typeof AppManagementRoute
@@ -285,6 +300,7 @@ export interface FileRoutesByTo {
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/': typeof AppIndexRoute
   '/admin': typeof AdminIndexRoute
+  '/account/$path': typeof AppAccountPathRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -312,6 +328,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sign-out': typeof SignOutRoute
   '/_app/bookkeeping': typeof AppBookkeepingRoute
   '/_app/clients': typeof AppClientsRoute
   '/_app/management': typeof AppManagementRoute
@@ -324,6 +341,7 @@ export interface FileRoutesById {
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/_app/': typeof AppIndexRoute
   '/admin/': typeof AdminIndexRoute
+  '/_app/account/$path': typeof AppAccountPathRoute
   '/_app/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
   '/_app/invoices/$invoiceId': typeof AppInvoicesInvoiceIdRoute
   '/_app/leases/$leaseId': typeof AppLeasesLeaseIdRoute
@@ -352,6 +370,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/reset-password'
+    | '/sign-out'
     | '/bookkeeping'
     | '/clients'
     | '/management'
@@ -363,6 +382,7 @@ export interface FileRouteTypes {
     | '/admin/events'
     | '/invitations/$invitationId'
     | '/admin/'
+    | '/account/$path'
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
@@ -387,6 +407,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/reset-password'
+    | '/sign-out'
     | '/bookkeeping'
     | '/clients'
     | '/management'
@@ -399,6 +420,7 @@ export interface FileRouteTypes {
     | '/invitations/$invitationId'
     | '/'
     | '/admin'
+    | '/account/$path'
     | '/credit-notes/$creditNoteId'
     | '/invoices/$invoiceId'
     | '/leases/$leaseId'
@@ -425,6 +447,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/onboarding'
     | '/reset-password'
+    | '/sign-out'
     | '/_app/bookkeeping'
     | '/_app/clients'
     | '/_app/management'
@@ -437,6 +460,7 @@ export interface FileRouteTypes {
     | '/invitations/$invitationId'
     | '/_app/'
     | '/admin/'
+    | '/_app/account/$path'
     | '/_app/credit-notes/$creditNoteId'
     | '/_app/invoices/$invoiceId'
     | '/_app/leases/$leaseId'
@@ -464,6 +488,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SignOutRoute: typeof SignOutRoute
   InvitationsInvitationIdRoute: typeof InvitationsInvitationIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -510,6 +535,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-out': {
+      id: '/sign-out'
+      path: '/sign-out'
+      fullPath: '/sign-out'
+      preLoaderRoute: typeof SignOutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -595,6 +627,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/invitations/$invitationId'
       preLoaderRoute: typeof InvitationsInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/account/$path': {
+      id: '/_app/account/$path'
+      path: '/account/$path'
+      fullPath: '/account/$path'
+      preLoaderRoute: typeof AppAccountPathRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/credit-notes/$creditNoteId': {
       id: '/_app/credit-notes/$creditNoteId'
@@ -735,6 +774,7 @@ interface AppRouteChildren {
   AppSettingsRoute: typeof AppSettingsRoute
   AppTeamRoute: typeof AppTeamRoute
   AppIndexRoute: typeof AppIndexRoute
+  AppAccountPathRoute: typeof AppAccountPathRoute
   AppCreditNotesCreditNoteIdRoute: typeof AppCreditNotesCreditNoteIdRoute
   AppInvoicesInvoiceIdRoute: typeof AppInvoicesInvoiceIdRoute
   AppLeasesLeaseIdRoute: typeof AppLeasesLeaseIdRoute
@@ -760,6 +800,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppSettingsRoute: AppSettingsRoute,
   AppTeamRoute: AppTeamRoute,
   AppIndexRoute: AppIndexRoute,
+  AppAccountPathRoute: AppAccountPathRoute,
   AppCreditNotesCreditNoteIdRoute: AppCreditNotesCreditNoteIdRoute,
   AppInvoicesInvoiceIdRoute: AppInvoicesInvoiceIdRoute,
   AppLeasesLeaseIdRoute: AppLeasesLeaseIdRoute,
@@ -805,6 +846,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SignOutRoute: SignOutRoute,
   InvitationsInvitationIdRoute: InvitationsInvitationIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

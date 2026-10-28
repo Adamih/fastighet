@@ -1,3 +1,4 @@
+import ConfirmEmailChange, * as confirmEmailChange from '#/emails/ConfirmEmailChange'
 import CreditNote, * as creditNote from '#/emails/CreditNote'
 import ManagementRequest, * as managementRequest from '#/emails/ManagementRequest'
 import OrganizationInvitation, * as organizationInvitation from '#/emails/OrganizationInvitation'
@@ -14,6 +15,7 @@ import VerifyEmail, * as verifyEmail from '#/emails/VerifyEmail'
 export const templates = {
   verifyEmail: { Component: VerifyEmail, subject: verifyEmail.subject },
   resetPassword: { Component: ResetPassword, subject: resetPassword.subject },
+  confirmEmailChange: { Component: ConfirmEmailChange, subject: confirmEmailChange.subject },
   organizationInvitation: {
     Component: OrganizationInvitation,
     subject: organizationInvitation.subject,

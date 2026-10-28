@@ -9,13 +9,13 @@ import {
   Handshake,
   KeyRound,
   LayoutGrid,
-  LogOut,
   Receipt,
   Settings,
+  UserRound,
   UserRoundCog,
   Users,
 } from 'lucide-react'
-import { useState } from 'react'
+import { UserButton } from '#/components/auth/user/user-button'
 import {
   Select,
   SelectContent,
@@ -43,8 +43,6 @@ import type { PlanFeature } from '#/features/billing/tiers'
 import { usePlan } from '#/features/billing/use-plan'
 import type { CompanyKind } from '#/features/settings/company-kinds'
 import { companyTerms } from '#/features/settings/terminology'
-import { authClient } from '#/lib/auth-client'
-import { authErrorMessage } from '#/lib/auth-errors'
 import type { Permissions } from '#/lib/permissions'
 import { m } from '#/paraglide/messages'
 
@@ -155,11 +153,8 @@ export function AppSidebar() {
   const { app } = useRouteContext({ from: '/_app' })
   const can = useCan()
   const plan = usePlan()
-  const router = useRouter()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const { setOpenMobile } = useSidebar()
-  const [signingOut, setSigningOut] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   return (
     <Sidebar>
@@ -214,36 +209,21 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarSeparator className="mx-3 data-[orientation=horizontal]:w-auto" />
       <SidebarFooter className="p-3">
-        <span className="break-all px-2 text-muted-foreground text-sm">{app.user.email}</span>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="h-11"
-              disabled={signingOut}
-              onClick={async () => {
-                setSigningOut(true)
-                setError(null)
-                try {
-                  const result = await authClient.signOut()
-                  if (result.error) throw new Error(authErrorMessage(result.error))
-                  setOpenMobile(false)
-                  await router.navigate({ to: '/login' })
-                } catch (cause) {
-                  setError(cause instanceof Error ? cause.message : m.nav_sign_out_failed())
-                  setSigningOut(false)
-                }
-              }}
-            >
-              <LogOut aria-hidden="true" />
-              <span>{signingOut ? m.nav_signing_out() : m.nav_sign_out()}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        {error && (
-          <p role="alert" className="px-2 text-destructive text-sm">
-            {error}
-          </p>
-        )}
+        {/* Better Auth UI's user menu: the user, "Mitt konto" and signing out (/sign-out). */}
+        <UserButton
+          className="h-auto w-full justify-start"
+          variant="ghost"
+          side="top"
+          align="start"
+          hideSettings
+          links={[
+            {
+              label: m.my_account_title(),
+              href: '/account/profile',
+              icon: <UserRound aria-hidden="true" />,
+            },
+          ]}
+        />
       </SidebarFooter>
     </Sidebar>
   )

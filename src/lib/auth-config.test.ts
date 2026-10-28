@@ -10,6 +10,7 @@ import Stripe from 'stripe'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { hasPermission, requirePermission } from '#/server/authorize'
+import type { AnyEmail } from '#/server/mail/mailer'
 import { CurrentOrganization, PermissionChecker } from '#/server/services'
 import { type AdminEvent, type CompanyEvent, createAuth } from './auth-config'
 import type { Permissions } from './permissions'
@@ -72,10 +73,13 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
     .run()
   const events: CompanyEvent[] = []
   const adminEvents: AdminEvent[] = []
+  const emails: AnyEmail[] = []
   const auth = createAuth(db as unknown as Db, {
     secret,
     baseURL: 'http://localhost:3000',
-    deliverEmail: () => {},
+    deliverEmail: (email) => {
+      emails.push(email)
+    },
     recordCompanyEvent: async (event) => {
       events.push(event)
     },
@@ -92,7 +96,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
   })
   const post = (path: string, body: object, plugin = 'organization') =>
     auth.handler(
-      new Request(`http://localhost:3000/api/auth/${plugin}/${path}`, {
+      new Request(`http://localhost:3000/api/auth/${plugin ? `${plugin}/` : ''}${path}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -121,7 +125,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
         }),
       ),
     )
-  return { db, auth, headers, post, target, permissions, events, adminEvents }
+  return { db, auth, headers, post, target, permissions, events, adminEvents, emails }
 }
 
 describe('Better Auth member endpoints', () => {
@@ -246,6 +250,23 @@ describe('Team changes for the audit log', () => {
     await f.post('update-member-role', { memberId: 'target', role: 'admin' })
     await f.post('remove-member', { memberIdOrEmail: 'target' })
     expect(f.events).toEqual([])
+  })
+})
+
+describe('Account settings', () => {
+  test('a new email is approved from the current address before anything changes', async () => {
+    const f = await fixture()
+    const response = await f.post('change-email', { newEmail: 'ny@example.se' }, '')
+    expect(response.status).toBe(200)
+    expect(f.emails).toMatchObject([
+      {
+        to: 'actor@example.se',
+        template: 'confirmEmailChange',
+        props: { name: 'actor', newEmail: 'ny@example.se' },
+      },
+    ])
+    const [actor] = f.db.select().from(schema.user).where(eq(schema.user.id, 'actor')).all()
+    expect(actor.email).toBe('actor@example.se')
   })
 })
 
