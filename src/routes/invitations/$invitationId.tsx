@@ -14,7 +14,10 @@ export const Route = createFileRoute('/invitations/$invitationId')({
     const session = await getSessionFn()
     if (session?.isAdmin) throw redirect({ to: '/admin' })
     if (!session) {
-      throw redirect({ to: '/login', search: { redirect: `/invitations/${params.invitationId}` } })
+      throw redirect({
+        to: '/login',
+        search: { redirectTo: `/invitations/${params.invitationId}` },
+      })
     }
   },
   loader: ({ params }) => getInvitationFn({ data: { invitationId: params.invitationId } }),

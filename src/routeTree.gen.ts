@@ -11,11 +11,17 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuthCallbackRouteImport } from './routes/auth-callback'
+import { Route as AuthErrorRouteImport } from './routes/auth-error'
+import { Route as AuthRedirectRouteImport } from './routes/auth-redirect'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as ResetLinkSentRouteImport } from './routes/reset-link-sent'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignOutRouteImport } from './routes/sign-out'
+import { Route as SignUpRouteImport } from './routes/sign-up'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppBookkeepingRouteImport } from './routes/_app/bookkeeping'
 import { Route as AppClientsRouteImport } from './routes/_app/clients'
@@ -57,6 +63,21 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth-callback',
+  path: '/auth-callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthErrorRoute = AuthErrorRouteImport.update({
+  id: '/auth-error',
+  path: '/auth-error',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRedirectRoute = AuthRedirectRouteImport.update({
+  id: '/auth-redirect',
+  path: '/auth-redirect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
@@ -72,6 +93,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetLinkSentRoute = ResetLinkSentRouteImport.update({
+  id: '/reset-link-sent',
+  path: '/reset-link-sent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -80,6 +106,16 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SignOutRoute = SignOutRouteImport.update({
   id: '/sign-out',
   path: '/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -246,11 +282,17 @@ const AppOwnershipsOwnershipIdPledgesPledgeIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/admin': typeof AdminRouteWithChildren
+  '/auth-callback': typeof AuthCallbackRoute
+  '/auth-error': typeof AuthErrorRoute
+  '/auth-redirect': typeof AuthRedirectRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-link-sent': typeof ResetLinkSentRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
   '/company-details': typeof AppCompanyDetailsRoute
@@ -283,11 +325,17 @@ export interface FileRoutesByFullPath {
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesByTo {
+  '/auth-callback': typeof AuthCallbackRoute
+  '/auth-error': typeof AuthErrorRoute
+  '/auth-redirect': typeof AuthRedirectRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-link-sent': typeof ResetLinkSentRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/bookkeeping': typeof AppBookkeepingRoute
   '/clients': typeof AppClientsRoute
   '/company-details': typeof AppCompanyDetailsRoute
@@ -324,11 +372,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/admin': typeof AdminRouteWithChildren
+  '/auth-callback': typeof AuthCallbackRoute
+  '/auth-error': typeof AuthErrorRoute
+  '/auth-redirect': typeof AuthRedirectRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/reset-link-sent': typeof ResetLinkSentRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sign-out': typeof SignOutRoute
+  '/sign-up': typeof SignUpRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/_app/bookkeeping': typeof AppBookkeepingRoute
   '/_app/clients': typeof AppClientsRoute
   '/_app/company-details': typeof AppCompanyDetailsRoute
@@ -366,11 +420,17 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/auth-callback'
+    | '/auth-error'
+    | '/auth-redirect'
     | '/forgot-password'
     | '/login'
     | '/onboarding'
+    | '/reset-link-sent'
     | '/reset-password'
     | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/bookkeeping'
     | '/clients'
     | '/company-details'
@@ -403,11 +463,17 @@ export interface FileRouteTypes {
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/auth-callback'
+    | '/auth-error'
+    | '/auth-redirect'
     | '/forgot-password'
     | '/login'
     | '/onboarding'
+    | '/reset-link-sent'
     | '/reset-password'
     | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/bookkeeping'
     | '/clients'
     | '/company-details'
@@ -443,11 +509,17 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/admin'
+    | '/auth-callback'
+    | '/auth-error'
+    | '/auth-redirect'
     | '/forgot-password'
     | '/login'
     | '/onboarding'
+    | '/reset-link-sent'
     | '/reset-password'
     | '/sign-out'
+    | '/sign-up'
+    | '/verify-email'
     | '/_app/bookkeeping'
     | '/_app/clients'
     | '/_app/company-details'
@@ -484,11 +556,17 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   AdminRoute: typeof AdminRouteWithChildren
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthErrorRoute: typeof AuthErrorRoute
+  AuthRedirectRoute: typeof AuthRedirectRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
+  ResetLinkSentRoute: typeof ResetLinkSentRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignOutRoute: typeof SignOutRoute
+  SignUpRoute: typeof SignUpRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   InvitationsInvitationIdRoute: typeof InvitationsInvitationIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -507,6 +585,27 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth-callback': {
+      id: '/auth-callback'
+      path: '/auth-callback'
+      fullPath: '/auth-callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth-error': {
+      id: '/auth-error'
+      path: '/auth-error'
+      fullPath: '/auth-error'
+      preLoaderRoute: typeof AuthErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth-redirect': {
+      id: '/auth-redirect'
+      path: '/auth-redirect'
+      fullPath: '/auth-redirect'
+      preLoaderRoute: typeof AuthRedirectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/forgot-password': {
@@ -530,6 +629,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reset-link-sent': {
+      id: '/reset-link-sent'
+      path: '/reset-link-sent'
+      fullPath: '/reset-link-sent'
+      preLoaderRoute: typeof ResetLinkSentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -542,6 +648,20 @@ declare module '@tanstack/react-router' {
       path: '/sign-out'
       fullPath: '/sign-out'
       preLoaderRoute: typeof SignOutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -842,11 +962,17 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthErrorRoute: AuthErrorRoute,
+  AuthRedirectRoute: AuthRedirectRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
+  ResetLinkSentRoute: ResetLinkSentRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignOutRoute: SignOutRoute,
+  SignUpRoute: SignUpRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   InvitationsInvitationIdRoute: InvitationsInvitationIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }

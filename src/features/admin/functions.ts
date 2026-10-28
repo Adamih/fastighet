@@ -24,7 +24,7 @@ import {
 /** The signed-in admin, for the dashboard's layout; others get a 404, the signed-out /login. */
 export const getAdminContextFn = createServerFn({ method: 'GET' }).handler(async () => {
   const found = await adminOfRequest()
-  if (!found) throw redirect({ to: '/login', search: { redirect: '/admin' } })
+  if (!found) throw redirect({ to: '/login', search: { redirectTo: '/admin' } })
   if (!found.admin) throw notFound()
   return found.user
 })

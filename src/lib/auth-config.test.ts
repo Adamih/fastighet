@@ -275,6 +275,115 @@ describe('Companies are never deleted', () => {
   })
 })
 
+describe('Public email/password authentication', () => {
+  test('signup verifies its email, returns to the invitation and can join the company', async () => {
+    const f = await fixture('owner')
+    const email = 'new-member@example.se'
+    const password = 'Test-password-123!'
+    const inviteResponse = await f.post('invite-member', { email, role: 'member' })
+    expect(inviteResponse.status).toBe(200)
+    const invitation = (await inviteResponse.json()) as { id: string }
+    const destination = `/invitations/${invitation.id}`
+    const post = (path: string, body: object, cookie = '') =>
+      f.auth.handler(
+        new Request(`http://localhost:3000/api/auth/${path}`, {
+          method: 'POST',
+          headers: { origin: 'http://localhost:3000', 'content-type': 'application/json', cookie },
+          body: JSON.stringify(body),
+        }),
+      )
+
+    const signup = await post('sign-up/email', {
+      name: 'New member',
+      email,
+      password,
+      callbackURL: destination,
+    })
+    expect(signup.status).toBe(200)
+    expect(await post('sign-in/email', { email, password }).then((r) => r.status)).toBe(403)
+    const verification = f.emails.find((email) => email.template === 'verifyEmail')
+    if (!verification || verification.template !== 'verifyEmail')
+      throw new Error('missing verification')
+    const url = new URL(verification.props.verifyUrl)
+    expect(url.searchParams.get('callbackURL')).toBe(destination)
+    const verified = await f.auth.handler(new Request(url))
+    expect(verified.status).toBe(302)
+    const verifiedLocation = verified.headers.get('location')
+    if (!verifiedLocation) throw new Error('missing verification redirect')
+    expect(new URL(verifiedLocation, url).pathname).toBe(destination)
+    const cookie = verified.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ')
+    expect(cookie).toContain('better-auth.session_token=')
+    const joined = await post(
+      'organization/accept-invitation',
+      { invitationId: invitation.id },
+      cookie,
+    )
+    expect(joined.status).toBe(200)
+    const created = f.db.select().from(schema.user).where(eq(schema.user.email, email)).get()
+    if (!created) throw new Error('missing signed-up user')
+    expect(created.emailVerified).toBe(true)
+    expect(
+      f.db.select().from(schema.member).where(eq(schema.member.userId, created.id)).all(),
+    ).toHaveLength(1)
+  })
+
+  test('password recovery keeps its return destination and invalidates the old password', async () => {
+    const f = await fixture()
+    const email = 'recover@example.se'
+    const post = (path: string, body: object) =>
+      f.auth.handler(
+        new Request(`http://localhost:3000/api/auth/${path}`, {
+          method: 'POST',
+          headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      )
+    await post('sign-up/email', { name: 'Recovery', email, password: 'Old-password-123!' })
+    f.db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.email, email)).run()
+    const requested = await post('request-password-reset', {
+      email,
+      redirectTo: 'http://localhost:3000/reset-password?redirectTo=%2Finvitations%2Fpending',
+    })
+    expect(requested.status).toBe(200)
+    const unknown = await post('request-password-reset', {
+      email: 'unknown@example.se',
+      redirectTo: '/reset-password',
+    })
+    expect(unknown.status).toBe(requested.status)
+    expect(await unknown.json()).toEqual(await requested.json())
+    const resetEmail = f.emails.find((email) => email.template === 'resetPassword')
+    if (!resetEmail || resetEmail.template !== 'resetPassword')
+      throw new Error('missing reset email')
+    const link = await f.auth.handler(new Request(resetEmail.props.resetUrl))
+    expect(link.status).toBe(302)
+    const resetLocation = link.headers.get('location')
+    if (!resetLocation) throw new Error('missing reset redirect')
+    const target = new URL(resetLocation, 'http://localhost:3000')
+    expect(target.pathname).toBe('/reset-password')
+    expect(target.searchParams.get('redirectTo')).toBe('/invitations/pending')
+    const reset = await post('reset-password', {
+      token: target.searchParams.get('token'),
+      newPassword: 'New-password-456!',
+    })
+    expect(reset.status).toBe(200)
+    expect(
+      await post('sign-in/email', { email, password: 'Old-password-123!' }).then((r) => r.status),
+    ).toBe(401)
+    expect(
+      await post('sign-in/email', { email, password: 'New-password-456!' }).then((r) => r.status),
+    ).toBe(200)
+    expect(
+      await post('reset-password', {
+        token: target.searchParams.get('token'),
+        newPassword: 'Another-password-789!',
+      }).then((r) => r.status),
+    ).toBe(400)
+  })
+})
+
 describe('Account settings', () => {
   test('a new email is approved from the current address before anything changes', async () => {
     const f = await fixture()

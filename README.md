@@ -35,6 +35,8 @@ To start from scratch instead, run `mise run db:migrate:local`, sign up at `/log
 
 Email addresses must be verified before signing in. No real email is sent yet: the mock mailer prints each email to the `mise run dev` console. Open the verification, password-reset or invitation link from there.
 
+Login (`/login`), signup (`/sign-up`), email verification and password recovery use Better Auth UI's `Auth` views with Swedish copy. Invitation destinations survive each step; staff accounts land in `/admin`, and customers without a company continue to onboarding. Development login shortcuts remain below the login card.
+
 ## Commands
 
 Run `mise tasks` to list all tasks. Every package script has a matching mise task; the underlying Bun scripts remain available. `mise run setup` preserves an existing `.dev.vars` and creates a random `BETTER_AUTH_SECRET` only when that file is missing.

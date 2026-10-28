@@ -1,15 +1,20 @@
 // Where Better Auth UI's views live in this app, shared by the provider (`components/providers`)
-// and the routes that render them. Sign-in and password resets are our own pages.
+// and the routes that render the library's Auth views.
 
 export const authBasePaths = { auth: '', settings: '/account', organization: '' } as const
 
 export const authViewPaths = {
   auth: {
     signIn: 'login',
-    signUp: 'login',
+    signUp: 'sign-up',
     signOut: 'sign-out',
     forgotPassword: 'forgot-password',
     resetPassword: 'reset-password',
+    resetLinkSent: 'reset-link-sent',
+    verifyEmail: 'verify-email',
+    callback: 'auth-callback',
+    error: 'auth-error',
+    redirect: 'auth-redirect',
   },
   settings: { account: 'profile', security: 'security' },
 } as const

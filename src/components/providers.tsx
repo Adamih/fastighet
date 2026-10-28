@@ -10,8 +10,8 @@ import { authClient } from '#/lib/auth-client'
 
 /**
  * Better Auth UI's provider (account settings, the user button) wired to the router, as its
- * TanStack Start guide does. Its paths (`lib/auth/paths`) point at our own sign-in and password
- * pages, account settings under /account and /sign-out. Its organization plugin provides the
+ * TanStack Start guide does. Its paths (`lib/auth/paths`) point at the Auth views,
+ * account settings under /account and /sign-out. Its organization plugin provides the
  * Team page's users and invitations; Better Auth enforces what each may do there.
  */
 export function Providers({ children }: { children: ReactNode }) {
@@ -28,7 +28,12 @@ export function Providers({ children }: { children: ReactNode }) {
       redirectTo="/"
       basePaths={authBasePaths}
       viewPaths={authViewPaths}
-      emailAndPassword={{ enabled: true, requireEmailVerification: true, forgotPassword: true }}
+      emailAndPassword={{
+        enabled: true,
+        requireEmailVerification: true,
+        forgotPassword: true,
+        confirmPassword: true,
+      }}
       // There is no storage for images, and avatars would otherwise go into the database.
       avatar={{ enabled: false }}
       plugins={[
