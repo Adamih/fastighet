@@ -59,6 +59,8 @@ import { Route as PortalPortalIndexRouteImport } from './routes/portal/_portal/i
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
 import { Route as PortalPortalAvierIndexRouteImport } from './routes/portal/_portal/avier/index'
 import { Route as PortalPortalAvierInvoiceIdRouteImport } from './routes/portal/_portal/avier/$invoiceId'
+import { Route as PortalPortalAvtalIndexRouteImport } from './routes/portal/_portal/avtal/index'
+import { Route as PortalPortalAvtalAgreementIdRouteImport } from './routes/portal/_portal/avtal/$agreementId'
 import { Route as AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport } from './routes/_app/ownerships/$ownershipId_.pledges.$pledgeId'
 
 const AppRoute = AppRouteImport.update({
@@ -315,6 +317,17 @@ const PortalPortalAvierInvoiceIdRoute =
     path: '/avier/$invoiceId',
     getParentRoute: () => PortalPortalRoute,
   } as any)
+const PortalPortalAvtalIndexRoute = PortalPortalAvtalIndexRouteImport.update({
+  id: '/avtal/',
+  path: '/avtal/',
+  getParentRoute: () => PortalPortalRoute,
+} as any)
+const PortalPortalAvtalAgreementIdRoute =
+  PortalPortalAvtalAgreementIdRouteImport.update({
+    id: '/avtal/$agreementId',
+    path: '/avtal/$agreementId',
+    getParentRoute: () => PortalPortalRoute,
+  } as any)
 const AppOwnershipsOwnershipIdPledgesPledgeIdRoute =
   AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport.update({
     id: '/ownerships/$ownershipId_/pledges/$pledgeId',
@@ -371,7 +384,9 @@ export interface FileRoutesByFullPath {
   '/portal/': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/avtal/$agreementId': typeof PortalPortalAvtalAgreementIdRoute
   '/portal/avier/': typeof PortalPortalAvierIndexRoute
+  '/portal/avtal/': typeof PortalPortalAvtalIndexRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesByTo {
@@ -421,7 +436,9 @@ export interface FileRoutesByTo {
   '/portal': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/avtal/$agreementId': typeof PortalPortalAvtalAgreementIdRoute
   '/portal/avier': typeof PortalPortalAvierIndexRoute
+  '/portal/avtal': typeof PortalPortalAvtalIndexRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesById {
@@ -475,7 +492,9 @@ export interface FileRoutesById {
   '/portal/_portal/': typeof PortalPortalIndexRoute
   '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/portal/_portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/_portal/avtal/$agreementId': typeof PortalPortalAvtalAgreementIdRoute
   '/portal/_portal/avier/': typeof PortalPortalAvierIndexRoute
+  '/portal/_portal/avtal/': typeof PortalPortalAvtalIndexRoute
   '/_app/ownerships/$ownershipId_/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRouteTypes {
@@ -529,7 +548,9 @@ export interface FileRouteTypes {
     | '/portal/'
     | '/ownerships/$ownershipId/extract'
     | '/portal/avier/$invoiceId'
+    | '/portal/avtal/$agreementId'
     | '/portal/avier/'
+    | '/portal/avtal/'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -579,7 +600,9 @@ export interface FileRouteTypes {
     | '/portal'
     | '/ownerships/$ownershipId/extract'
     | '/portal/avier/$invoiceId'
+    | '/portal/avtal/$agreementId'
     | '/portal/avier'
+    | '/portal/avtal'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   id:
     | '__root__'
@@ -632,7 +655,9 @@ export interface FileRouteTypes {
     | '/portal/_portal/'
     | '/_app/ownerships/$ownershipId_/extract'
     | '/portal/_portal/avier/$invoiceId'
+    | '/portal/_portal/avtal/$agreementId'
     | '/portal/_portal/avier/'
+    | '/portal/_portal/avtal/'
     | '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
   fileRoutesById: FileRoutesById
 }
@@ -1010,6 +1035,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalPortalAvierInvoiceIdRouteImport
       parentRoute: typeof PortalPortalRoute
     }
+    '/portal/_portal/avtal/': {
+      id: '/portal/_portal/avtal/'
+      path: '/avtal'
+      fullPath: '/portal/avtal/'
+      preLoaderRoute: typeof PortalPortalAvtalIndexRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
+    '/portal/_portal/avtal/$agreementId': {
+      id: '/portal/_portal/avtal/$agreementId'
+      path: '/avtal/$agreementId'
+      fullPath: '/portal/avtal/$agreementId'
+      preLoaderRoute: typeof PortalPortalAvtalAgreementIdRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
     '/_app/ownerships/$ownershipId_/pledges/$pledgeId': {
       id: '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
       path: '/ownerships/$ownershipId/pledges/$pledgeId'
@@ -1098,13 +1137,17 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 interface PortalPortalRouteChildren {
   PortalPortalIndexRoute: typeof PortalPortalIndexRoute
   PortalPortalAvierInvoiceIdRoute: typeof PortalPortalAvierInvoiceIdRoute
+  PortalPortalAvtalAgreementIdRoute: typeof PortalPortalAvtalAgreementIdRoute
   PortalPortalAvierIndexRoute: typeof PortalPortalAvierIndexRoute
+  PortalPortalAvtalIndexRoute: typeof PortalPortalAvtalIndexRoute
 }
 
 const PortalPortalRouteChildren: PortalPortalRouteChildren = {
   PortalPortalIndexRoute: PortalPortalIndexRoute,
   PortalPortalAvierInvoiceIdRoute: PortalPortalAvierInvoiceIdRoute,
+  PortalPortalAvtalAgreementIdRoute: PortalPortalAvtalAgreementIdRoute,
   PortalPortalAvierIndexRoute: PortalPortalAvierIndexRoute,
+  PortalPortalAvtalIndexRoute: PortalPortalAvtalIndexRoute,
 }
 
 const PortalPortalRouteWithChildren = PortalPortalRoute._addFileChildren(

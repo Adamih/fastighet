@@ -9,7 +9,7 @@ import { removeOneOffChargeFn } from './functions'
 import type { AgreementKind, ChargeKind } from './kinds'
 import { inForceOn } from './periods'
 
-const kindLabels: Record<ChargeKind, () => string> = {
+export const chargeKindLabels: Record<ChargeKind, () => string> = {
   rent: m.charges_kind_rent,
   fee: m.charges_kind_fee,
   parking: m.charges_kind_parking,
@@ -102,7 +102,7 @@ export function ChargesPanel({
             <PanelRow key={c.id}>
               <span className="grid min-w-0 gap-0.5">
                 <span className="font-semibold">
-                  {kindLabels[c.kind]()}
+                  {chargeKindLabels[c.kind]()}
                   {c.fromDate > today && (
                     <span className="font-normal text-muted-foreground">
                       {' '}
@@ -136,7 +136,7 @@ export function ChargesPanel({
               <PanelRow key={c.id}>
                 <span className="grid min-w-0 gap-0.5">
                   <span className="truncate font-semibold">
-                    {[kindLabels[c.kind](), c.description ?? unitLabel(c.unitId)]
+                    {[chargeKindLabels[c.kind](), c.description ?? unitLabel(c.unitId)]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>

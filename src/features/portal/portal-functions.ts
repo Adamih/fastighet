@@ -3,6 +3,7 @@ import { createServerFn } from '@tanstack/react-start'
 import { Schema } from 'effect'
 import { portalContext, runPortal } from '#/server/portal'
 import { validate } from '#/server/validate'
+import { portalAgreement, portalAgreements } from './agreements-program'
 import { portalBalance, portalInvoice, portalInvoices } from './invoices-program'
 
 // Server functions for the signed-in person in Mina sidor. Everything runs through `runPortal`
@@ -34,3 +35,20 @@ export const portalInvoiceQuery = (invoiceId: string) =>
 
 export const portalBalanceQuery = () =>
   queryOptions({ queryKey: ['portal', 'balance'], queryFn: () => portalBalanceFn() })
+
+export const portalAgreementsFn = createServerFn({ method: 'GET' }).handler(() =>
+  runPortal(portalAgreements),
+)
+
+export const portalAgreementFn = createServerFn({ method: 'GET' })
+  .validator(validate(Schema.Struct({ agreementId: Schema.String })))
+  .handler(({ data }) => runPortal(portalAgreement(data.agreementId)))
+
+export const portalAgreementsQuery = () =>
+  queryOptions({ queryKey: ['portal', 'agreements'], queryFn: () => portalAgreementsFn() })
+
+export const portalAgreementQuery = (agreementId: string) =>
+  queryOptions({
+    queryKey: ['portal', 'agreements', agreementId],
+    queryFn: () => portalAgreementFn({ data: { agreementId } }),
+  })
