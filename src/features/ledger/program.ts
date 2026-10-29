@@ -109,13 +109,15 @@ export const receivableEntriesFor = Effect.fn('ledger.receivableEntriesFor')(fun
   return new Map<string, ReceivableEntry[]>(invoiceIds.map((id) => [id, byInvoice.get(id) ?? []]))
 })
 
-/** What each avi's receivable entries add up to (see `invoiceMoney`). Avier with no entries owe nothing. */
+/** An avi's money by id, like `allInvoiceMoney`; an avi without entries owes nothing. */
+export type MoneyOf = (invoiceId: string) => InvoiceMoney
+
+/** What each of these avier's receivable entries add up to (see `invoiceMoney`). */
 export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
-  Effect.map(
-    receivableEntriesFor(invoiceIds),
-    (entries) =>
-      new Map<string, InvoiceMoney>([...entries].map(([id, list]) => [id, invoiceMoney(list)])),
-  )
+  Effect.map(receivableEntriesFor(invoiceIds), (entries): MoneyOf => {
+    const money = new Map([...entries].map(([id, list]) => [id, invoiceMoney(list)]))
+    return (invoiceId) => money.get(invoiceId) ?? invoiceMoney([])
+  })
 
 /** Every avi's money in the company, for lists and overviews. */
 export const allInvoiceMoney = Effect.gen(function* () {
@@ -132,7 +134,8 @@ export const allInvoiceMoney = Effect.gen(function* () {
       .where(inCompany(ledgerEntry, organizationId, eq(ledgerEntry.account, 'receivable'))),
   )
   const byInvoice = groupBy(rows, (r) => r.invoiceId ?? '')
-  return (invoiceId: string) => invoiceMoney(byInvoice.get(invoiceId) ?? [])
+  const moneyOf: MoneyOf = (invoiceId) => invoiceMoney(byInvoice.get(invoiceId) ?? [])
+  return moneyOf
 }).pipe(Effect.withSpan('ledger.allInvoiceMoney'))
 
 const reversedBy = alias(posting, 'reversed_by')
@@ -315,10 +318,10 @@ export const openAvierFor = Effect.fn('ledger.openAvierFor')(function* (
       )),
     )
   }
-  const money = yield* invoiceMoneyFor(rows.map((r) => r.id))
+  const moneyOf = yield* invoiceMoneyFor(rows.map((r) => r.id))
   const result = new Map<string, OpenAvi[]>(partyIds.map((id) => [id, []]))
   for (const r of rows) {
-    const owedOre = money.get(r.id)?.owedOre ?? 0
+    const { owedOre } = moneyOf(r.id)
     if (owedOre > 0) result.get(r.partyId)?.push({ ...r, owedOre })
   }
   return result

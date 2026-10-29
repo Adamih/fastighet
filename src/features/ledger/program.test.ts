@@ -20,6 +20,7 @@ import {
 } from '#/features/payments/program'
 import { addMonths, stockholmDate } from '#/lib/dates'
 import { fail, harness } from '#/test/harness'
+import { invoiceMoneyFor } from './program'
 
 // Money end to end through the programs: an invoice run posts the avi, payments and credits post
 // against it, what is left over is the tenant's credit balance, and every status comes from the
@@ -191,4 +192,11 @@ test('a payment without OCR waits; matched to the tenant it settles oldest first
   )
   await run(undoPayment(waiting.id))
   expect(await run(getInvoice(first.id))).toMatchObject({ status: 'unpaid' })
+})
+
+test('an avi without receivable entries owes nothing, rather than being missing', async () => {
+  const { run } = harness()
+  const moneyOf = await run(invoiceMoneyFor(['no-such-avi']))
+  expect(moneyOf('no-such-avi')).toMatchObject({ owedOre: 0, paidOre: 0, paidOn: null })
+  expect(moneyOf('never-asked')).toMatchObject({ owedOre: 0 })
 })

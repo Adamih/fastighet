@@ -393,7 +393,7 @@ export const getInvoice = Effect.fn('invoicing.getInvoice')(function* (invoiceId
     }),
   ).pipe(orNotFound('invoice', invoiceId))
   const seller = yield* loadCompanyDetails
-  const money = (yield* invoiceMoneyFor([row.id])).get(row.id) as InvoiceMoney
+  const money = (yield* invoiceMoneyFor([row.id]))(row.id)
   // Payments on the avi, from the ledger: bank payments matched to it and payments registered
   // by hand. Listed only for those who may read payments.
   const payments = (yield* hasPermission({ payment: ['read'] }))
@@ -752,7 +752,7 @@ export const getCreditNote = Effect.fn('invoicing.getCreditNote')(function* (cre
       },
     }),
   ).pipe(orNotFound('creditNote', creditNoteId))
-  const money = (yield* invoiceMoneyFor([row.invoice.id])).get(row.invoice.id) as InvoiceMoney
+  const money = (yield* invoiceMoneyFor([row.invoice.id]))(row.invoice.id)
   return {
     ...row,
     /** Whether the credit went (in part) to the party's credit balance: the avi had been paid. */

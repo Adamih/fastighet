@@ -6,7 +6,7 @@ import { rentFields } from '#/features/agreements/current'
 import type { PartyRole } from '#/features/agreements/kinds'
 import { agreementTerms } from '#/features/agreements/terms'
 import { leaseStatus } from '#/features/leases/terms'
-import { type InvoiceMoney, statusFromMoney } from '#/features/ledger/postings'
+import { statusFromMoney } from '#/features/ledger/postings'
 import { invoiceMoneyFor } from '#/features/ledger/program'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
@@ -138,12 +138,12 @@ export const getTenant = Effect.fn('tenants.getTenant')(function* (tenantId: str
       )
     : []
   const on = yield* today
-  const money = yield* invoiceMoneyFor(invoices.map((i) => i.id))
+  const moneyOf = yield* invoiceMoneyFor(invoices.map((i) => i.id))
   return {
     ...found,
     leases: showLeases ? found.leases : [],
     invoices: invoices.map((i) => {
-      const m = money.get(i.id) as InvoiceMoney
+      const m = moneyOf(i.id)
       return { ...i, ...m, status: statusFromMoney(i, m, on) }
     }),
   }
