@@ -25,6 +25,7 @@ import { periodLabel } from '#/features/invoicing/rules'
 import { formatPeriod, LeaseStatusBadge } from '#/features/leases/components'
 import { tenantKindLabels } from '#/features/leases/options'
 import { formatShortDate, monthlyRentOre } from '#/features/leases/overview'
+import { PortalAccessPanel } from '#/features/portal/access-panel'
 import { deleteTenantFn, tenantQuery } from '#/features/tenants/functions'
 import { useEditTenantDrawer } from '#/features/tenants/tenant-form'
 import { stockholmDate } from '#/lib/dates'
@@ -264,45 +265,50 @@ function TenantPage() {
           </>
         }
         side={
-          <Panel title={m.tenant_contact()}>
-            {tenant.email || tenant.phone ? (
-              <div className="grid gap-1.5 text-[13px]">
-                {tenant.email && (
-                  <a
-                    href={`mailto:${tenant.email}`}
-                    className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground"
-                  >
-                    <Mail aria-hidden="true" className="size-3.5 shrink-0" />
-                    <span className="truncate">{tenant.email}</span>
-                  </a>
-                )}
-                {tenant.phone && (
-                  <a
-                    href={`tel:${tenant.phone.replace(/[^\d+]/g, '')}`}
-                    className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                  >
-                    <Phone aria-hidden="true" className="size-3.5 shrink-0" />
-                    {tenant.phone}
-                  </a>
-                )}
+          <>
+            <Panel title={m.tenant_contact()}>
+              {tenant.email || tenant.phone ? (
+                <div className="grid gap-1.5 text-[13px]">
+                  {tenant.email && (
+                    <a
+                      href={`mailto:${tenant.email}`}
+                      className="flex min-w-0 items-center gap-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <Mail aria-hidden="true" className="size-3.5 shrink-0" />
+                      <span className="truncate">{tenant.email}</span>
+                    </a>
+                  )}
+                  {tenant.phone && (
+                    <a
+                      href={`tel:${tenant.phone.replace(/[^\d+]/g, '')}`}
+                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                    >
+                      <Phone aria-hidden="true" className="size-3.5 shrink-0" />
+                      {tenant.phone}
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <p className="text-[13px] text-amber-700 dark:text-amber-300">
+                  {m.tenant_no_contact()}
+                </p>
+              )}
+              <div className="border-t pt-3">
+                <FactList
+                  facts={[
+                    [m.common_kind(), tenantKindLabels[tenant.kind]],
+                    ...(tenant.organizationNumber
+                      ? ([
+                          [m.common_organization_number_short(), tenant.organizationNumber],
+                        ] as const)
+                      : []),
+                    [m.tenant_form_billing_address(), address.join(', ') || '–'],
+                  ]}
+                />
               </div>
-            ) : (
-              <p className="text-[13px] text-amber-700 dark:text-amber-300">
-                {m.tenant_no_contact()}
-              </p>
-            )}
-            <div className="border-t pt-3">
-              <FactList
-                facts={[
-                  [m.common_kind(), tenantKindLabels[tenant.kind]],
-                  ...(tenant.organizationNumber
-                    ? ([[m.common_organization_number_short(), tenant.organizationNumber]] as const)
-                    : []),
-                  [m.tenant_form_billing_address(), address.join(', ') || '–'],
-                ]}
-              />
-            </div>
-          </Panel>
+            </Panel>
+            <PortalAccessPanel party={tenant} canManage={canManage} />
+          </>
         }
       />
     </div>

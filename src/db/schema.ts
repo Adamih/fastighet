@@ -424,6 +424,8 @@ export const chargeRelations = relations(charge, ({ one }) => ({
 export const partyRelations = relations(party, ({ many }) => ({
   agreements: many(agreementParty),
   invoices: many(invoice),
+  portalAccess: many(partyAccess),
+  portalInvitations: many(portalInvitation),
 }))
 
 export const agreementRelations = relations(agreement, ({ one, many }) => ({
@@ -1055,6 +1057,63 @@ export const auditEvent = sqliteTable(
   ],
 )
 
+// The tenant and member portal ("Mina sidor", `features/portal`). Portal users are never
+// organization members: what they may see comes from these links between a user and a party.
+
+/**
+ * A user's access to a party's pages in the portal. Never deleted: revoking closes it, and the
+ * history stays. One open link per party and user.
+ */
+export const partyAccess = sqliteTable(
+  'party_access',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    partyId: text('party_id').notNull(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    /** The invitation it came from. */
+    invitationId: text('invitation_id'),
+    createdAt: createdAt(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    revokedBy: text('revoked_by').references(() => user.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    companyKey('party_access', t),
+    sameCompany(t, t.partyId, party).onDelete('cascade'),
+    uniqueIndex('party_access_open_uq').on(t.partyId, t.userId).where(sql`${t.revokedAt} is null`),
+    index('party_access_user_idx').on(t.userId),
+  ],
+)
+
+/**
+ * An invitation to the portal for one party, sent by staff to an email address. The link carries
+ * a random code stored only as a SHA-256 hash; it works until `expiresAt`, once.
+ */
+export const portalInvitation = sqliteTable(
+  'portal_invitation',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    partyId: text('party_id').notNull(),
+    email: text('email').notNull(),
+    codeHash: text('code_hash').notNull().unique(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    createdBy: text('created_by').references(() => user.id, { onDelete: 'set null' }),
+    createdAt: createdAt(),
+    acceptedAt: integer('accepted_at', { mode: 'timestamp_ms' }),
+    acceptedBy: text('accepted_by').references(() => user.id, { onDelete: 'set null' }),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    revokedBy: text('revoked_by').references(() => user.id, { onDelete: 'set null' }),
+  },
+  (t) => [
+    companyKey('portal_invitation', t),
+    sameCompany(t, t.partyId, party).onDelete('cascade'),
+    index('portal_invitation_party_idx').on(t.organizationId, t.partyId),
+  ],
+)
+
 // What admins did in the admin dashboard (`features/admin`): impersonations, bans, roles and tiers
 // set by agreement. Not company data: it names any user or company, and only admins read it.
 export const adminEvent = sqliteTable(
@@ -1076,3 +1135,12 @@ export const adminEvent = sqliteTable(
   },
   (t) => [index('admin_event_created_idx').on(t.createdAt)],
 )
+
+export const partyAccessRelations = relations(partyAccess, ({ one }) => ({
+  party: one(party, { fields: [partyAccess.partyId], references: [party.id] }),
+  user: one(user, { fields: [partyAccess.userId], references: [user.id] }),
+}))
+
+export const portalInvitationRelations = relations(portalInvitation, ({ one }) => ({
+  party: one(party, { fields: [portalInvitation.partyId], references: [party.id] }),
+}))

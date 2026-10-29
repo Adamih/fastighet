@@ -426,6 +426,56 @@ async function seed() {
   }
   await insertAll(schema.party, Object.values(tenants))
 
+  // --- Mina sidor: Anna has a portal login (no password; she signs in with an emailed code), the
+  // café's invitation waits, and Erik's ran out unused.
+  const tenantUser = { id: id(), ...SEED_USERS.tenant }
+  await db
+    .insert(schema.user)
+    .values({ ...tenantUser, emailVerified: true, createdAt: now, updatedAt: now })
+  const annaInvitation = id()
+  await db.insert(schema.portalInvitation).values([
+    {
+      id: annaInvitation,
+      organizationId: org.id,
+      partyId: tenants.anna.id,
+      email: tenantUser.email,
+      codeHash: await hashCode(generateCode()),
+      expiresAt: new Date(now.getTime() - 20 * 86_400_000),
+      createdBy: owner.id,
+      createdAt: new Date(now.getTime() - 30 * 86_400_000),
+      acceptedAt: new Date(now.getTime() - 29 * 86_400_000),
+      acceptedBy: tenantUser.id,
+    },
+    {
+      id: id(),
+      organizationId: org.id,
+      partyId: tenants.cafe.id,
+      email: 'ekonomi@kaffeochkaka.test',
+      codeHash: await hashCode(generateCode()),
+      expiresAt: new Date(now.getTime() + 10 * 86_400_000),
+      createdBy: owner.id,
+      createdAt: new Date(now.getTime() - 4 * 86_400_000),
+    },
+    {
+      id: id(),
+      organizationId: org.id,
+      partyId: tenants.erik.id,
+      email: tenants.erik.email as string,
+      codeHash: await hashCode(generateCode()),
+      expiresAt: new Date(now.getTime() - 6 * 86_400_000),
+      createdBy: owner.id,
+      createdAt: new Date(now.getTime() - 20 * 86_400_000),
+    },
+  ])
+  await db.insert(schema.partyAccess).values({
+    id: id(),
+    organizationId: org.id,
+    partyId: tenants.anna.id,
+    userId: tenantUser.id,
+    invitationId: annaInvitation,
+    createdAt: new Date(now.getTime() - 29 * 86_400_000),
+  })
+
   // --- Leases, numbered in the order they were signed.
   const openEnded = (startDate: string, noticePeriodMonths = 3): LeaseTerms => ({
     startDate,
@@ -1483,6 +1533,7 @@ async function seed() {
   const open = invoices.filter((i) => !i.paidOn && !i.voidedAt && i.totalOre > (i.creditedOre ?? 0))
   console.log(`Seeded ${org.name}:
   logins     ${owner.email} (owner), ${member.email} (member). Password: SEED_PASSWORD in scripts/db-seed-constants.ts
+  portal     ${SEED_USERS.tenant.email} signs in at /portal/login with an emailed code
   bankgiro   ${settings.bankgiro}, org.nr ${settings.organizationNumber}
   data       ${Object.keys(properties).length} properties, ${Object.keys(units).length} units, ${Object.keys(tenants).length} tenants, ${leases.length} leases
   invoices   ${invoices.length} (${open.length} open), ${creditNotes.length} credit notes
