@@ -57,6 +57,8 @@ import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users/$user
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as PortalPortalIndexRouteImport } from './routes/portal/_portal/index'
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
+import { Route as PortalPortalAvierIndexRouteImport } from './routes/portal/_portal/avier/index'
+import { Route as PortalPortalAvierInvoiceIdRouteImport } from './routes/portal/_portal/avier/$invoiceId'
 import { Route as AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport } from './routes/_app/ownerships/$ownershipId_.pledges.$pledgeId'
 
 const AppRoute = AppRouteImport.update({
@@ -302,6 +304,17 @@ const AppOwnershipsOwnershipIdExtractRoute =
     path: '/ownerships/$ownershipId/extract',
     getParentRoute: () => AppRoute,
   } as any)
+const PortalPortalAvierIndexRoute = PortalPortalAvierIndexRouteImport.update({
+  id: '/avier/',
+  path: '/avier/',
+  getParentRoute: () => PortalPortalRoute,
+} as any)
+const PortalPortalAvierInvoiceIdRoute =
+  PortalPortalAvierInvoiceIdRouteImport.update({
+    id: '/avier/$invoiceId',
+    path: '/avier/$invoiceId',
+    getParentRoute: () => PortalPortalRoute,
+  } as any)
 const AppOwnershipsOwnershipIdPledgesPledgeIdRoute =
   AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport.update({
     id: '/ownerships/$ownershipId_/pledges/$pledgeId',
@@ -357,6 +370,8 @@ export interface FileRoutesByFullPath {
   '/admin/users/': typeof AdminUsersIndexRoute
   '/portal/': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/avier/': typeof PortalPortalAvierIndexRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesByTo {
@@ -405,6 +420,8 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersIndexRoute
   '/portal': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/avier': typeof PortalPortalAvierIndexRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRoutesById {
@@ -457,6 +474,8 @@ export interface FileRoutesById {
   '/admin/users/': typeof AdminUsersIndexRoute
   '/portal/_portal/': typeof PortalPortalIndexRoute
   '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
+  '/portal/_portal/avier/$invoiceId': typeof PortalPortalAvierInvoiceIdRoute
+  '/portal/_portal/avier/': typeof PortalPortalAvierIndexRoute
   '/_app/ownerships/$ownershipId_/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
 export interface FileRouteTypes {
@@ -509,6 +528,8 @@ export interface FileRouteTypes {
     | '/admin/users/'
     | '/portal/'
     | '/ownerships/$ownershipId/extract'
+    | '/portal/avier/$invoiceId'
+    | '/portal/avier/'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -557,6 +578,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/portal'
     | '/ownerships/$ownershipId/extract'
+    | '/portal/avier/$invoiceId'
+    | '/portal/avier'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   id:
     | '__root__'
@@ -608,6 +631,8 @@ export interface FileRouteTypes {
     | '/admin/users/'
     | '/portal/_portal/'
     | '/_app/ownerships/$ownershipId_/extract'
+    | '/portal/_portal/avier/$invoiceId'
+    | '/portal/_portal/avier/'
     | '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
   fileRoutesById: FileRoutesById
 }
@@ -971,6 +996,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOwnershipsOwnershipIdExtractRouteImport
       parentRoute: typeof AppRoute
     }
+    '/portal/_portal/avier/': {
+      id: '/portal/_portal/avier/'
+      path: '/avier'
+      fullPath: '/portal/avier/'
+      preLoaderRoute: typeof PortalPortalAvierIndexRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
+    '/portal/_portal/avier/$invoiceId': {
+      id: '/portal/_portal/avier/$invoiceId'
+      path: '/avier/$invoiceId'
+      fullPath: '/portal/avier/$invoiceId'
+      preLoaderRoute: typeof PortalPortalAvierInvoiceIdRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
     '/_app/ownerships/$ownershipId_/pledges/$pledgeId': {
       id: '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
       path: '/ownerships/$ownershipId/pledges/$pledgeId'
@@ -1058,10 +1097,14 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface PortalPortalRouteChildren {
   PortalPortalIndexRoute: typeof PortalPortalIndexRoute
+  PortalPortalAvierInvoiceIdRoute: typeof PortalPortalAvierInvoiceIdRoute
+  PortalPortalAvierIndexRoute: typeof PortalPortalAvierIndexRoute
 }
 
 const PortalPortalRouteChildren: PortalPortalRouteChildren = {
   PortalPortalIndexRoute: PortalPortalIndexRoute,
+  PortalPortalAvierInvoiceIdRoute: PortalPortalAvierInvoiceIdRoute,
+  PortalPortalAvierIndexRoute: PortalPortalAvierIndexRoute,
 }
 
 const PortalPortalRouteWithChildren = PortalPortalRoute._addFileChildren(

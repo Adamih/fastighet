@@ -4,7 +4,8 @@ import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { invoice, ledgerEntry, posting } from '#/db/schema'
 import type { OpenAvi } from '#/features/payments/matching'
-import { inCompany, orgQuery } from '#/server/scoped'
+import { inCompany, orgQuery, query } from '#/server/scoped'
+import { CurrentOrganization } from '#/server/services'
 import type { PostingKind } from './kinds'
 import {
   creditBalance,
@@ -76,15 +77,19 @@ export function postingStatements(
   ] as const
 }
 
-/** Each avi's receivable entries, with their posting's kind and date. */
-export const receivableEntriesFor = Effect.fn('ledger.receivableEntriesFor')(function* (
+/**
+ * Each avi's receivable entries in a company, with their posting's kind and date. The company is
+ * named by the caller: the company in focus (`receivableEntriesFor`) or Mina sidor's.
+ */
+export const receivableEntriesIn = Effect.fn('ledger.receivableEntriesIn')(function* (
+  organizationId: string,
   invoiceIds: readonly string[],
 ) {
   const rows: { invoiceId: string | null; kind: PostingKind; date: string; amountOre: number }[] =
     []
   for (const ids of chunks([...new Set(invoiceIds)])) {
     rows.push(
-      ...(yield* orgQuery((db, organizationId) =>
+      ...(yield* query((db) =>
         db
           .select({
             invoiceId: ledgerEntry.invoiceId,
@@ -109,15 +114,27 @@ export const receivableEntriesFor = Effect.fn('ledger.receivableEntriesFor')(fun
   return new Map<string, ReceivableEntry[]>(invoiceIds.map((id) => [id, byInvoice.get(id) ?? []]))
 })
 
+/** Each avi's receivable entries in the company in focus. */
+export const receivableEntriesFor = (invoiceIds: readonly string[]) =>
+  Effect.gen(function* () {
+    return yield* receivableEntriesIn((yield* CurrentOrganization).id, invoiceIds)
+  })
+
 /** An avi's money by id, like `allInvoiceMoney`; an avi without entries owes nothing. */
 export type MoneyOf = (invoiceId: string) => InvoiceMoney
 
+const moneyLookup = (entries: ReadonlyMap<string, ReceivableEntry[]>): MoneyOf => {
+  const money = new Map([...entries].map(([id, list]) => [id, invoiceMoney(list)]))
+  return (invoiceId) => money.get(invoiceId) ?? invoiceMoney([])
+}
+
 /** What each of these avier's receivable entries add up to (see `invoiceMoney`). */
 export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
-  Effect.map(receivableEntriesFor(invoiceIds), (entries): MoneyOf => {
-    const money = new Map([...entries].map(([id, list]) => [id, invoiceMoney(list)]))
-    return (invoiceId) => money.get(invoiceId) ?? invoiceMoney([])
-  })
+  Effect.map(receivableEntriesFor(invoiceIds), moneyLookup)
+
+/** Like `invoiceMoneyFor`, in a company the caller names (Mina sidor). */
+export const invoiceMoneyIn = (organizationId: string, invoiceIds: readonly string[]) =>
+  Effect.map(receivableEntriesIn(organizationId, invoiceIds), moneyLookup)
 
 /** Every avi's money in the company, for lists and overviews. */
 export const allInvoiceMoney = Effect.gen(function* () {
@@ -265,13 +282,14 @@ export const invoiceOwner = (invoiceId: string) =>
   ).pipe(Effect.map(([row]) => row ?? null))
 
 /** Each party's credit balance (tillgodo): their receivable entries that aren't on an avi. */
-export const creditBalances = Effect.fn('ledger.creditBalances')(function* (
+export const creditBalancesIn = Effect.fn('ledger.creditBalancesIn')(function* (
+  organizationId: string,
   partyIds: readonly string[],
 ) {
   const rows: { partyId: string | null; amountOre: number }[] = []
   for (const ids of chunks([...new Set(partyIds)])) {
     rows.push(
-      ...(yield* orgQuery((db, organizationId) =>
+      ...(yield* query((db) =>
         db
           .select({ partyId: ledgerEntry.partyId, amountOre: ledgerEntry.amountOre })
           .from(ledgerEntry)
@@ -290,6 +308,12 @@ export const creditBalances = Effect.fn('ledger.creditBalances')(function* (
   const byParty = groupBy(rows, (r) => r.partyId ?? '')
   return new Map(partyIds.map((id) => [id, creditBalance(byParty.get(id) ?? [])]))
 })
+
+/** Each party's credit balance (tillgodo) in the company in focus. */
+export const creditBalances = (partyIds: readonly string[]) =>
+  Effect.gen(function* () {
+    return yield* creditBalancesIn((yield* CurrentOrganization).id, partyIds)
+  })
 
 /** Each party's avier with something still owed (not voided), for splitting payments. */
 export const openAvierFor = Effect.fn('ledger.openAvierFor')(function* (
