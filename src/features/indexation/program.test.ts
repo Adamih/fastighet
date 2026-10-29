@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { createInvoiceRun } from '#/features/invoicing/program'
+import { createInvoiceRun } from '#/features/invoicing/run-program'
 import { createLease, updateLease } from '#/features/leases/program'
 import { addMonths, stockholmDate } from '#/lib/dates'
 import { fail, harness } from '#/test/harness'

@@ -1,11 +1,8 @@
 import { expect, test } from 'bun:test'
 import { removeOneOffCharge } from '#/features/agreements/program'
-import {
-  createInvoiceRun,
-  getInvoice,
-  listInvoices,
-  markInvoicePaid,
-} from '#/features/invoicing/program'
+import { markInvoicePaid } from '#/features/invoicing/payment-program'
+import { getInvoice, listInvoices } from '#/features/invoicing/program'
+import { createInvoiceRun } from '#/features/invoicing/run-program'
 import { createLease } from '#/features/leases/program'
 import { buildCamt054 } from '#/features/payments/camt054-builder'
 import { importPayments } from '#/features/payments/program'

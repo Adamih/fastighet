@@ -1,14 +1,10 @@
 import { expect, test } from 'bun:test'
 import { partyAccount, refundCredit, undoCreditRefund } from '#/features/accounts/program'
-import {
-  createCreditNote,
-  createInvoiceRun,
-  getInvoice,
-  listInvoices,
-  markInvoicePaid,
-  unmarkInvoicePaid,
-  voidInvoice,
-} from '#/features/invoicing/program'
+import { voidInvoice } from '#/features/invoicing/correction-program'
+import { createCreditNote } from '#/features/invoicing/credit-program'
+import { markInvoicePaid, unmarkInvoicePaid } from '#/features/invoicing/payment-program'
+import { getInvoice, listInvoices } from '#/features/invoicing/program'
+import { createInvoiceRun } from '#/features/invoicing/run-program'
 import { createLease } from '#/features/leases/program'
 import { buildCamt054 } from '#/features/payments/camt054-builder'
 import {
