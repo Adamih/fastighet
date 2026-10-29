@@ -42,6 +42,7 @@ function harness() {
         name: org,
         role: 'owner',
         grant: null,
+        customRoles: {},
       }),
       Effect.provideService(CurrentUser, { id: user, name: user, email: 'test@example.test' }),
       Effect.provideService(PermissionChecker, { check: async () => allowed }),

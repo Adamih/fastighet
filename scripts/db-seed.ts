@@ -67,6 +67,7 @@ import {
 } from '#/lib/dates'
 import { luhnCheckDigit } from '#/lib/luhn'
 import { grantPresets } from '#/lib/managed-access'
+import type { AppPermissions } from '#/lib/permissions'
 import { SEED_PASSWORD, SEED_USERS } from './db-seed-constants'
 
 /** Seed records are built up step by step, so their fields stay writable. */
@@ -2127,8 +2128,9 @@ async function seedBrf() {
 /**
  * A property manager (Exempel Förvaltning AB) that manages both companies above through grants:
  * Brf Linden in full, Exempel Fastigheter for its finances only. Frida (owner) sees both; Hugo is
- * assigned to Brf Linden; Elin to Brf Linden as admin and to Exempel Fastigheter read only. One
- * request for a third client waits, with its code printed below.
+ * assigned to Brf Linden in the company's own role "handläggare"; Elin to Brf Linden as admin and
+ * to Exempel Fastigheter read only. One request for a third client waits, with its code printed
+ * below.
  */
 async function seedManager(
   landlord: { id: string; ownerId: string },
@@ -2200,8 +2202,28 @@ async function seedManager(
       grantedBy: g.client.ownerId,
     })
   }
+  // A custom role (Team page, "Roller"): the daily work without bookkeeping or company details.
+  const handlaggare = 'handläggare'
+  await db.insert(schema.organizationRole).values({
+    id: id(),
+    organizationId: org.id,
+    role: handlaggare,
+    permission: JSON.stringify({
+      property: ['read'],
+      tenant: ['read', 'manage'],
+      lease: ['read', 'manage'],
+      invoice: ['read', 'manage'],
+      payment: ['read', 'manage'],
+      settings: ['read'],
+    } satisfies AppPermissions),
+  })
   await db.insert(schema.managementAssignment).values([
-    { managingOrganizationId: org.id, managedOrganizationId: brf.id, userId: hugo.id, role: null },
+    {
+      managingOrganizationId: org.id,
+      managedOrganizationId: brf.id,
+      userId: hugo.id,
+      role: handlaggare,
+    },
     {
       managingOrganizationId: org.id,
       managedOrganizationId: brf.id,
@@ -2250,7 +2272,7 @@ async function seedManager(
   })
 
   console.log(`Seeded ${org.name} (property manager):
-  logins     ${frida.email} (owner, sees both clients), ${hugo.email} (Brf Linden),
+  logins     ${frida.email} (owner, sees both clients), ${hugo.email} (Brf Linden as ${handlaggare}),
              ${elin.email} (Brf Linden as admin, Exempel Fastigheter read only)
   grants     Brf Linden: full; Exempel Fastigheter: finances
   request    waiting, code ${code} (sign up a new company and enter it under Förvaltare)`)

@@ -5,13 +5,12 @@ import { PageHeader } from '#/components/responsive'
 import { Button } from '#/components/ui/button'
 import { useCan } from '#/features/auth/use-can'
 import { clientsQuery, endClientFn, withdrawRequestFn } from '#/features/management/functions'
-import { assignmentRoleLabel, grantSummary } from '#/features/management/grant-levels'
+import { assignmentRoleName, grantSummary } from '#/features/management/grant-levels'
 import {
   type StaffMember,
   useAssignStaffDrawer,
   useRequestAccessDrawer,
 } from '#/features/management/management-forms'
-import { isAssignmentRole } from '#/lib/managed-access'
 import { m } from '#/paraglide/messages'
 
 // "Kundbolag": the companies this company manages. Only from the company's own view: a company
@@ -85,9 +84,7 @@ function ClientRow({
     },
   })
   const assigned = client.assigned.map((a) =>
-    a.role && isAssignmentRole(a.role)
-      ? `${a.name} (${assignmentRoleLabel[a.role]().toLowerCase()})`
-      : a.name,
+    a.role ? `${a.name} (${assignmentRoleName(a.role)})` : a.name,
   )
   return (
     <li className="grid gap-3 px-5 py-4">

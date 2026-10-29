@@ -1,7 +1,6 @@
 import { useRouteContext } from '@tanstack/react-router'
-import { authClient } from '#/lib/auth-client'
 import { managedAllows } from '#/lib/managed-access'
-import type { Permissions, roles } from '#/lib/permissions'
+import { type Permissions, roleAllows } from '#/lib/permissions'
 
 /**
  * Permission checks for the signed-in user in the company in focus, for hiding what they may not
@@ -9,15 +8,13 @@ import type { Permissions, roles } from '#/lib/permissions'
  */
 export function useCan() {
   const { app } = useRouteContext({ from: '/_app' })
-  const { grant, role } = app.organization
+  const { grant, role, customRoles } = app.organization
+  // The same rules as the server: Better Auth's roles and the company's custom roles at home
+  // (`checkRolePermission` can't see custom roles), capped by the grant in a managed company.
   return (permissions: Permissions) =>
     grant
-      ? managedAllows(role, grant, permissions)
-      : authClient.organization.checkRolePermission({
-          // Better Auth also accepts comma-separated memberships at runtime.
-          role: role as keyof typeof roles,
-          permissions,
-        })
+      ? managedAllows(role, grant, permissions, customRoles)
+      : roleAllows(role, permissions, customRoles)
 }
 
 /** Whether the company in focus is the user's own (not one their company manages). */

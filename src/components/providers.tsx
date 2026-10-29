@@ -7,6 +7,30 @@ import { organizationPlugin } from '#/lib/auth/organization-plugin'
 import { authBasePaths, authViewPaths, organizationViewPaths } from '#/lib/auth/paths'
 import { svSE } from '#/lib/auth/sv-se'
 import { authClient } from '#/lib/auth-client'
+import { appResources } from '#/lib/permissions'
+import { m } from '#/paraglide/messages'
+
+/** What the role editor offers: each app resource with "Visa" and "Ändra" (`manage`). */
+const rolePermissionRegistry = () => {
+  const labels = {
+    property: m.role_resource_property(),
+    tenant: m.role_resource_tenant(),
+    lease: m.role_resource_lease(),
+    invoice: m.role_resource_invoice(),
+    payment: m.role_resource_payment(),
+    settings: m.role_resource_settings(),
+    bookkeeping: m.role_resource_bookkeeping(),
+  } satisfies Record<(typeof appResources)[number], string>
+  return Object.fromEntries(
+    appResources.map((resource) => [
+      resource,
+      {
+        label: labels[resource],
+        actions: { read: m.role_action_read(), manage: m.role_action_manage() },
+      },
+    ]),
+  )
+}
 
 /**
  * Better Auth UI's provider (account settings, the user button) wired to the router, as its
@@ -46,6 +70,8 @@ export function Providers({ children }: { children: ReactNode }) {
           hideSlug: true,
           logo: { enabled: false },
           teams: false,
+          // Custom roles (Team page, "Roller"): the app's resources only, as the server allows.
+          dynamicAccessControl: { enabled: true, permissions: rolePermissionRegistry() },
         }),
       ]}
     >

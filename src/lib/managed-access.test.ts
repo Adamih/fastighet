@@ -80,3 +80,24 @@ describe('managedAllows: the role AND the grant', () => {
     expect(managedAllows('', grantPresets.full, { lease: ['read'] })).toBe(false)
   })
 })
+
+describe('custom roles at a managed company', () => {
+  test('the managing company’s role, capped by the grant', () => {
+    const customRoles = {
+      ekonom: { invoice: ['read', 'manage'], lease: ['read', 'manage'] } as const,
+    } as unknown as Parameters<typeof managedAllows>[3]
+    expect(
+      managedAllows('ekonom', grantPresets.finance, { invoice: ['manage'] }, customRoles),
+    ).toBe(true)
+    // The role has it, the grant doesn't.
+    expect(managedAllows('ekonom', grantPresets.finance, { lease: ['manage'] }, customRoles)).toBe(
+      false,
+    )
+    // The grant has it, the role doesn't.
+    expect(managedAllows('ekonom', grantPresets.full, { payment: ['read'] }, customRoles)).toBe(
+      false,
+    )
+    // Without the company's roles, the name means nothing.
+    expect(managedAllows('ekonom', grantPresets.full, { invoice: ['read'] })).toBe(false)
+  })
+})

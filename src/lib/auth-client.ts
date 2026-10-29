@@ -4,5 +4,9 @@ import { createAuthClient } from 'better-auth/react'
 import { ac, roles } from './permissions'
 
 export const authClient = createAuthClient({
-  plugins: [organizationClient({ ac, roles }), adminClient(), stripeClient({ subscription: true })],
+  plugins: [
+    organizationClient({ ac, roles, dynamicAccessControl: { enabled: true } }),
+    adminClient(),
+    stripeClient({ subscription: true }),
+  ],
 })

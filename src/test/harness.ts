@@ -6,6 +6,7 @@ import { Effect } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import type { Grant } from '#/lib/managed-access'
+import type { CustomRoles } from '#/lib/permissions'
 import { Mailer } from '#/server/mail/mailer'
 import { makeMockMailer } from '#/server/mail/mock'
 import {
@@ -48,16 +49,27 @@ export function harness() {
   const runAs =
     (as: {
       user?: string
-      home?: { id: string; name: string; role: string }
-      organization?: { id: string; name: string; role: string; grant: Grant | null }
+      home?: { id: string; name: string; role: string; customRoles?: CustomRoles }
+      organization?: {
+        id: string
+        name: string
+        role: string
+        grant: Grant | null
+        customRoles?: CustomRoles
+      }
     }) =>
     <A, E, R>(program: Effect.Effect<A, E, R>) => {
-      const home = as.home ?? { id: 'org', name: 'Test', role: 'owner' }
+      const home = { customRoles: {}, ...(as.home ?? { id: 'org', name: 'Test', role: 'owner' }) }
       const user = as.user ?? 'user'
       return Effect.runPromise(
         program.pipe(
           Effect.provideService(Database, db as unknown as Db),
-          Effect.provideService(CurrentOrganization, as.organization ?? { ...home, grant: null }),
+          Effect.provideService(
+            CurrentOrganization,
+            as.organization
+              ? { customRoles: home.customRoles, ...as.organization }
+              : { ...home, grant: null },
+          ),
           Effect.provideService(HomeOrganization, home),
           Effect.provideService(
             CurrentUser,

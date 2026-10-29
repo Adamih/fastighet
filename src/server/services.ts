@@ -1,7 +1,7 @@
 import { Context } from 'effect'
 import type { Db } from '#/db'
 import type { Grant } from '#/lib/managed-access'
-import type { Permissions } from '#/lib/permissions'
+import type { CustomRoles, Permissions } from '#/lib/permissions'
 import type { Mailer } from './mail/mailer'
 
 export class Database extends Context.Service<Database, Db>()('app/Database') {}
@@ -29,13 +29,21 @@ export class CurrentOrganization extends Context.Service<
     readonly name: string
     readonly role: string
     readonly grant: Grant | null
+    /** The home company's custom roles, which `role` may name (at home and on assignments). */
+    readonly customRoles: CustomRoles
   }
 >()('app/CurrentOrganization') {}
 
 /** The user's own company (Better Auth membership), whichever company is in focus. */
 export class HomeOrganization extends Context.Service<
   HomeOrganization,
-  { readonly id: string; readonly name: string; readonly role: string }
+  {
+    readonly id: string
+    readonly name: string
+    readonly role: string
+    /** Its custom roles, which the user's role there or on an assignment may name. */
+    readonly customRoles: CustomRoles
+  }
 >()('app/HomeOrganization') {}
 
 /** Better Auth's server permission API, bound to the authenticated request by runApp. */

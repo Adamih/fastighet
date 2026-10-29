@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
+import { useRouteContext } from '@tanstack/react-router'
 import { Check, Copy } from 'lucide-react'
 import { useLayoutEffect, useState } from 'react'
 import { Optional, useAppForm } from '#/components/form'
@@ -172,7 +173,8 @@ export interface StaffMember {
 }
 
 const HOME_ROLE = 'home'
-type RoleChoice = AssignmentRole | typeof HOME_ROLE
+/** A built-in assignment role, one of the company's custom roles, or its home role. */
+type RoleChoice = string
 
 function AssignStaffForm({
   client,
@@ -190,6 +192,9 @@ function AssignStaffForm({
     onSuccess: () => invalidate(queryClient, clientsQuery().queryKey),
   })
   const others = staff.filter((s) => !s.seesAll)
+  // The company's own roles can be set on an assignment too; this page is always the home company.
+  const { app } = useRouteContext({ from: '/_app' })
+  const customRoles = Object.keys(app.organization.customRoles).sort()
   const form = useAppForm({
     defaultValues: {
       staff: others.map((s) => {
@@ -258,6 +263,11 @@ function AssignStaffForm({
                       {(Object.keys(assignmentRoleLabel) as AssignmentRole[]).map((role) => (
                         <SelectItem key={role} value={role}>
                           {assignmentRoleLabel[role]()}
+                        </SelectItem>
+                      ))}
+                      {customRoles.map((role) => (
+                        <SelectItem key={role} value={role}>
+                          {role}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -2,6 +2,7 @@ import { tryGetCurrentAuthEndpointContext } from '@better-auth/core/context'
 import { stripe as stripePlugin } from '@better-auth/stripe'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import { admin, organization } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { and, asc, eq } from 'drizzle-orm'
@@ -11,6 +12,7 @@ import * as schema from '#/db/schema'
 import type { CompanyAction } from '#/features/audit/actions'
 import { stripePlans, tierOf } from '#/features/billing/store'
 import { tiers } from '#/features/billing/tiers'
+import { checkRoleRequest, roleEndpoints } from '#/features/team/custom-roles'
 import { stockholmDate } from '#/lib/dates'
 import { ac, roles } from '#/lib/permissions'
 import type { AnyEmail } from '#/server/mail/mailer'
@@ -74,6 +76,9 @@ function requestImpersonator(): string | null {
 }
 
 const RESET_PASSWORD_TTL_SECONDS = 60 * 60
+
+/** How many custom roles a company can have. */
+export const MAX_CUSTOM_ROLES = 20
 
 // Kept free of `cloudflare:workers` so the Better Auth CLI can load it from Node.
 export function createAuth(
@@ -175,6 +180,70 @@ export function createAuth(
           props: { name: user.name, verifyUrl: url },
         }),
     },
+    // Custom roles: our rules before Better Auth's role endpoints run, and the audit log after
+    // (its organization hooks don't cover roles). See `features/team/custom-roles.ts`.
+    hooks: {
+      before: createAuthMiddleware(async (ctx) => {
+        if (!roleEndpoints.has(ctx.path)) return
+        const session = await getSessionFromCtx(ctx)
+        const body = (ctx.body ?? {}) as Record<string, unknown>
+        const organizationId =
+          (body.organizationId as string | undefined) ?? session?.session.activeOrganizationId
+        // Without either, Better Auth refuses the request itself.
+        if (!session || !organizationId) return
+        const check = await checkRoleRequest(db, organizationId, ctx.path, body)
+        if (check.problem !== null) throw new APIError('BAD_REQUEST', { message: check.problem })
+        if (!check.permission) return
+        // Store what we allow: `manage` always with `read`.
+        return {
+          context: {
+            body:
+              ctx.path === '/organization/create-role'
+                ? { ...body, permission: check.permission }
+                : { ...body, data: { ...(body.data as object), permission: check.permission } },
+          },
+        }
+      }),
+      after: createAuthMiddleware(async (ctx) => {
+        if (!roleEndpoints.has(ctx.path)) return
+        const returned = ctx.context.returned as
+          | { success?: boolean; roleData?: { role?: string; permission?: unknown } }
+          | undefined
+        if (!returned || returned instanceof Error || !returned.success) return
+        const session = await getSessionFromCtx(ctx)
+        const body = (ctx.body ?? {}) as Record<string, unknown>
+        const organizationId =
+          (body.organizationId as string | undefined) ?? session?.session.activeOrganizationId
+        if (!organizationId) return
+        const [company] = await db
+          .select({ id: schema.organization.id, name: schema.organization.name })
+          .from(schema.organization)
+          .where(eq(schema.organization.id, organizationId))
+        if (!company) return
+        const role = returned.roleData?.role ?? String(body.roleName ?? body.roleId ?? '')
+        const permission = returned.roleData?.permission
+        await recordCompanyEvent({
+          organization: company,
+          actor: session ? person(session.user) : null,
+          action:
+            ctx.path === '/organization/create-role'
+              ? 'team.create_role'
+              : ctx.path === '/organization/update-role'
+                ? 'team.update_role'
+                : 'team.delete_role',
+          entityId: organizationId,
+          details: {
+            role,
+            ...(permission === undefined
+              ? {}
+              : {
+                  permissions:
+                    typeof permission === 'string' ? permission : JSON.stringify(permission),
+                }),
+          },
+        })
+      }),
+    },
     databaseHooks: {
       session: {
         create: {
@@ -214,6 +283,9 @@ export function createAuth(
         // Roles and permissions shared with the server's `requirePermission` and the UI.
         ac,
         roles,
+        // Custom roles per company, stored by Better Auth (`organizationRole`). What they may hold,
+        // their names and the tier are checked in `hooks` below.
+        dynamicAccessControl: { enabled: true, maximumRolesPerOrganization: MAX_CUSTOM_ROLES },
         creatorRole: 'owner',
         disableOrganizationDeletion: true,
         requireEmailVerificationOnInvitation: true,

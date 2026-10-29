@@ -98,3 +98,76 @@ export type AssignmentRole = keyof typeof assignmentRoles
 
 type Statement = typeof statement
 export type Permissions = { [K in keyof Statement]?: Statement[K][number][] }
+
+// Custom roles (Better Auth's dynamic access control). A company's owners and admins create them
+// on the Team page; members hold them like the built-in roles, and a managing company can set one
+// on an assignment. They cover the app's resources only: the team, invitations, roles, Kundbolag
+// and Förvaltare stay with owners and admins.
+
+/** What a custom role (and a grant to a managing company) can include. */
+export const appResources = [
+  'property',
+  'tenant',
+  'lease',
+  'invoice',
+  'payment',
+  'settings',
+  'bookkeeping',
+] as const
+export type AppResource = (typeof appResources)[number]
+export type AppPermissions = { [K in AppResource]?: ('read' | 'manage')[] }
+
+/** Names a custom role can't take: the built-in roles, assignment roles included. */
+export const reservedRoleNames: readonly string[] = [
+  ...new Set([...Object.keys(roles), ...Object.keys(assignmentRoles)]),
+]
+
+/**
+ * A custom role's permissions as stored, or as sent: only app resources and their actions, and
+ * `manage` always with `read`. Null when anything else is in it, so it can be refused.
+ */
+export function appPermissions(input: unknown): AppPermissions | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  const result: AppPermissions = {}
+  for (const [resource, actions] of Object.entries(input)) {
+    if (!(appResources as readonly string[]).includes(resource)) return null
+    if (!Array.isArray(actions) || actions.some((a) => a !== 'read' && a !== 'manage')) return null
+    if (actions.length === 0) continue
+    result[resource as AppResource] = actions.includes('manage') ? ['read', 'manage'] : ['read']
+  }
+  return result
+}
+
+/** A company's custom roles by name, with their permissions. */
+export type CustomRoles = Readonly<Record<string, AppPermissions>>
+
+const builtInRoles: Record<string, { authorize: (request: never) => { success: boolean } }> = {
+  ...roles,
+  ...assignmentRoles,
+}
+
+/**
+ * Whether `roleName` (comma-separated like Better Auth's, any role is enough) allows `wanted`:
+ * a built-in role by its statements, a custom role by its stored permissions.
+ */
+export function roleAllows(roleName: string, wanted: Permissions, customRoles: CustomRoles) {
+  const asked = Object.entries(wanted)
+  if (asked.length === 0 || asked.some(([, actions]) => (actions ?? []).length === 0)) return false
+  return roleName
+    .split(',')
+    .map((r) => r.trim())
+    .some((r) => {
+      if (Object.hasOwn(builtInRoles, r)) {
+        return builtInRoles[r].authorize(wanted as never).success
+      }
+      const custom = Object.hasOwn(customRoles, r) ? customRoles[r] : undefined
+      return (
+        custom !== undefined &&
+        asked.every(([resource, actions]) =>
+          (actions ?? []).every((a) =>
+            (custom[resource as AppResource] as string[] | undefined)?.includes(a),
+          ),
+        )
+      )
+    })
+}

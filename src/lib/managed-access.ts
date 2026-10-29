@@ -1,23 +1,24 @@
-import { type AssignmentRole, assignmentRoles, type Permissions, roles } from './permissions'
+import {
+  type AppResource,
+  type AssignmentRole,
+  appResources,
+  assignmentRoles,
+  type CustomRoles,
+  type Permissions,
+  roleAllows,
+} from './permissions'
 
 // What a manager's staff may do in a company they manage. Pure and client-safe: the server
 // checks with it (`requirePermission`) and the UI mirrors it (`useCan`).
 //
 // Three layers: the managed company's grant (raw permissions, the most anyone from the manager
 // may ever do there), the manager's assignment of staff to the company, and the person's role
-// (the assignment's, or else their home role). Allowed = the role allows it AND the grant does.
+// (the assignment's, or else their home role; built-in or one of the managing company's custom
+// roles). Allowed = the role allows it AND the grant does.
 
 /** Resources a company can let another company manage. Never the team, invitations or grants. */
-export const grantableResources = [
-  'property',
-  'tenant',
-  'lease',
-  'invoice',
-  'payment',
-  'settings',
-  'bookkeeping',
-] as const
-export type GrantableResource = (typeof grantableResources)[number]
+export const grantableResources = appResources
+export type GrantableResource = AppResource
 
 export const accessLevels = ['none', 'read', 'manage'] as const
 export type AccessLevel = (typeof accessLevels)[number]
@@ -90,30 +91,24 @@ export function presetOf(grant: Grant): GrantPreset | null {
   return null
 }
 
-const allRoles: Record<string, { authorize: (request: never) => { success: boolean } }> = {
-  ...roles,
-  ...assignmentRoles,
-}
-
 export const isAssignmentRole = (role: string): role is AssignmentRole =>
   Object.hasOwn(assignmentRoles, role)
 
 /**
- * Whether `roleName` (comma-separated like Better Auth's, any role is enough) allows `wanted`,
- * and the grant includes every permission in it.
+ * Whether `roleName` (comma-separated like Better Auth's, any role is enough; `customRoles` are
+ * the managing company's) allows `wanted`, and the grant includes every permission in it.
  */
-export function managedAllows(roleName: string, grant: Grant, wanted: Permissions): boolean {
+export function managedAllows(
+  roleName: string,
+  grant: Grant,
+  wanted: Permissions,
+  customRoles: CustomRoles = {},
+): boolean {
   const allowed = cleanGrant(grant) as Record<string, string[] | undefined>
   const inGrant = Object.entries(wanted).every(
     ([resource, actions]) =>
       (actions ?? []).length > 0 &&
       (actions ?? []).every((a) => allowed[resource]?.includes(a) ?? false),
   )
-  if (!inGrant) return false
-  return roleName
-    .split(',')
-    .map((r) => r.trim())
-    .filter((r) => Object.hasOwn(allRoles, r))
-    .map((r) => allRoles[r])
-    .some((role) => role.authorize(wanted as never).success)
+  return inGrant && roleAllows(roleName, wanted, customRoles)
 }

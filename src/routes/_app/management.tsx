@@ -14,12 +14,12 @@ import {
   revokeGrantFn,
 } from '#/features/management/functions'
 import {
-  assignmentRoleLabel,
+  assignmentRoleName,
   GrantLevelsEditor,
   grantSummary,
 } from '#/features/management/grant-levels'
 import { useEditGrantDrawer } from '#/features/management/management-forms'
-import { type GrantLevels, isAssignmentRole } from '#/lib/managed-access'
+import type { GrantLevels } from '#/lib/managed-access'
 import { m } from '#/paraglide/messages'
 
 // "Förvaltare": the companies that manage this one. The owner enters a manager's code, sees who
@@ -212,11 +212,7 @@ function ManagerRow({ manager, manage }: { manager: Managers[number]; manage: bo
     ...(manager.leaders.length > 0
       ? [m.managers_leaders({ names: manager.leaders.join(', ') })]
       : []),
-    ...manager.assigned.map((a) =>
-      a.role && isAssignmentRole(a.role)
-        ? `${a.name} (${assignmentRoleLabel[a.role]().toLowerCase()})`
-        : a.name,
-    ),
+    ...manager.assigned.map((a) => (a.role ? `${a.name} (${assignmentRoleName(a.role)})` : a.name)),
   ]
 
   return (

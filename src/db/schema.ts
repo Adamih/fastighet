@@ -959,7 +959,10 @@ export const managementAssignment = sqliteTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    /** `admin`, `member` or `viewer`; null uses the person's role in their own company. */
+    /**
+     * `admin`, `member`, `viewer` or one of the managing company's custom roles; null uses the
+     * person's role in their own company.
+     */
     role: text('role'),
     createdAt: createdAt(),
   },

@@ -122,6 +122,7 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
           // Deliberately different: the adapter must ask Better Auth, not trust this role snapshot.
           role: 'owner',
           grant: null,
+          customRoles: {},
         }),
       ),
     )
@@ -478,5 +479,110 @@ describe('Better Auth domain permission adapter', () => {
     await expect(f.permissions({ invoice: ['read'] }, 'another-company')).rejects.toMatchObject({
       _tag: 'DatabaseError',
     })
+  })
+})
+
+describe('Custom roles', () => {
+  /** The fixture company on a tier with custom roles (the free tier has none). */
+  async function paid(actorRole = 'admin') {
+    const f = await fixture(actorRole)
+    f.db
+      .insert(schema.organizationSettings)
+      .values({ organizationId: 'company', planOverride: 'landlord' })
+      .run()
+    return f
+  }
+  const create = (f: Awaited<ReturnType<typeof fixture>>, role: string, permission: object) =>
+    f.post('create-role', { organizationId: 'company', role, permission })
+  const stored = (f: Awaited<ReturnType<typeof fixture>>) =>
+    f.db
+      .select({
+        role: schema.organizationRole.role,
+        permission: schema.organizationRole.permission,
+      })
+      .from(schema.organizationRole)
+      .all()
+      .map((r) => [r.role, JSON.parse(r.permission)])
+  const message = async (response: Response) =>
+    ((await response.json()) as { message: string }).message
+
+  test('need a tier that includes them', async () => {
+    const f = await fixture('admin')
+    const refused = await create(f, 'Ekonom', { invoice: ['read'] })
+    expect(refused.status).toBe(400)
+    expect(await message(refused)).toContain('Egna roller ingår inte i')
+    expect(stored(f)).toEqual([])
+  })
+
+  test('hold app resources only, store manage with read, and are recorded', async () => {
+    const f = await paid()
+    const created = await create(f, 'Ekonom', { invoice: ['manage'], lease: ['read'] })
+    expect(created.status).toBe(200)
+    expect(stored(f)).toEqual([['ekonom', { invoice: ['read', 'manage'], lease: ['read'] }]])
+    expect(f.events.map((e) => [e.action, e.actor?.id, e.details.role])).toEqual([
+      ['team.create_role', 'actor', 'ekonom'],
+    ])
+
+    for (const permission of [{ member: ['delete'] }, { ac: ['create'] }, { grant: ['manage'] }]) {
+      const refused = await create(f, 'Fel', permission)
+      expect(refused.status).toBe(400)
+      expect(await message(refused)).toContain('bara ge behörighet till')
+    }
+    for (const name of ['viewer', 'Admin', 'a,b']) {
+      expect((await create(f, name, { invoice: ['read'] })).status).toBe(400)
+    }
+    expect((await create(f, 'Tom', {})).status).toBe(400)
+    expect(stored(f)).toHaveLength(1)
+  })
+
+  test('members holding one get exactly its permissions', async () => {
+    const f = await paid()
+    await create(f, 'ekonom', { invoice: ['manage'], lease: ['read'] })
+    f.db.update(schema.member).set({ role: 'ekonom' }).where(eq(schema.member.id, 'self')).run()
+    expect(await f.permissions({ invoice: ['read', 'manage'] })).toBe(true)
+    expect(await f.permissions({ lease: ['read'] })).toBe(true)
+    expect(await f.permissions({ lease: ['manage'] })).toBe(false)
+    expect(await f.permissions({ settings: ['read'] })).toBe(false)
+  })
+
+  test('a role in use can change permissions but not its name, nor be deleted', async () => {
+    const f = await paid()
+    await create(f, 'ekonom', { invoice: ['read'] })
+    // Not in use yet: it may be renamed.
+    const renamed = await f.post('update-role', {
+      organizationId: 'company',
+      roleName: 'ekonom',
+      data: { roleName: 'ekonomi' },
+    })
+    expect(renamed.status).toBe(200)
+    f.db
+      .insert(schema.managementAssignment)
+      .values({
+        managingOrganizationId: 'company',
+        managedOrganizationId: 'another-company',
+        userId: 'target',
+        role: 'ekonomi',
+      })
+      .run()
+    const update = (data: object) =>
+      f.post('update-role', { organizationId: 'company', roleName: 'ekonomi', data })
+    expect((await update({ permission: { invoice: ['manage'] } })).status).toBe(200)
+    expect(stored(f)).toEqual([['ekonomi', { invoice: ['read', 'manage'] }]])
+    const rename = await update({ roleName: 'kassör' })
+    expect(rename.status).toBe(400)
+    expect(await message(rename)).toContain('kan inte byta namn')
+    const removed = await f.post('delete-role', { organizationId: 'company', roleName: 'ekonomi' })
+    expect(removed.status).toBe(400)
+    expect(await message(removed)).toContain('Kundbolag')
+    expect(f.events.map((e) => e.action)).toEqual([
+      'team.create_role',
+      'team.update_role',
+      'team.update_role',
+    ])
+  })
+
+  test('members can see roles but not change them', async () => {
+    const f = await paid('member')
+    expect((await create(f, 'ekonom', { invoice: ['read'] })).status).toBe(403)
   })
 })

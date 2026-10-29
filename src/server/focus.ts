@@ -1,7 +1,8 @@
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
-import { managementAssignment, managementGrant, organization } from '#/db/schema'
+import { managementAssignment, managementGrant, organization, organizationRole } from '#/db/schema'
 import { cleanGrant, type Grant } from '#/lib/managed-access'
+import { appPermissions, type CustomRoles } from '#/lib/permissions'
 import { CompanyNotInScope } from './errors'
 import { query } from './scoped'
 
@@ -13,6 +14,8 @@ export interface Home {
   readonly id: string
   readonly name: string
   readonly role: string
+  /** The company's custom roles (Better Auth's dynamic access control), by name. */
+  readonly customRoles: CustomRoles
 }
 
 export interface ManagedCompany {
@@ -21,7 +24,30 @@ export interface ManagedCompany {
   /** The assignment's role, or else the user's home role. */
   readonly role: string
   readonly grant: Grant
+  /** The managing (home) company's custom roles, which `role` may name. */
+  readonly customRoles: CustomRoles
 }
+
+/**
+ * A company's custom roles with their permissions. A stored role with anything but app resources
+ * (written before the checks, or by hand) is left out, so it allows nothing.
+ */
+export const customRolesOf = (organizationId: string) =>
+  Effect.map(
+    query((db) =>
+      db
+        .select({ role: organizationRole.role, permission: organizationRole.permission })
+        .from(organizationRole)
+        .where(eq(organizationRole.organizationId, organizationId)),
+    ),
+    (rows): CustomRoles =>
+      Object.fromEntries(
+        rows.flatMap((r) => {
+          const permissions = appPermissions(safeJson(r.permission))
+          return permissions ? [[r.role, permissions]] : []
+        }),
+      ),
+  )
 
 /** Owners and admins of the managing company reach every company it manages. */
 export const seesAllClients = (homeRole: string) =>
@@ -65,6 +91,7 @@ export const managedCompanies = (userId: string, home: Home) =>
           name: r.name,
           role: r.role ?? home.role,
           grant: cleanGrant(safeJson(r.permissions)),
+          customRoles: home.customRoles,
         }),
       )
   })

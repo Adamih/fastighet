@@ -86,6 +86,11 @@ export const auditActions = {
   'team.reject_invitation': action(m.audit_team_reject_invitation, 'invitation'),
   'team.change_role': action(m.audit_team_change_role, 'user'),
   'team.remove': action(m.audit_team_remove, 'user'),
+  // Custom roles, recorded by a hook on Better Auth's role endpoints. Details: the role's name and
+  // its permissions as JSON.
+  'team.create_role': action(m.audit_team_create_role),
+  'team.update_role': action(m.audit_team_update_role),
+  'team.delete_role': action(m.audit_team_delete_role),
   // Subscription changes, recorded by Better Auth's Stripe plugin hooks (Stripe's webhooks).
   'billing.subscribe': action(m.audit_billing_subscribe),
   'billing.cancel': action(m.audit_billing_cancel),

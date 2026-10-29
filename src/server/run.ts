@@ -15,7 +15,7 @@ import { m } from '#/paraglide/messages'
 import { recordAudit } from './audit'
 import { requireCustomerSession } from './customer-access'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
-import { resolveFocus } from './focus'
+import { customRolesOf, resolveFocus } from './focus'
 import { Mailer } from './mail/mailer'
 import { mailer } from './mail/provider'
 import { query } from './scoped'
@@ -84,7 +84,12 @@ const loadRequestContext = Effect.gen(function* () {
     )
   }
 
-  const home = { id: membership.organizationId, name: membership.name, role: membership.role }
+  const home = {
+    id: membership.organizationId,
+    name: membership.name,
+    role: membership.role,
+    customRoles: yield* customRolesOf(membership.organizationId),
+  }
   return {
     user: {
       id: session.user.id,

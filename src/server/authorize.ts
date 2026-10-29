@@ -12,7 +12,14 @@ import { CurrentOrganization, PermissionChecker } from './services'
 export const hasPermission = (permissions: Permissions) =>
   Effect.gen(function* () {
     const organization = yield* CurrentOrganization
-    if (organization.grant) return managedAllows(organization.role, organization.grant, permissions)
+    if (organization.grant) {
+      return managedAllows(
+        organization.role,
+        organization.grant,
+        permissions,
+        organization.customRoles,
+      )
+    }
     const checker = yield* PermissionChecker
     return yield* Effect.tryPromise({
       try: () => checker.check(organization.id, permissions),

@@ -33,11 +33,16 @@ export const planFeatures = [
   'clients',
   /** "Alla bolag", all clients side by side. Checked in the user's own company. */
   'portfolio',
+  /**
+   * Creating and editing the company's own roles (Team page). Checked in the user's own company;
+   * roles that exist keep working after a downgrade.
+   */
+  'roles',
 ] as const
 export type PlanFeature = (typeof planFeatures)[number]
 
 /** Features of the manager's own business, checked in the home company, not the one in focus. */
-export const homeFeatures: ReadonlySet<PlanFeature> = new Set(['clients', 'portfolio'])
+export const homeFeatures: ReadonlySet<PlanFeature> = new Set(['clients', 'portfolio', 'roles'])
 
 /**
  * What a tier's price counts: apartments; apartments and premises (not parking or storage); or
@@ -186,6 +191,7 @@ export const plans: Record<
         cells: [false, perUse(m.plan_cell_per_let_object), true],
       },
       { label: m.plan_row_bookkeeping, feature: 'bookkeeping', cells: [false, true, true] },
+      { label: m.plan_row_custom_roles, feature: 'roles', cells: [false, true, true] },
       { label: m.plan_row_audit, soon: true, cells: [false, true, true] },
       { label: m.plan_row_integration, soon: true, cells: [false, false, true] },
       { label: m.plan_row_member_portal, soon: true, cells: [false, false, true] },
@@ -209,6 +215,7 @@ export const plans: Record<
         cells: [false, perUse(m.plan_cell_per_premises), true],
       },
       { label: m.plan_row_bookkeeping, feature: 'bookkeeping', cells: [false, true, true] },
+      { label: m.plan_row_custom_roles, feature: 'roles', cells: [false, true, true] },
       { label: m.plan_row_audit, soon: true, cells: [false, true, true] },
       { label: m.plan_row_integration, soon: true, cells: [false, false, true] },
       {
@@ -229,6 +236,7 @@ export const plans: Record<
         cells: [perUse(() => m.plan_cell_up_to_users({ count: FREE_MEMBERS })), true, true],
       },
       { label: m.plan_row_portfolio, feature: 'portfolio', cells: [false, true, true] },
+      { label: m.plan_row_custom_roles, feature: 'roles', cells: [false, true, true] },
       { label: m.plan_row_staff_activity, soon: true, cells: [false, true, true] },
       {
         label: m.plan_row_pay_for_clients,

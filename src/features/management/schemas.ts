@@ -30,8 +30,11 @@ export const AssignStaffInput = Schema.Struct({
   staff: Schema.Array(
     Schema.Struct({
       userId: Schema.String,
-      /** Null: the person's role in their own company. */
-      role: Schema.NullOr(Schema.Literals(['admin', 'member', 'viewer'])),
+      /**
+       * `admin`, `member`, `viewer` or one of the company's custom roles; null: the person's role
+       * in their own company.
+       */
+      role: Schema.NullOr(Schema.String.check(Schema.isMaxLength(100))),
     }),
   ),
 })

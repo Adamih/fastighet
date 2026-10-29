@@ -17,6 +17,7 @@ import {
   cleanGrant,
   type Grant,
   grantFromLevels,
+  isAssignmentRole,
   isEmptyGrant,
   levelsFromGrant,
   presetOf,
@@ -285,6 +286,11 @@ export const assignStaff = (input: AssignStaffInput) =>
           )
     if (members.length !== userIds.length) {
       return yield* new Conflict({ message: 'Bara bolagets egna användare kan tilldelas.' })
+    }
+    // A built-in assignment role, or one of the company's own roles.
+    const roleNames = [...new Set(input.staff.flatMap((s) => (s.role ? [s.role] : [])))]
+    if (roleNames.some((r) => !isAssignmentRole(r) && !Object.hasOwn(org.customRoles, r))) {
+      return yield* new Conflict({ message: 'Rollen finns inte längre. Välj en annan.' })
     }
 
     const scope = and(

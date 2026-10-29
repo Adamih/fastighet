@@ -9,6 +9,7 @@ import {
   grantableResources,
   grantFromLevels,
   grantPresets,
+  isAssignmentRole,
   levelsFromGrant,
   presetOf,
 } from '#/lib/managed-access'
@@ -49,6 +50,10 @@ export const assignmentRoleLabel: Record<AssignmentRole, () => string> = {
   member: m.assignment_role_member,
   viewer: m.assignment_role_viewer,
 }
+
+/** An assignment's role as shown: a built-in role's name, or the custom role's own name. */
+export const assignmentRoleName = (role: string) =>
+  isAssignmentRole(role) ? assignmentRoleLabel[role]().toLowerCase() : role
 
 export const presetLevels = (preset: GrantPreset) => levelsFromGrant(grantPresets[preset])
 

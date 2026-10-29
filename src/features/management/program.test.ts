@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test'
 import { portfolio } from '#/features/portfolio/program'
 import { createProperty, listProperties } from '#/features/properties/program'
 import { grantPresets, levelsFromGrant } from '#/lib/managed-access'
+import type { CustomRoles } from '#/lib/permissions'
 import { recordAudit } from '#/server/audit'
+import { hasPermission } from '#/server/authorize'
 import { managedCompanies, resolveFocus } from '#/server/focus'
 import { fail, harness } from '#/test/harness'
 import {
@@ -45,7 +47,7 @@ function setup() {
     INSERT INTO organization_settings (organization_id, kind, plan_override) VALUES
       ('mgr', 'manager', 'manager_pro');
   `)
-  const mgrHome = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
+  const mgrHome = { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} }
   const asBoss = h.runAs({ user: 'boss', home: mgrHome })
   return { ...h, asBoss, mgrHome }
 }
@@ -99,7 +101,10 @@ test('a code works once, not after withdrawal, expiry or from the company itself
   ).toContain('personuppgiftsbiträdesavtal')
   await h.run(acceptRequest({ code: first.code, levels: full, processorAgreement: true }))
   // Used, and a second company can't use it either.
-  const asOther = h.runAs({ user: 'stranger', home: { id: 'other', name: 'Annat', role: 'owner' } })
+  const asOther = h.runAs({
+    user: 'stranger',
+    home: { id: 'other', name: 'Annat', role: 'owner', customRoles: {} },
+  })
   expect(await fail(asOther(previewRequest(first.code)))).toContain('Koden gäller inte')
 
   const withdrawn = await h.asBoss(
@@ -134,8 +139,8 @@ test('wrong codes are limited', async () => {
 test('who at the manager reaches the company, and with which role', async () => {
   const h = setup()
   await grantAccess(h)
-  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
-  const member = { id: 'mgr', name: 'Förvaltning', role: 'member' }
+  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} }
+  const member = { id: 'mgr', name: 'Förvaltning', role: 'member', customRoles: {} }
   const focus = (user: string, home: typeof boss, company: string | null) =>
     h.run(resolveFocus(user, home, company))
 
@@ -144,7 +149,12 @@ test('who at the manager reaches the company, and with which role', async () => 
   expect(await focus('anna-m', member, 'mgr')).toEqual({ ...member, grant: null })
 
   // Owners and admins without an assignment; members only once assigned.
-  expect(await focus('boss', boss, 'org')).toMatchObject({ id: 'org', name: 'Test', role: 'owner' })
+  expect(await focus('boss', boss, 'org')).toMatchObject({
+    id: 'org',
+    name: 'Test',
+    role: 'owner',
+    customRoles: {},
+  })
   expect(await fail(focus('anna-m', member, 'org'))).toContain('CompanyNotInScope')
   await h.asBoss(
     assignStaff({
@@ -162,7 +172,7 @@ test('who at the manager reaches the company, and with which role', async () => 
   expect(await fail(focus('boss', boss, 'other'))).toContain('CompanyNotInScope')
   expect(await fail(focus('boss', boss, 'nope'))).toContain('CompanyNotInScope')
   // The manager's staff from another company, with the same id asked for.
-  const stranger = { id: 'other', name: 'Annat', role: 'owner' }
+  const stranger = { id: 'other', name: 'Annat', role: 'owner', customRoles: {} }
   expect(await fail(focus('stranger', stranger, 'org'))).toContain('CompanyNotInScope')
 })
 
@@ -173,18 +183,22 @@ test("grants don't chain", async () => {
   h.sqlite.exec(
     "UPDATE organization_settings SET kind = 'manager', plan_override = 'manager_pro' WHERE organization_id = 'org'",
   )
-  const asChainOwner = h.runAs({ home: { id: 'chain', name: 'Kedja', role: 'owner' } })
+  const asChainOwner = h.runAs({
+    home: { id: 'chain', name: 'Kedja', role: 'owner', customRoles: {} },
+  })
   const { code } = await h.run(
     requestAccess({ label: 'Kedja', email: '', levels: full }, 'http://x'),
   )
   await asChainOwner(acceptRequest({ code, levels: full, processorAgreement: true }))
 
   expect(
-    (await h.run(managedCompanies('user', { id: 'org', name: 'Test', role: 'owner' }))).map(
-      (c) => c.id,
-    ),
+    (
+      await h.run(
+        managedCompanies('user', { id: 'org', name: 'Test', role: 'owner', customRoles: {} }),
+      )
+    ).map((c) => c.id),
   ).toEqual(['chain'])
-  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
+  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} }
   expect((await h.run(managedCompanies('boss', boss))).map((c) => c.id)).toEqual(['org'])
   expect(await fail(h.run(resolveFocus('boss', boss, 'chain')))).toContain('CompanyNotInScope')
 
@@ -207,7 +221,7 @@ test('revoking ends access at once; granting again brings the assignments back',
   await h.asBoss(
     assignStaff({ managedOrganizationId: 'org', staff: [{ userId: 'anna-m', role: null }] }),
   )
-  const member = { id: 'mgr', name: 'Förvaltning', role: 'member' }
+  const member = { id: 'mgr', name: 'Förvaltning', role: 'member', customRoles: {} }
 
   await h.run(revokeGrant(grantId))
   expect(await fail(h.run(resolveFocus('anna-m', member, 'org')))).toContain('CompanyNotInScope')
@@ -223,7 +237,7 @@ test('changing a grant applies on the next request; only the managed company can
   const h = setup()
   const { grantId } = await grantAccess(h)
   await h.run(updateGrant({ grantId, levels: finance }))
-  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
+  const boss = { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} }
   expect((await h.run(resolveFocus('boss', boss, 'org'))).grant).toEqual(grantPresets.finance)
 
   const none = levelsFromGrant({})
@@ -262,7 +276,7 @@ test('only the manager’s own members can be assigned, to companies it manages'
 
 test('domain programs follow the grant and the role in a managed company; the team stays private', async () => {
   const h = setup()
-  const home = { id: 'mgr', name: 'Förvaltning', role: 'owner' }
+  const home = { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} }
   const as = (role: string, grant: typeof grantPresets.full) =>
     h.runAs({ user: 'boss', home, organization: { id: 'org', name: 'Test', role, grant } })
   const property = {
@@ -297,7 +311,10 @@ test('the manager can end its own access; the client sees it in its log', async 
   const h = setup()
   const { grantId } = await grantAccess(h)
   // Only the manager's own grants, and only from its own company.
-  const asOther = h.runAs({ user: 'stranger', home: { id: 'other', name: 'Annat', role: 'owner' } })
+  const asOther = h.runAs({
+    user: 'stranger',
+    home: { id: 'other', name: 'Annat', role: 'owner', customRoles: {} },
+  })
   expect(await fail(asOther(endClient(grantId)))).toContain('NotFound')
 
   await h.asBoss(endClient(grantId))
@@ -350,7 +367,7 @@ test("the log lists what other companies' staff did, not the company's own chang
   // A manager can't read the client's log from inside it.
   const managed = h.runAs({
     user: 'boss',
-    home: { id: 'mgr', name: 'Förvaltning', role: 'owner' },
+    home: { id: 'mgr', name: 'Förvaltning', role: 'owner', customRoles: {} },
     organization: { id: 'org', name: 'Test', role: 'owner', grant: grantPresets.full },
   })
   expect(await fail(managed(managerActivity))).toContain('Forbidden')
@@ -374,7 +391,39 @@ test('all companies: each company with the permissions that apply there', async 
   // A member who isn't assigned sees only their own company.
   const asAnna = h.runAs({
     user: 'anna-m',
-    home: { id: 'mgr', name: 'Förvaltning', role: 'member' },
+    home: { id: 'mgr', name: 'Förvaltning', role: 'member', customRoles: {} },
   })
   expect((await asAnna(portfolio)).companies.map((c) => c.name)).toEqual(['Förvaltning'])
+})
+
+test('an assignment can use one of the manager’s own roles, capped by the grant', async () => {
+  const h = setup()
+  await grantAccess(h, finance)
+  const customRoles = {
+    ekonom: { invoice: ['read', 'manage'], lease: ['read', 'manage'] },
+  } as const satisfies CustomRoles
+  const asBoss = h.runAs({ user: 'boss', home: { ...h.mgrHome, customRoles } })
+  await asBoss(
+    assignStaff({ managedOrganizationId: 'org', staff: [{ userId: 'anna-m', role: 'ekonom' }] }),
+  )
+  expect(
+    await fail(
+      asBoss(
+        assignStaff({
+          managedOrganizationId: 'org',
+          staff: [{ userId: 'anna-m', role: 'kassör' }],
+        }),
+      ),
+    ),
+  ).toContain('Rollen finns inte')
+
+  const home = { id: 'mgr', name: 'Förvaltning', role: 'member', customRoles }
+  const focus = await h.run(resolveFocus('anna-m', home, 'org'))
+  expect(focus).toMatchObject({ role: 'ekonom', grant: grantPresets.finance })
+  const asAnna = h.runAs({ user: 'anna-m', home, organization: focus })
+  // Avier: the role and the grant allow it. Leases: the role does, the finance grant doesn't.
+  expect(await asAnna(hasPermission({ invoice: ['manage'] }))).toBe(true)
+  expect(await asAnna(hasPermission({ lease: ['manage'] }))).toBe(false)
+  expect(await asAnna(hasPermission({ lease: ['read'] }))).toBe(true)
+  expect(await asAnna(hasPermission({ payment: ['read'] }))).toBe(false)
 })
