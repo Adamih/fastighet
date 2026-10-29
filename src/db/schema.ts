@@ -20,6 +20,7 @@ import { invoiceIntervals, tenantKinds } from '#/features/leases/options'
 import { ledgerAccounts, postingKinds } from '#/features/ledger/kinds'
 import { paymentStatuses } from '#/features/payments/matching'
 import { unitKinds } from '#/features/properties/unit-kinds'
+import { feeWaivers } from '#/features/reminders/rules'
 import { companyKinds } from '#/features/settings/company-kinds'
 import { organization, user } from './auth-schema'
 
@@ -475,6 +476,10 @@ export const organizationSettings = sqliteTable('organization_settings', {
   reminderFeeOre: integer('reminder_fee_ore'),
   reminderIntervalDays: integer('reminder_interval_days').notNull().default(10),
   reminderDueDays: integer('reminder_due_days').notNull().default(10),
+  // Waive an avi's reminder fee when the avi itself is paid by the reminder's due date.
+  waiveReminderFeeByDueDate: integer('waive_reminder_fee_by_due_date', { mode: 'boolean' })
+    .notNull()
+    .default(false),
   // Bookkeeping: the month the financial year starts (1 = January), and the company's own
   // account numbers for the SIE export as JSON; unset ones are BAS (`features/bookkeeping`).
   financialYearStartMonth: integer('financial_year_start_month').notNull().default(1),
@@ -664,6 +669,9 @@ export const paymentReminder = sqliteTable(
     // What the reminder asked for, fee included, and the fee.
     owedOre: integer('owed_ore').notNull(),
     feeOre: integer('fee_ore').notNull().default(0),
+    // When and why the fee was waived (`features/reminders/rules.ts`); its posting is reversed.
+    feeWaivedOn: text('fee_waived_on'),
+    feeWaiver: text('fee_waiver', { enum: feeWaivers }),
     recipientEmail: text('recipient_email').notNull(),
     createdAt: createdAt(),
   },

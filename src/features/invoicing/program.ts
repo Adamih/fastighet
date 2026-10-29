@@ -33,6 +33,7 @@ import {
   reversalStatements,
 } from '#/features/ledger/program'
 import { undoPaymentStatements } from '#/features/payments/program'
+import { feeWaiverStatements, standingFees } from '#/features/reminders/waivers'
 import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
@@ -509,7 +510,20 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
     if (input.paidOn > (yield* today)) {
       return yield* new Conflict({ message: 'Betaldatum kan inte vara i framtiden' })
     }
-    // A payment by hand settles what is still owed, straight from the bank.
+    // A payment by hand settles what is still owed, straight from the bank. When paying the avi
+    // without its reminder fee waives the fee (paid before the reminder, or by its due date if
+    // the company waives it then), the payer paid only the avi.
+    const fee = (yield* standingFees([inv.id])).get(inv.id)
+    const withoutFee = inv.owedOre - (fee?.reminder.feeOre ?? 0)
+    const waive =
+      fee && withoutFee > 0
+        ? (yield* feeWaiverStatements(
+            new Map([
+              [inv.id, [{ kind: 'manual_payment', date: input.paidOn, amountOre: -withoutFee }]],
+            ]),
+          )).get(inv.id)
+        : undefined
+    const amountOre = waive ? withoutFee : inv.owedOre
     yield* orgQuery((db, organizationId) =>
       db.batch([
         ...postingStatements(
@@ -521,9 +535,10 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
             description: `Betalning av avi ${inv.number}`,
             invoiceId: inv.id,
           },
-          manualPaymentEntries(inv.id, inv.owedOre),
+          manualPaymentEntries(inv.id, amountOre),
           { partyId: inv.partyId, agreementId: inv.agreementId },
         ),
+        ...(waive ? waive(db, organizationId) : []),
       ]),
     )
     return yield* getInvoice(inv.id)

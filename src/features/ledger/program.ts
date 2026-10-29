@@ -11,6 +11,7 @@ import {
   type EntryDraft,
   type InvoiceMoney,
   invoiceMoney,
+  type ReceivableEntry,
   reversal,
 } from './postings'
 
@@ -75,10 +76,9 @@ export function postingStatements(
   ] as const
 }
 
-/** What each avi's receivable entries add up to (see `invoiceMoney`). Avier with no entries owe nothing. */
-export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
+/** Each avi's receivable entries, with their posting's kind and date. */
+export const receivableEntriesFor = (invoiceIds: readonly string[]) =>
   Effect.gen(function* () {
-    const result = new Map<string, InvoiceMoney>()
     const rows: { invoiceId: string | null; kind: PostingKind; date: string; amountOre: number }[] =
       []
     for (const ids of chunks([...new Set(invoiceIds)])) {
@@ -104,9 +104,16 @@ export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
       )
     }
     const byInvoice = groupBy(rows, (r) => r.invoiceId ?? '')
-    for (const id of invoiceIds) result.set(id, invoiceMoney(byInvoice.get(id) ?? []))
-    return result
+    return new Map<string, ReceivableEntry[]>(invoiceIds.map((id) => [id, byInvoice.get(id) ?? []]))
   })
+
+/** What each avi's receivable entries add up to (see `invoiceMoney`). Avier with no entries owe nothing. */
+export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
+  Effect.map(
+    receivableEntriesFor(invoiceIds),
+    (entries) =>
+      new Map<string, InvoiceMoney>([...entries].map(([id, list]) => [id, invoiceMoney(list)])),
+  )
 
 /** Every avi's money in the company, for lists and overviews. */
 export const allInvoiceMoney = Effect.gen(function* () {
@@ -137,6 +144,7 @@ const reversedBy = alias(posting, 'reversed_by')
 export const livePostings = (filter: {
   kinds: readonly PostingKind[]
   invoiceId?: string
+  invoiceIds?: readonly string[]
   paymentIds?: readonly string[]
 }) =>
   Effect.gen(function* () {
@@ -153,6 +161,7 @@ export const livePostings = (filter: {
             isNull(posting.reversesPostingId),
             isNull(reversedBy.id),
             filter.invoiceId ? eq(posting.invoiceId, filter.invoiceId) : undefined,
+            filter.invoiceIds ? inArray(posting.invoiceId, [...filter.invoiceIds]) : undefined,
             filter.paymentIds ? inArray(posting.paymentId, [...filter.paymentIds]) : undefined,
           ),
         ),

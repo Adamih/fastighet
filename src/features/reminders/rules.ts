@@ -1,3 +1,4 @@
+import type { ReceivableEntry } from '#/features/ledger/postings'
 import { addDays, daysBetweenInclusive, maxDate, weekdayOnOrAfter } from '#/lib/dates'
 
 // Pure rules for payment reminders (påminnelser). Shared by the server (sending) and the UI
@@ -19,6 +20,8 @@ export interface ReminderSettings {
   readonly reminderIntervalDays: number
   /** Days the payer gets to pay a reminder. */
   readonly reminderDueDays: number
+  /** Waive the fee when the avi itself is paid by the reminder's due date. */
+  readonly waiveReminderFeeByDueDate: boolean
 }
 
 export type ReminderProblem = 'not_overdue' | 'nothing_owed' | 'too_soon' | 'no_email'
@@ -74,3 +77,50 @@ export const reminderDueDate = (
   today: string,
   settings: Pick<ReminderSettings, 'reminderDueDays'>,
 ) => weekdayOnOrAfter(addDays(today, settings.reminderDueDays))
+
+/**
+ * Why a reminder's fee was waived (its posting reversed):
+ * - `paid_before_reminder`: the money had arrived when the reminder went out (bank files are
+ *   imported after the fact), so the reminder shouldn't have been sent.
+ * - `paid_by_due_date`: the avi was paid by the reminder's due date, without the fee, and the
+ *   company waives it then (`waiveReminderFeeByDueDate`).
+ * - `by_hand`: someone waived it ("Stryk avgiften").
+ */
+export const feeWaivers = ['paid_before_reminder', 'paid_by_due_date', 'by_hand'] as const
+export type FeeWaiver = (typeof feeWaivers)[number]
+
+const total = (entries: readonly ReceivableEntry[]) => entries.reduce((s, e) => s + e.amountOre, 0)
+
+/**
+ * Whether a reminder's fee is waived without anyone asking, from the avi's receivable entries
+ * (the ones about to be written included). Settled money counts from its own date: a bank
+ * payment's booking date, a payment by hand's paid date.
+ * - What the avi owed apart from fees was settled on or before the day the reminder was sent:
+ *   the whole fee goes, paid or not.
+ * - If the company chose it: settled by the reminder's due date while the fee itself is still
+ *   wholly unpaid. A payer who paid the fee too keeps it paid.
+ */
+export function automaticFeeWaiver(
+  entries: readonly ReceivableEntry[],
+  reminder: { readonly sentOn: string; readonly dueDate: string; readonly feeOre: number },
+  settings: Pick<ReminderSettings, 'waiveReminderFeeByDueDate'>,
+): Exclude<FeeWaiver, 'by_hand'> | null {
+  const debt = entries.filter((e) => e.kind !== 'reminder')
+  const owedOn = (date: string) => total(debt.filter((e) => e.date <= date))
+  if (owedOn(reminder.sentOn) <= 0) return 'paid_before_reminder'
+  if (
+    settings.waiveReminderFeeByDueDate &&
+    owedOn(reminder.dueDate) <= 0 &&
+    total(entries) >= reminder.feeOre
+  ) {
+    return 'paid_by_due_date'
+  }
+  return null
+}
+
+/**
+ * What waiving a fee moves to the party's credit balance: the part of it already paid. `owedOre`
+ * is what the avi owes with the fee.
+ */
+export const waivedFeeToCredit = (owedOre: number, feeOre: number) =>
+  Math.max(0, feeOre - Math.max(0, owedOre))

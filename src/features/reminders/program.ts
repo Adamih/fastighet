@@ -5,7 +5,6 @@ import { getInvoice } from '#/features/invoicing/program'
 import { periodLabel } from '#/features/invoicing/rules'
 import { reminderFeeEntries, statusFromMoney } from '#/features/ledger/postings'
 import { allInvoiceMoney, postingStatements } from '#/features/ledger/program'
-import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -22,16 +21,11 @@ import {
   reminderFee,
   reminderProblem,
 } from './rules'
+import { reminderSettings, standingFees, waiveStatements } from './waivers'
 
 // Payment reminders (påminnelser): who can be reminded, and sending them. Sending changes what
 // an avi owes when there is a fee, so it needs invoice:manage.
 const manage: Permissions = { invoice: ['manage'] }
-
-const reminderSettings = Effect.map(loadCompanyDetails, (s) => ({
-  reminderFeeOre: s.reminderFeeOre,
-  reminderIntervalDays: s.reminderIntervalDays,
-  reminderDueDays: s.reminderDueDays,
-}))
 
 /**
  * Every overdue avi with what it owes, its reminders so far, and whether it can be reminded
@@ -176,4 +170,29 @@ export const sendReminders = (invoiceIds: readonly string[]) =>
       failed: failedInvoiceIds.length,
       failedInvoiceIds,
     }
+  })
+
+/**
+ * "Stryk avgiften": waives the avi's reminder fee. What the avi owes goes back to its own
+ * amount; what was already paid of the fee goes to the party's credit balance.
+ */
+export const waiveReminderFee = (invoiceId: string) =>
+  Effect.gen(function* () {
+    yield* requirePermission(manage)
+    const inv = yield* getInvoice(invoiceId)
+    const fee = (yield* standingFees([inv.id])).get(inv.id)
+    if (!fee) return yield* new Conflict({ message: 'Avin har ingen påminnelseavgift att stryka' })
+    const on = yield* today
+    yield* orgQuery((db, organizationId) => {
+      const [first, ...rest] = waiveStatements(
+        db,
+        organizationId,
+        inv.id,
+        fee,
+        'by_hand',
+        inv.owedOre,
+        on,
+      )
+      return db.batch([first, ...rest])
+    })
   })

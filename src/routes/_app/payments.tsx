@@ -34,6 +34,7 @@ import {
 import { allocationSummary } from '#/features/payments/matching'
 import type { listPayments } from '#/features/payments/program'
 import { type PaymentFilter, paymentFilters } from '#/features/payments/schemas'
+import { waiveReminderFeeFn } from '#/features/reminders/functions'
 import { formatSek } from '#/lib/money'
 import { m } from '#/paraglide/messages'
 
@@ -266,9 +267,64 @@ function PaymentStatusDetails({
           {allocationSummary(payment.allocations)}
         </span>
       )}
+      {payment.allocations.map(
+        (a) =>
+          a.invoiceId &&
+          a.feeLeftOre > 0 && (
+            <FeeLeft
+              key={a.invoiceId}
+              invoiceId={a.invoiceId}
+              number={a.number ?? 0}
+              feeOre={a.feeLeftOre}
+            />
+          ),
+      )}
       {payment.note && <span className="text-muted-foreground text-xs">{payment.note}</span>}
       {error && <span className="text-destructive text-xs">{error.message}</span>}
     </>
+  )
+}
+
+/**
+ * A payment settled an avi except for its reminder fee, e.g. paid from the avi rather than the
+ * reminder: say so, and let the fee be waived here.
+ */
+function FeeLeft({
+  invoiceId,
+  number,
+  feeOre,
+}: {
+  invoiceId: string
+  number: number
+  feeOre: number
+}) {
+  const canWaive = useCan()({ invoice: ['manage'] })
+  const queryClient = useQueryClient()
+  const waive = useMutation({
+    mutationFn: waiveReminderFeeFn,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['payments'] })
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    },
+  })
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span className="text-amber-700 dark:text-amber-300">
+        {m.payment_fee_left({ fee: formatSek(feeOre), number })}
+      </span>
+      {canWaive && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-11 sm:h-7"
+          disabled={waive.isPending}
+          onClick={() => waive.mutate({ data: { invoiceId } })}
+        >
+          {m.reminder_waive_fee()}
+        </Button>
+      )}
+      {waive.error && <span className="text-destructive">{waive.error.message}</span>}
+    </span>
   )
 }
 

@@ -52,6 +52,7 @@ export const UpdateCompanyDetailsInput = Schema.Struct({
       message: 'Ange 1–60 dagar',
     }),
   ),
+  waiveReminderFeeByDueDate: Schema.Boolean,
   pledgeFee: FeePercent('pledge_fee', 'Ange högst 1 % av prisbasbeloppet, eller lämna tomt'),
   transferFee: FeePercent('transfer_fee', 'Ange högst 2,5 % av prisbasbeloppet, eller lämna tomt'),
 })

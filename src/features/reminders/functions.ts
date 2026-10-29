@@ -5,7 +5,7 @@ import { audit } from '#/features/audit/actions'
 import { runApp } from '#/server/run'
 import { once } from '#/server/submission'
 import { validate } from '#/server/validate'
-import { reminderCandidates, sendReminder, sendReminders } from './program'
+import { reminderCandidates, sendReminder, sendReminders, waiveReminderFee } from './program'
 
 const requestId = Schema.optional(Schema.String.check(Schema.isMaxLength(100)))
 
@@ -37,6 +37,13 @@ export const sendRemindersFn = createServerFn({ method: 'POST' })
       once('sendReminders', data, { invoice: ['manage'] }, sendReminders(data.invoiceIds)),
       audit('reminder.send_many', null),
     ),
+  )
+
+// Waiving twice finds no fee the second time, so a retry is refused rather than repeated.
+export const waiveReminderFeeFn = createServerFn({ method: 'POST' })
+  .validator(validate(Schema.Struct({ invoiceId: Schema.String })))
+  .handler(({ data }) =>
+    runApp(waiveReminderFee(data.invoiceId), audit('reminder.waive_fee', data.invoiceId)),
   )
 
 export const reminderCandidatesQuery = () =>

@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { invoice, party, payment, paymentImport } from '#/db/schema'
+import type { ReceivableEntry } from '#/features/ledger/postings'
 import {
   allocationEntries,
   creditAllocationEntries,
@@ -9,12 +10,14 @@ import {
 } from '#/features/ledger/postings'
 import {
   creditBalances,
+  invoiceMoneyFor,
   livePostings,
   openAvierFor,
   paymentAllocations,
   postingStatements,
   reversalStatements,
 } from '#/features/ledger/program'
+import { feeWaiverStatements, type StandingFee, standingFees } from '#/features/reminders/waivers'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
@@ -89,6 +92,25 @@ function allocationStatements(
   })
 }
 
+/**
+ * What allocations will write on each avi's receivable, dated by the payments' booking dates,
+ * so reminder fees they make waived (`feeWaiverStatements`) can be waived in the same batch.
+ */
+function plannedEntries(
+  payments: readonly { bookingDate: string; allocations: readonly Allocation[] }[],
+) {
+  const planned = new Map<string, ReceivableEntry[]>()
+  for (const p of payments) {
+    for (const a of p.allocations) {
+      if (a.invoiceId === null) continue
+      const list = planned.get(a.invoiceId) ?? []
+      list.push({ kind: 'allocation', date: p.bookingDate, amountOre: -a.amountOre })
+      planned.set(a.invoiceId, list)
+    }
+  }
+  return planned
+}
+
 /** Number and owner of avier, for allocation postings and labels. */
 const aviOwners = (invoiceIds: readonly string[]) =>
   Effect.gen(function* () {
@@ -161,6 +183,19 @@ export const importPayments = (input: ImportPaymentsInput) =>
       ...[...named.values()].map((a) => a.id),
       ...[...open.values()].flat().map((a) => a.id),
     ])
+    // A fee a payment waives is waived with the last payment in the file that settles its avi.
+    const waivers = yield* feeWaiverStatements(
+      plannedEntries(fresh.map((p, i) => ({ ...p, allocations: results[i].allocations }))),
+    )
+    const lastSettling = new Map<string, number>()
+    results.forEach((r, i) => {
+      for (const a of r.allocations) if (a.invoiceId) lastSettling.set(a.invoiceId, i)
+    })
+    const waiverAt = new Map<number, string[]>()
+    for (const invoiceId of waivers.keys()) {
+      const last = lastSettling.get(invoiceId) ?? -1
+      waiverAt.set(last, [...(waiverAt.get(last) ?? []), invoiceId])
+    }
 
     const importId = crypto.randomUUID()
     yield* orgQuery((db, organizationId) =>
@@ -212,6 +247,9 @@ export const importPayments = (input: ImportPaymentsInput) =>
                 { partyId: match.partyId, agreementId: namedAvi.agreementId },
               )
             : []),
+          ...(waiverAt.get(i) ?? []).flatMap(
+            (invoiceId) => waivers.get(invoiceId)?.(db, organizationId) ?? [],
+          ),
         ]
       })
     yield* orgQuery(async (db, organizationId) => {
@@ -280,6 +318,16 @@ export const listPayments = (filter: PaymentFilter) =>
           ),
         )
       : new Map<string, { id: string; recipientName: string } & AviOwner>()
+    // Avier a payment settled except for their reminder fee, so it can be waived from here.
+    const settledIds = [...labels.keys()]
+    const fees =
+      settledIds.length > 0 ? yield* standingFees(settledIds) : new Map<string, StandingFee>()
+    const money = yield* invoiceMoneyFor([...fees.keys()])
+    const feeLeftOre = (invoiceId: string | null) => {
+      const fee = invoiceId ? fees.get(invoiceId) : undefined
+      const owedOre = invoiceId ? (money.get(invoiceId)?.owedOre ?? 0) : 0
+      return fee && owedOre > 0 && owedOre <= fee.reminder.feeOre ? owedOre : 0
+    }
     return rows.map((r) => {
       const { allocations, unallocatedOre } = allocated.get(r.id) ?? {
         allocations: [],
@@ -295,6 +343,8 @@ export const listPayments = (filter: PaymentFilter) =>
           ? allocations.map((a) => ({
               ...a,
               number: a.invoiceId ? (labels.get(a.invoiceId)?.number ?? 0) : undefined,
+              /** What is left on the avi when that is only (part of) its reminder fee. */
+              feeLeftOre: feeLeftOre(a.invoiceId),
             }))
           : [],
         invoice: first
@@ -440,6 +490,7 @@ export const assignPayment = (input: AssignPaymentInput) =>
     yield* requirePermission(book)
     const { p, payer, allocations, owners } = yield* planAssignment(input)
     const agreementId = [...owners.values()][0]?.agreementId ?? null
+    const waivers = yield* feeWaiverStatements(plannedEntries([{ ...p, allocations }]))
     yield* orgQuery((db, organizationId) => {
       const [first, ...rest] = [
         db
@@ -450,6 +501,7 @@ export const assignPayment = (input: AssignPaymentInput) =>
           partyId: payer.id,
           agreementId,
         }),
+        ...[...waivers.values()].flatMap((waive) => waive(db, organizationId)),
       ]
       return db.batch([first, ...rest])
     })

@@ -7,6 +7,7 @@ import {
   Check,
   CircleCheck,
   Copy,
+  Eraser,
   FilePen,
   FilePlus,
   type LucideIcon,
@@ -54,7 +55,8 @@ import { useReissueInvoiceDrawer } from '#/features/invoicing/reissue-form'
 import { periodLabel, vatNumberFor } from '#/features/invoicing/rules'
 import { daysUntil, inDays } from '#/features/leases/overview'
 import { PaymentStatusBadge } from '#/features/payments/components'
-import { sendReminderFn } from '#/features/reminders/functions'
+import { sendReminderFn, waiveReminderFeeFn } from '#/features/reminders/functions'
+import type { FeeWaiver } from '#/features/reminders/rules'
 import { documentTerms } from '#/features/settings/terminology'
 import { stockholmDate } from '#/lib/dates'
 import { formatSek, formatSekShort } from '#/lib/money'
@@ -291,26 +293,13 @@ function InvoicePage() {
               <Panel title={m.invoice_reminders()}>
                 <div>
                   {invoice.reminders.map((r) => (
-                    <PanelRow key={r.id}>
-                      <span className="grid min-w-0 gap-0.5">
-                        <span className="font-semibold">
-                          {m.invoice_reminder_title({ sequence: r.sequence })}
-                        </span>
-                        <span className="truncate text-muted-foreground">
-                          {m.invoice_reminder_meta({ date: r.sentOn, due: r.dueDate })}
-                        </span>
-                      </span>
-                      <span className="grid shrink-0 justify-items-end gap-0.5">
-                        <span className="font-semibold tabular-nums">
-                          {formatSekShort(r.owedOre)}
-                        </span>
-                        {r.feeOre > 0 && (
-                          <span className="text-muted-foreground text-xs">
-                            {m.invoice_reminder_fee({ fee: formatSekShort(r.feeOre) })}
-                          </span>
-                        )}
-                      </span>
-                    </PanelRow>
+                    <ReminderRow
+                      key={r.id}
+                      reminder={r}
+                      invoiceId={invoice.id}
+                      canWaive={canManage && invoice.status !== 'void'}
+                      onDone={onDone}
+                    />
                   ))}
                 </div>
               </Panel>
@@ -431,6 +420,98 @@ function ReplacementLink({ invoiceId, text }: { invoiceId: string; text: string 
 }
 
 /** What is owed and how to settle it. */
+const waiverLabels: Record<FeeWaiver, (inputs: { date: string }) => string> = {
+  paid_before_reminder: m.invoice_reminder_fee_waived_paid_before_reminder,
+  paid_by_due_date: m.invoice_reminder_fee_waived_paid_by_due_date,
+  by_hand: m.invoice_reminder_fee_waived_by_hand,
+}
+
+/** A reminder: when, what it asked for, its fee and whether it was waived ("Stryk avgiften"). */
+function ReminderRow({
+  reminder: r,
+  invoiceId,
+  canWaive,
+  onDone,
+}: {
+  reminder: InvoiceView['reminders'][number]
+  invoiceId: string
+  canWaive: boolean
+  onDone: () => Promise<void>
+}) {
+  const [confirming, setConfirming] = useState(false)
+  const waive = useMutation({
+    mutationFn: waiveReminderFeeFn,
+    onSuccess: async () => {
+      setConfirming(false)
+      await onDone()
+    },
+  })
+  const fee = formatSekShort(r.feeOre)
+  return (
+    <div className="grid gap-2">
+      <PanelRow>
+        <span className="grid min-w-0 gap-0.5">
+          <span className="font-semibold">
+            {m.invoice_reminder_title({ sequence: r.sequence })}
+          </span>
+          <span className="truncate text-muted-foreground">
+            {m.invoice_reminder_meta({ date: r.sentOn, due: r.dueDate })}
+          </span>
+        </span>
+        <span className="grid shrink-0 justify-items-end gap-0.5">
+          <span className="font-semibold tabular-nums">{formatSekShort(r.owedOre)}</span>
+          {r.feeOre > 0 && (
+            <span className={cn('text-muted-foreground text-xs', r.feeWaivedOn && 'line-through')}>
+              {m.invoice_reminder_fee({ fee })}
+            </span>
+          )}
+        </span>
+      </PanelRow>
+      {r.feeOre > 0 && r.feeWaivedOn && r.feeWaiver && (
+        <p className="text-muted-foreground text-xs">
+          {waiverLabels[r.feeWaiver]({ date: r.feeWaivedOn })}
+        </p>
+      )}
+      {r.feeOre > 0 && !r.feeWaivedOn && canWaive && (
+        <div className="grid gap-2 pb-2">
+          {confirming ? (
+            <>
+              <p className="text-sm">{m.reminder_waive_fee_confirm({ fee })}</p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="h-11 flex-1 sm:h-9"
+                  onClick={() => setConfirming(false)}
+                >
+                  {m.common_cancel()}
+                </Button>
+                <Button
+                  className="h-11 flex-1 sm:h-9"
+                  disabled={waive.isPending}
+                  onClick={() => waive.mutate({ data: { invoiceId } })}
+                >
+                  {m.reminder_waive_fee()}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-11 justify-self-start sm:h-8"
+              onClick={() => setConfirming(true)}
+            >
+              <Eraser aria-hidden="true" />
+              {m.reminder_waive_fee()}
+            </Button>
+          )}
+          {waive.error && <p className="text-destructive text-sm">{waive.error.message}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AmountPanel({
   invoice,
   today,
@@ -446,6 +527,9 @@ function AmountPanel({
   const [copied, setCopied] = useState(false)
   const pay = useMutation({ mutationFn: markInvoicePaidFn, onSuccess: onDone })
   const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
+  // All that is left is (part of) the reminder fee, which can be waived under Påminnelser.
+  const fee = invoice.reminders.find((r) => r.feeOre > 0 && !r.feeWaivedOn)
+  const feeLeft = fee !== undefined && invoice.owedOre <= fee.feeOre
   const days = daysUntil(today, invoice.dueDate)
   const status = {
     overdue: m.invoice_overdue_since({ days: -days }),
@@ -491,6 +575,9 @@ function AmountPanel({
               total: formatSekShort(invoice.totalOre - invoice.creditedOre),
             })}
           </span>
+        )}
+        {open && feeLeft && (
+          <span className="text-[13px] text-muted-foreground">{m.invoice_fee_left()}</span>
         )}
         {invoice.creditUsedOre > 0 && (
           <span className="text-[13px] text-muted-foreground">

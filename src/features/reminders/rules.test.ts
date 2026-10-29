@@ -1,10 +1,13 @@
-import { expect, test } from 'bun:test'
+import { describe, expect, test } from 'bun:test'
+import type { ReceivableEntry } from '#/features/ledger/postings'
 import {
+  automaticFeeWaiver,
   MAX_REMINDER_FEE_ORE,
   nextReminderOn,
   reminderDueDate,
   reminderFee,
   reminderProblem,
+  waivedFeeToCredit,
 } from './rules'
 
 const overdue = {
@@ -48,4 +51,65 @@ test('the fee is the agreed amount, at most 60 kr, and only once per avi', () =>
 test('the reminder is due after its payment term, on a weekday', () => {
   expect(reminderDueDate('2026-10-14', settings)).toBe('2026-10-26') // Saturday 24th → Monday
   expect(reminderDueDate('2026-10-12', settings)).toBe('2026-10-22')
+})
+
+describe('automatic fee waivers', () => {
+  // A 9 000 kr avi due 1 October, reminded on 11 October with a 60 kr fee, due 21 October.
+  const reminder = { sentOn: '2026-10-11', dueDate: '2026-10-21', feeOre: 6_000 }
+  const avi: ReceivableEntry[] = [
+    { kind: 'invoice', date: '2026-09-15', amountOre: 900_000 },
+    { kind: 'reminder', date: '2026-10-11', amountOre: 6_000 },
+  ]
+  const paid = (date: string, amountOre: number): ReceivableEntry => ({
+    kind: 'allocation',
+    date,
+    amountOre: -amountOre,
+  })
+  const off = { waiveReminderFeeByDueDate: false }
+  const on = { waiveReminderFeeByDueDate: true }
+
+  test('money booked by the day the reminder went out waives the fee, paid or not', () => {
+    expect(automaticFeeWaiver([...avi, paid('2026-10-09', 900_000)], reminder, off)).toBe(
+      'paid_before_reminder',
+    )
+    expect(automaticFeeWaiver([...avi, paid('2026-10-11', 900_000)], reminder, off)).toBe(
+      'paid_before_reminder',
+    )
+    // Two part payments that together had settled it.
+    expect(
+      automaticFeeWaiver(
+        [...avi, paid('2026-10-02', 400_000), paid('2026-10-10', 500_000)],
+        reminder,
+        off,
+      ),
+    ).toBe('paid_before_reminder')
+    expect(automaticFeeWaiver([...avi, paid('2026-10-12', 900_000)], reminder, off)).toBeNull()
+    // Only part had arrived: the reminder was right.
+    expect(
+      automaticFeeWaiver(
+        [...avi, paid('2026-10-10', 500_000), paid('2026-10-12', 400_000)],
+        reminder,
+        off,
+      ),
+    ).toBeNull()
+  })
+
+  test('paid by the reminder’s due date without the fee waives it, if the company chose so', () => {
+    const avierOnly = [...avi, paid('2026-10-20', 900_000)]
+    expect(automaticFeeWaiver(avierOnly, reminder, on)).toBe('paid_by_due_date')
+    expect(automaticFeeWaiver(avierOnly, reminder, off)).toBeNull()
+    expect(automaticFeeWaiver([...avi, paid('2026-10-21', 900_000)], reminder, on)).toBe(
+      'paid_by_due_date',
+    )
+    expect(automaticFeeWaiver([...avi, paid('2026-10-22', 900_000)], reminder, on)).toBeNull()
+    // Who paid the fee too keeps it paid.
+    expect(automaticFeeWaiver([...avi, paid('2026-10-20', 906_000)], reminder, on)).toBeNull()
+  })
+
+  test('what was paid of a waived fee goes to credit', () => {
+    expect(waivedFeeToCredit(6_000, 6_000)).toBe(0)
+    expect(waivedFeeToCredit(2_000, 6_000)).toBe(4_000)
+    expect(waivedFeeToCredit(0, 6_000)).toBe(6_000)
+    expect(waivedFeeToCredit(906_000, 6_000)).toBe(0)
+  })
 })

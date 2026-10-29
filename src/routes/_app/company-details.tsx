@@ -46,6 +46,7 @@ const toValues = (s: CompanyDetails) => ({
   reminderFee: s.reminderFeeOre === null ? '' : oreToInput(s.reminderFeeOre),
   reminderIntervalDays: String(s.reminderIntervalDays),
   reminderDueDays: String(s.reminderDueDays),
+  waiveReminderFeeByDueDate: s.waiveReminderFeeByDueDate,
   pledgeFee: s.pledgeFeeBasisPoints === null ? '' : formatFeePercent(s.pledgeFeeBasisPoints),
   transferFee: s.transferFeeBasisPoints === null ? '' : formatFeePercent(s.transferFeeBasisPoints),
 })
@@ -213,6 +214,15 @@ function CompanyDetailsPage() {
                 )}
               </form.AppField>
             </div>
+            <form.AppField name="waiveReminderFeeByDueDate">
+              {(field) => (
+                <field.SwitchField
+                  disabled={!canEdit}
+                  label={m.company_details_waive_reminder_fee()}
+                  description={m.company_details_waive_reminder_fee_description()}
+                />
+              )}
+            </form.AppField>
           </Section>
 
           <form.Subscribe selector={(s) => s.values.kind}>

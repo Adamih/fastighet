@@ -41,6 +41,7 @@ export const loadCompanyDetails = Effect.gen(function* () {
     reminderFeeOre: row?.reminderFeeOre ?? null,
     reminderIntervalDays: row?.reminderIntervalDays ?? DEFAULT_REMINDER_INTERVAL_DAYS,
     reminderDueDays: row?.reminderDueDays ?? DEFAULT_REMINDER_DUE_DAYS,
+    waiveReminderFeeByDueDate: row?.waiveReminderFeeByDueDate ?? false,
     pledgeFeeBasisPoints: row?.pledgeFeeBasisPoints ?? null,
     transferFeeBasisPoints: row?.transferFeeBasisPoints ?? null,
   }
@@ -89,6 +90,7 @@ export const updateCompanyDetails = (input: UpdateCompanyDetailsInput) =>
       reminderFeeOre: input.reminderFee.trim() ? parseSek(input.reminderFee) : null,
       reminderIntervalDays: Number(input.reminderIntervalDays),
       reminderDueDays: Number(input.reminderDueDays),
+      waiveReminderFeeByDueDate: input.waiveReminderFeeByDueDate,
       pledgeFeeBasisPoints: parseFeePercent(input.pledgeFee),
       transferFeeBasisPoints: parseFeePercent(input.transferFee),
     }

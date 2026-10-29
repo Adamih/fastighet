@@ -73,6 +73,7 @@ export const auditActions = {
   'unit.delete': action(m.audit_unit_delete),
   'reminder.send': action(m.audit_reminder_send, 'invoice'),
   'reminder.send_many': action(m.audit_reminder_send_many),
+  'reminder.waive_fee': action(m.audit_reminder_waive_fee, 'invoice'),
   'settings.update': action(m.audit_settings_update),
   'settings.kind': action(m.audit_settings_kind),
   'tenant.create': action(m.audit_tenant_create, 'party'),

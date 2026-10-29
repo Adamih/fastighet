@@ -71,6 +71,13 @@
       "when": 1793200500137,
       "tag": "0009_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793284457773,
+      "tag": "0010_reminder_fee_waivers",
+      "breakpoints": true
     }
   ]
 }

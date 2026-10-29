@@ -1,9 +1,17 @@
 import { expect, test } from 'bun:test'
-import { createInvoiceRun, getInvoice, listInvoices } from '#/features/invoicing/program'
+import { partyAccount } from '#/features/accounts/program'
+import {
+  createInvoiceRun,
+  getInvoice,
+  listInvoices,
+  markInvoicePaid,
+} from '#/features/invoicing/program'
 import { createLease } from '#/features/leases/program'
+import { buildCamt054 } from '#/features/payments/camt054-builder'
+import { importPayments, listPayments } from '#/features/payments/program'
 import { addDays, addMonths, stockholmDate } from '#/lib/dates'
 import { fail, harness } from '#/test/harness'
-import { reminderCandidates, sendReminder, sendReminders } from './program'
+import { reminderCandidates, sendReminder, sendReminders, waiveReminderFee } from './program'
 
 const today = stockholmDate(Date.now())
 
@@ -69,4 +77,112 @@ test('sending in bulk reports what failed without stopping the rest', async () =
   const id = await overdueAvi(h)
   const result = await h.run(sendReminders([id, 'missing']))
   expect(result).toMatchObject({ sent: 1, failed: 1, failedInvoiceIds: ['missing'] })
+})
+
+let file = 0
+/** Imports a bank file with one payment to `ocr`, booked on `bookingDate`. */
+const pay = (h: ReturnType<typeof harness>, ocr: string, amountOre: number, bookingDate: string) =>
+  h.run(
+    importPayments({
+      fileName: 'b.xml',
+      content: buildCamt054({
+        messageId: `MSG-${++file}`,
+        bankgiro: '9900002',
+        payments: [{ bookingDate, amountOre, ocr, bankReference: `REF-${file}` }],
+      }),
+    }),
+  )
+
+/** An overdue avi reminded today with the 60 kr fee. */
+async function reminded(h: ReturnType<typeof harness>) {
+  const id = await overdueAvi(h)
+  await h.run(sendReminder(id))
+  return h.run(getInvoice(id))
+}
+
+/** Moves the reminder (and the avi, issued before it) `days` back. */
+function remindedDaysAgo(h: ReturnType<typeof harness>, days: number) {
+  h.sqlite.exec(`
+    UPDATE payment_reminder SET sent_on = '${addDays(today, -days)}';
+    UPDATE posting SET date = '${addDays(today, -days)}' WHERE kind = 'reminder';
+    UPDATE posting SET date = '${addDays(today, -40)}' WHERE kind = 'invoice';
+  `)
+}
+
+test('a payment booked before the reminder went out, imported after, waives its fee', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  await pay(h, avi.ocr, 900_000, addDays(today, -2))
+  const after = await h.run(getInvoice(avi.id))
+  expect(after).toMatchObject({ status: 'paid', owedOre: 0, paidOre: 900_000 })
+  expect(after.reminders[0]).toMatchObject({
+    feeWaivedOn: today,
+    feeWaiver: 'paid_before_reminder',
+  })
+  // The fee's posting is reversed, so it isn't income either.
+  const income = h.sqlite
+    .query(
+      "SELECT sum(amount_ore) AS ore FROM ledger_entry WHERE account = 'income' AND charge_kind = 'reminder_fee'",
+    )
+    .get() as { ore: number }
+  expect(income.ore).toBe(0)
+})
+
+test('the same payment by hand, dated before the reminder, pays the avi without the fee', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  const after = await h.run(markInvoicePaid({ invoiceId: avi.id, paidOn: addDays(today, -1) }))
+  expect(after).toMatchObject({ status: 'paid', owedOre: 0, paidOre: 900_000 })
+  expect(after.reminders[0]?.feeWaiver).toBe('paid_before_reminder')
+})
+
+test('paying the avi but not the fee after the reminder leaves the fee, which can be waived', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  await pay(h, avi.ocr, 900_000, today)
+  // Booked the day the reminder went out: it may have crossed the reminder, so the fee goes.
+  expect((await h.run(getInvoice(avi.id))).reminders[0]?.feeWaiver).toBe('paid_before_reminder')
+
+  const h2 = harness()
+  const avi2 = await reminded(h2)
+  remindedDaysAgo(h2, 3)
+  await pay(h2, avi2.ocr, 900_000, today)
+  const left = await h2.run(getInvoice(avi2.id))
+  expect(left).toMatchObject({ status: 'overdue', owedOre: 6_000 })
+  expect(left.reminders[0]?.feeWaivedOn).toBeNull()
+  const [payment] = await h2.run(listPayments('matched'))
+  expect(payment.allocations).toEqual([
+    expect.objectContaining({ invoiceId: avi2.id, amountOre: 900_000, feeLeftOre: 6_000 }),
+  ])
+
+  await h2.run(waiveReminderFee(avi2.id))
+  const waived = await h2.run(getInvoice(avi2.id))
+  expect(waived).toMatchObject({ status: 'paid', owedOre: 0 })
+  expect(waived.reminders[0]).toMatchObject({ feeWaivedOn: today, feeWaiver: 'by_hand' })
+  expect(await fail(h2.run(waiveReminderFee(avi2.id)))).toContain('ingen påminnelseavgift')
+  const [listed] = await h2.run(listPayments('matched'))
+  expect(listed.allocations[0]?.feeLeftOre).toBe(0)
+})
+
+test('a company can waive the fee when the avi is paid by the reminder’s due date', async () => {
+  const h = harness()
+  h.sqlite.exec('UPDATE organization_settings SET waive_reminder_fee_by_due_date = 1')
+  const avi = await reminded(h)
+  remindedDaysAgo(h, 3)
+  await pay(h, avi.ocr, 900_000, today)
+  const after = await h.run(getInvoice(avi.id))
+  expect(after).toMatchObject({ status: 'paid', owedOre: 0 })
+  expect(after.reminders[0]?.feeWaiver).toBe('paid_by_due_date')
+})
+
+test('waiving a fee that was already paid moves it to the payer’s credit', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  remindedDaysAgo(h, 3)
+  await pay(h, avi.ocr, 906_000, today)
+  expect((await h.run(getInvoice(avi.id))).status).toBe('paid')
+  await h.run(waiveReminderFee(avi.id))
+  const after = await h.run(getInvoice(avi.id))
+  expect(after).toMatchObject({ status: 'paid', owedOre: 0, toCreditOre: 6_000 })
+  expect((await h.run(partyAccount('anna'))).creditOre).toBe(6_000)
 })

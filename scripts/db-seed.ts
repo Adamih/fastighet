@@ -61,6 +61,7 @@ import {
   addMonths,
   endOfMonth,
   lastWeekdayBefore,
+  minDate,
   stockholmDate,
   weekdayOnOrAfter,
 } from '#/lib/dates'
@@ -127,8 +128,11 @@ function seedReminders(
   }[],
   settings: ReminderSettings,
   today: string,
+  /** How many fees someone waived by hand ("Stryk avgiften"), two days after the reminder. */
+  waivedByHand = 0,
 ) {
   const rows: (typeof schema.paymentReminder.$inferInsert)[] = []
+  let waived = 0
   for (const inv of invoices) {
     if (!inv.recipientEmail || inv.owedOre <= 0) continue
     const sent: { sentOn: string; feeOre: number }[] = []
@@ -138,6 +142,8 @@ function seedReminders(
       const on = weekdayOnOrAfter(nextReminderOn(inv.dueDate, sent, settings))
       if (on > today) break
       const feeOre = reminderFee(settings, sent)
+      const waivedOn = feeOre > 0 && waived < waivedByHand ? minDate(addDays(on, 2), today) : null
+      if (waivedOn) waived++
       owed += feeOre
       sent.push({ sentOn: on, feeOre })
       rows.push({
@@ -149,19 +155,32 @@ function seedReminders(
         dueDate: reminderDueDate(on, settings),
         owedOre: owed,
         feeOre,
+        feeWaivedOn: waivedOn,
+        feeWaiver: waivedOn ? 'by_hand' : null,
         recipientEmail: inv.recipientEmail,
       })
       if (feeOre > 0) {
-        ledger.post(
-          {
-            date: on,
-            kind: 'reminder',
-            description: `Påminnelseavgift, avi ${inv.number}`,
-            invoiceId: inv.id,
-          },
+        const owner = { partyId: inv.partyId, agreementId: inv.agreementId }
+        const description = `Påminnelseavgift, avi ${inv.number}`
+        const feePostingId = ledger.post(
+          { date: on, kind: 'reminder', description, invoiceId: inv.id },
           reminderFeeEntries(inv.id, feeOre),
-          { partyId: inv.partyId, agreementId: inv.agreementId },
+          owner,
         )
+        if (waivedOn) {
+          owed -= feeOre
+          ledger.post(
+            {
+              date: waivedOn,
+              kind: 'reminder',
+              description: `Struken: ${description}`,
+              invoiceId: inv.id,
+              reversesPostingId: feePostingId,
+            },
+            reversal(reminderFeeEntries(inv.id, feeOre)),
+            owner,
+          )
+        }
       }
     }
   }
@@ -1379,8 +1398,14 @@ async function seed() {
         recipientEmail: i.recipientEmail ?? null,
         owedOre: i.totalOre - (i.creditedOre ?? 0) - (i.creditUsedOre ?? 0),
       })),
-    { reminderFeeOre: 6_000, reminderIntervalDays: 10, reminderDueDays: 10 },
+    {
+      reminderFeeOre: 6_000,
+      reminderIntervalDays: 10,
+      reminderDueDays: 10,
+      waiveReminderFeeByDueDate: false,
+    },
     today,
+    1,
   )
   await ledger.write()
   await insertAll(schema.paymentReminder, reminders)
@@ -2035,7 +2060,12 @@ async function seedBrf() {
         recipientEmail: i.recipientEmail ?? null,
         owedOre: i.totalOre,
       })),
-    { reminderFeeOre: null, reminderIntervalDays: 10, reminderDueDays: 10 },
+    {
+      reminderFeeOre: null,
+      reminderIntervalDays: 10,
+      reminderDueDays: 10,
+      waiveReminderFeeByDueDate: false,
+    },
     today,
   )
   await ledger.write()
