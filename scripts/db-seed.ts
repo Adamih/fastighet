@@ -219,7 +219,7 @@ try {
     process.exitCode = 1
   } else {
     const landlord = await seed()
-    const brf = await seedBrf()
+    const brf = await seedBrf(landlord.tenantUserId)
     await seedManager(landlord, brf)
     await seedAdmin()
   }
@@ -1538,7 +1538,7 @@ async function seed() {
   data       ${Object.keys(properties).length} properties, ${Object.keys(units).length} units, ${Object.keys(tenants).length} tenants, ${leases.length} leases
   invoices   ${invoices.length} (${open.length} open), ${creditNotes.length} credit notes
   payments   ${payments.length} in ${imports.size} bank files (${payments.filter((p) => p.status !== 'matched').length} need attention or ignored)`)
-  return { id: org.id, ownerId: owner.id }
+  return { id: org.id, ownerId: owner.id, tenantUserId: tenantUser.id }
 }
 
 /**
@@ -1566,7 +1566,7 @@ async function seedAdmin() {
   login      ${admin.email} (the admin dashboard is at /admin)`)
 }
 
-async function seedBrf() {
+async function seedBrf(tenantUserId: string) {
   const today = stockholmDate(Date.now())
   const thisMonth = `${today.slice(0, 7)}-01`
   const now = new Date()
@@ -1689,7 +1689,8 @@ async function seedBrf() {
     'Mats Wik',
     'Rut Åberg',
     'Nils Åberg',
-    'Tove Lindgren',
+    // The board login's own bostadsrätt: one account, in the app and in Mina sidor.
+    'Siv Styrelse',
     'Elsa Strand',
     'Viktor Strand',
   ]
@@ -1709,6 +1710,26 @@ async function seedBrf() {
     city: 'Uppsala',
   }
   await insertAll(schema.party, [...Object.values(members), salonOwner])
+
+  // --- Mina sidor: the board login also has its own bostadsrätt (Siv Styrelse) in the portal,
+  // and Anna, a tenant of Exempel Fastigheter, does the salon's books, so she reaches two
+  // companies there.
+  await db.insert(schema.partyAccess).values([
+    {
+      id: id(),
+      organizationId: orgId,
+      partyId: members['Siv Styrelse'].id,
+      userId: board.id,
+      createdAt: now,
+    },
+    {
+      id: id(),
+      organizationId: orgId,
+      partyId: salonOwner.id,
+      userId: tenantUserId,
+      createdAt: now,
+    },
+  ])
 
   // Andelstal by living area; the fee pool is split by it (rounded to whole kronor a month).
   const totalArea = flats.reduce((sum, f) => sum + (f.areaSqm ?? 0), 0)
@@ -1830,7 +1851,7 @@ async function seedBrf() {
   const sold = owned(f1103, [['Ida Karlsson', 100]], '2018-02-01', { endDate: addDays(soldOn, -1) })
   owned(f1201, couple('Axel Nyström', 'Sanna Nyström'), '2021-08-01')
   owned(f1202, couple('Rut Åberg', 'Nils Åberg'), '2010-04-01')
-  owned(f1203, [['Tove Lindgren', 100]], '2023-01-01')
+  owned(f1203, [['Siv Styrelse', 100]], '2023-01-01')
   owned(f1301, couple('Elsa Strand', 'Viktor Strand'), '2017-10-01')
   const wik = owned(f1103, [['Mats Wik', 100]], soldOn, { previousAgreementId: sold.id })
 
@@ -2170,7 +2191,7 @@ async function seedBrf() {
   await insertAll(schema.paymentReminder, reminders.rows)
 
   console.log(`Seeded ${org.name} (BRF):
-  login      ${board.email} (owner)
+  login      ${board.email} (owner; also Mina sidor for Siv Styrelse's bostadsrätt)
   data       ${agreements.length - 1} bostadsrätter for ${flats.length} flats (one sold), 1 lease, ${names.length} members
   invoices   ${invoices.length}, payments ${payments.length}`)
   return { id: orgId, ownerId: board.id }

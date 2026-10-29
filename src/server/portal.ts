@@ -109,3 +109,26 @@ export async function runPortal<A, E>(
   if (Exit.isSuccess(exit)) return exit.value
   throw toPortalThrowable(exit.cause)
 }
+
+/**
+ * Mina sidor's layout context: the person, the companies they reach and the company in focus
+ * (null when they no longer have access anywhere, which the layout explains).
+ */
+export async function portalContext() {
+  const exit = await appRuntime.runPromiseExit(
+    Effect.gen(function* () {
+      const context = yield* loadPortalContext
+      const company =
+        context.companies.length === 0
+          ? null
+          : yield* focusPortalCompany(context.companies, requestedCompany())
+      return {
+        user: context.user,
+        companies: context.companies.map((c) => ({ id: c.id, name: c.name, kind: c.kind })),
+        company,
+      }
+    }),
+  )
+  if (Exit.isSuccess(exit)) return exit.value
+  throw toPortalThrowable(exit.cause)
+}

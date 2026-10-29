@@ -37,6 +37,7 @@ import { Route as InvitationsInvitationIdRouteImport } from './routes/invitation
 import { Route as PortalPortalRouteImport } from './routes/portal/_portal'
 import { Route as PortalInvitationRouteImport } from './routes/portal/invitation'
 import { Route as PortalLoginRouteImport } from './routes/portal/login'
+import { Route as PortalSignOutRouteImport } from './routes/portal/sign-out'
 import { Route as AppAccountPathRouteImport } from './routes/_app/account/$path'
 import { Route as AppCreditNotesCreditNoteIdRouteImport } from './routes/_app/credit-notes/$creditNoteId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
@@ -197,6 +198,11 @@ const PortalLoginRoute = PortalLoginRouteImport.update({
   path: '/portal/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalSignOutRoute = PortalSignOutRouteImport.update({
+  id: '/portal/sign-out',
+  path: '/portal/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAccountPathRoute = AppAccountPathRouteImport.update({
   id: '/account/$path',
   path: '/account/$path',
@@ -330,6 +336,7 @@ export interface FileRoutesByFullPath {
   '/portal': typeof PortalPortalRouteWithChildren
   '/portal/invitation': typeof PortalInvitationRoute
   '/portal/login': typeof PortalLoginRoute
+  '/portal/sign-out': typeof PortalSignOutRoute
   '/admin/': typeof AdminIndexRoute
   '/account/$path': typeof AppAccountPathRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
@@ -376,6 +383,7 @@ export interface FileRoutesByTo {
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
   '/portal/invitation': typeof PortalInvitationRoute
   '/portal/login': typeof PortalLoginRoute
+  '/portal/sign-out': typeof PortalSignOutRoute
   '/': typeof AppIndexRoute
   '/admin': typeof AdminIndexRoute
   '/account/$path': typeof AppAccountPathRoute
@@ -427,6 +435,7 @@ export interface FileRoutesById {
   '/portal/_portal': typeof PortalPortalRouteWithChildren
   '/portal/invitation': typeof PortalInvitationRoute
   '/portal/login': typeof PortalLoginRoute
+  '/portal/sign-out': typeof PortalSignOutRoute
   '/_app/': typeof AppIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/_app/account/$path': typeof AppAccountPathRoute
@@ -479,6 +488,7 @@ export interface FileRouteTypes {
     | '/portal'
     | '/portal/invitation'
     | '/portal/login'
+    | '/portal/sign-out'
     | '/admin/'
     | '/account/$path'
     | '/credit-notes/$creditNoteId'
@@ -525,6 +535,7 @@ export interface FileRouteTypes {
     | '/invitations/$invitationId'
     | '/portal/invitation'
     | '/portal/login'
+    | '/portal/sign-out'
     | '/'
     | '/admin'
     | '/account/$path'
@@ -575,6 +586,7 @@ export interface FileRouteTypes {
     | '/portal/_portal'
     | '/portal/invitation'
     | '/portal/login'
+    | '/portal/sign-out'
     | '/_app/'
     | '/admin/'
     | '/_app/account/$path'
@@ -617,6 +629,7 @@ export interface RootRouteChildren {
   PortalPortalRoute: typeof PortalPortalRouteWithChildren
   PortalInvitationRoute: typeof PortalInvitationRoute
   PortalLoginRoute: typeof PortalLoginRoute
+  PortalSignOutRoute: typeof PortalSignOutRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -816,6 +829,13 @@ declare module '@tanstack/react-router' {
       path: '/portal/login'
       fullPath: '/portal/login'
       preLoaderRoute: typeof PortalLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/sign-out': {
+      id: '/portal/sign-out'
+      path: '/portal/sign-out'
+      fullPath: '/portal/sign-out'
+      preLoaderRoute: typeof PortalSignOutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/account/$path': {
@@ -1066,6 +1086,7 @@ const rootRouteChildren: RootRouteChildren = {
   PortalPortalRoute: PortalPortalRouteWithChildren,
   PortalInvitationRoute: PortalInvitationRoute,
   PortalLoginRoute: PortalLoginRoute,
+  PortalSignOutRoute: PortalSignOutRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
