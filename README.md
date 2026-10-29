@@ -41,7 +41,7 @@ Login (`/login`), signup (`/sign-up`), email verification and password recovery 
 
 Run `mise tasks` to list all tasks. Every package script has a matching mise task; the underlying Bun scripts remain available. `mise run setup` preserves an existing `.dev.vars` and creates a random `BETTER_AUTH_SECRET` only when that file is missing.
 
-`bun install` also installs the Husky Git hooks. Before each commit, `bun run check:fix` runs Biome's formatting and safe fixes across the project, using the exclusions in `biome.json`. Remaining errors block the commit. Fixes stay in the working tree; stage them to include them in a commit.
+`bun install` also installs the Husky Git hooks. Before each commit, lint-staged runs `bun run check:fix` on staged files, using the exclusions in `biome.json`. Formatting and safe fixes are staged automatically; remaining errors block the commit. Unstaged edits in partially staged files are temporarily hidden and restored afterwards. Keep lint-staged's default backup and partial-staging protection enabled. `bun run check` and `bun run check:fix` still check the whole project when run directly.
 
 | Task | What it does |
 |---|---|
