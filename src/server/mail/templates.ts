@@ -8,6 +8,7 @@ import PortalInvitation, * as portalInvitation from '#/emails/PortalInvitation'
 import RentAdjustment, * as rentAdjustment from '#/emails/RentAdjustment'
 import RentInvoice, * as rentInvoice from '#/emails/RentInvoice'
 import ResetPassword, * as resetPassword from '#/emails/ResetPassword'
+import SignInCode, * as signInCode from '#/emails/SignInCode'
 import VerifyEmail, * as verifyEmail from '#/emails/VerifyEmail'
 
 // Every sendable email, by name. Each template file exports a default component, its `Props`
@@ -16,6 +17,7 @@ import VerifyEmail, * as verifyEmail from '#/emails/VerifyEmail'
 export const templates = {
   verifyEmail: { Component: VerifyEmail, subject: verifyEmail.subject },
   resetPassword: { Component: ResetPassword, subject: resetPassword.subject },
+  signInCode: { Component: SignInCode, subject: signInCode.subject },
   confirmEmailChange: { Component: ConfirmEmailChange, subject: confirmEmailChange.subject },
   organizationInvitation: {
     Component: OrganizationInvitation,

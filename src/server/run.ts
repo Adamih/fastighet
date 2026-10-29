@@ -8,11 +8,18 @@ import type { Audit } from '#/features/audit/actions'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
+import { sessionWorkspace } from '#/lib/workspace'
 import { m } from '#/paraglide/messages'
 import { inCompany } from '#/server/scoped'
 import { recordAudit } from './audit'
 import { requireCustomerSession } from './customer-access'
-import { DatabaseError, isAppError, NoActiveOrganization, Unauthenticated } from './errors'
+import {
+  DatabaseError,
+  isAppError,
+  NoActiveOrganization,
+  Unauthenticated,
+  WrongWorkspace,
+} from './errors'
 import { customRolesOf, resolveFocus } from './focus'
 import { appRuntime } from './live'
 import { query } from './scoped'
@@ -60,6 +67,10 @@ const impersonator = (adminId: string | null | undefined) =>
 const loadRequestContext = Effect.gen(function* () {
   const session = yield* getSession
   if (!session) return yield* new Unauthenticated()
+  // A Mina sidor session never reaches the app, even for a user who is also a member.
+  if (sessionWorkspace(session.session) !== 'staff') {
+    return yield* new WrongWorkspace({ wanted: 'staff' })
+  }
 
   // Staff never enter a customer company under their own account, even with a membership.
   yield* requireCustomerSession(session)
@@ -127,6 +138,8 @@ export function toThrowable(cause: Cause.Cause<unknown>): unknown {
         return appError('forbidden', m.form_error_forbidden())
       case 'Conflict':
         return appError('conflict', e.message)
+      case 'WrongWorkspace':
+        return redirect({ to: e.wanted === 'portal' ? '/portal/login' : '/login' })
       case 'DatabaseError':
         break
       default:

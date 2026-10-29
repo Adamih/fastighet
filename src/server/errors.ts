@@ -31,6 +31,14 @@ export class DatabaseError extends Data.TaggedError('DatabaseError')<{ readonly 
 export class UncertainSubmission extends Data.TaggedError('UncertainSubmission') {}
 
 /**
+ * The session belongs to the other workspace (`src/lib/workspace.ts`): a Mina sidor session in the
+ * app, or the reverse. `wanted` is the workspace asked for; its login page explains.
+ */
+export class WrongWorkspace extends Data.TaggedError('WrongWorkspace')<{
+  readonly wanted: 'staff' | 'portal'
+}> {}
+
+/**
  * Every error above. `toThrowable` (run.ts) maps each one exhaustively, so a new error class goes
  * here too; a missing one fails `errors.test.ts`.
  */
@@ -44,6 +52,7 @@ export const appErrors = [
   Conflict,
   DatabaseError,
   UncertainSubmission,
+  WrongWorkspace,
 ] as const
 
 export type AppError = InstanceType<(typeof appErrors)[number]>

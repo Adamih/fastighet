@@ -18,6 +18,8 @@ export const Route = createFileRoute('/onboarding')({
   beforeLoad: async () => {
     const session = await getSessionFn()
     if (!session) throw redirect({ to: '/login' })
+    // Mina sidor sessions never start a company; the login page says how to switch.
+    if (session.workspace === 'portal') throw redirect({ to: '/login' })
     // Fastighet staff belong in the admin dashboard, even if they have a company membership.
     if (session.isAdmin) throw redirect({ to: '/admin' })
     if (session.hasOrganization) throw redirect({ to: '/' })

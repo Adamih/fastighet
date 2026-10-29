@@ -17,10 +17,20 @@ export function canonicalAuthSearch(search: string): string {
   return query ? `?${query}` : ''
 }
 
+/**
+ * Where a signed-in visitor of the app's auth pages goes instead. A Mina sidor session stays on
+ * the page, which says they are signed in there (the only way across is signing out).
+ */
 export function signedInDestination(
-  session: { isAdmin: boolean } | null,
+  session: { isAdmin: boolean; workspace?: 'staff' | 'portal' } | null,
   destination: unknown,
 ): string | null {
-  if (!session) return null
+  if (!session || session.workspace === 'portal') return null
   return session.isAdmin ? '/admin' : authDestination(destination)
+}
+
+/** Where a Mina sidor login sends the person: a page in the portal, else its start. */
+export function portalDestination(value: unknown): string {
+  const destination = authDestination(value)
+  return destination === '/portal' || destination.startsWith('/portal/') ? destination : '/portal'
 }

@@ -4,6 +4,7 @@ import { Effect, Schema } from 'effect'
 import { tierOf } from '#/features/billing/store'
 import { loadCompanyDetails } from '#/features/settings/program'
 import { auth } from '#/lib/auth'
+import { sessionWorkspace } from '#/lib/workspace'
 import { managedCompanies } from '#/server/focus'
 import { getSessionOrNull, hasAnyMembership, runApp } from '#/server/run'
 import { query } from '#/server/scoped'
@@ -16,6 +17,9 @@ export const getSessionFn = createServerFn({ method: 'GET' }).handler(async () =
   const role = (session.user as { role?: string | null }).role ?? ''
   return {
     userId: session.user.id,
+    email: session.user.email,
+    /** Which login page created the session: the app's or Mina sidor's. */
+    workspace: sessionWorkspace(session.session),
     // Checked against the member table: the session's active company may be one the user left.
     hasOrganization: await hasAnyMembership(session.user.id),
     isAdmin: role.split(',').includes('admin'),

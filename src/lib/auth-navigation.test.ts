@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { authDestination, canonicalAuthSearch, signedInDestination } from './auth-navigation'
+import {
+  authDestination,
+  canonicalAuthSearch,
+  portalDestination,
+  signedInDestination,
+} from './auth-navigation'
 
 describe('public auth navigation', () => {
   test('invitation destinations survive the legacy-to-library query conversion', () => {
@@ -40,5 +45,17 @@ describe('public auth navigation', () => {
     )
     expect(signedInDestination({ isAdmin: false }, undefined)).toBe('/')
     expect(signedInDestination(null, '/team')).toBeNull()
+  })
+
+  test('a Mina sidor session stays on the app login page, which says how to switch', () => {
+    expect(signedInDestination({ isAdmin: false, workspace: 'portal' }, '/team')).toBeNull()
+    expect(signedInDestination({ isAdmin: false, workspace: 'staff' }, '/team')).toBe('/team')
+  })
+
+  test('the Mina sidor login only sends people within the portal', () => {
+    expect(portalDestination('/portal/avier')).toBe('/portal/avier')
+    expect(portalDestination('/team')).toBe('/portal')
+    expect(portalDestination('https://evil.example/portal')).toBe('/portal')
+    expect(portalDestination(undefined)).toBe('/portal')
   })
 })

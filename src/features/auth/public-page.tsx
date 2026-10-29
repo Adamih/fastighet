@@ -60,6 +60,17 @@ export function PublicAuthPage({
       ) : (
         <Auth view={view} />
       )}
+      {view === 'signIn' && (
+        <p className="text-center text-muted-foreground text-sm">
+          {m.workspace_portal_question()}{' '}
+          <Link
+            to="/portal/login"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            {m.workspace_portal_login()}
+          </Link>
+        </p>
+      )}
       {import.meta.env.DEV && view === 'signIn' && <DevLogins />}
     </main>
   )

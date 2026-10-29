@@ -1,0 +1,1 @@
+ALTER TABLE `session` ADD `workspace` text DEFAULT 'staff' NOT NULL;

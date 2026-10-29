@@ -34,6 +34,9 @@ import { Route as AppTeamRouteImport } from './routes/_app/team'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminEventsRouteImport } from './routes/admin/events'
 import { Route as InvitationsInvitationIdRouteImport } from './routes/invitations/$invitationId'
+import { Route as PortalPortalRouteImport } from './routes/portal/_portal'
+import { Route as PortalInvitationRouteImport } from './routes/portal/invitation'
+import { Route as PortalLoginRouteImport } from './routes/portal/login'
 import { Route as AppAccountPathRouteImport } from './routes/_app/account/$path'
 import { Route as AppCreditNotesCreditNoteIdRouteImport } from './routes/_app/credit-notes/$creditNoteId'
 import { Route as AppInvoicesIndexRouteImport } from './routes/_app/invoices/index'
@@ -51,6 +54,7 @@ import { Route as AdminCompaniesOrganizationIdRouteImport } from './routes/admin
 import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
 import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users/$userId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as PortalPortalIndexRouteImport } from './routes/portal/_portal/index'
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
 import { Route as AppOwnershipsOwnershipIdPledgesPledgeIdRouteImport } from './routes/_app/ownerships/$ownershipId_.pledges.$pledgeId'
 
@@ -178,6 +182,21 @@ const InvitationsInvitationIdRoute = InvitationsInvitationIdRouteImport.update({
   path: '/invitations/$invitationId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalPortalRoute = PortalPortalRouteImport.update({
+  id: '/portal/_portal',
+  path: '/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalInvitationRoute = PortalInvitationRouteImport.update({
+  id: '/portal/invitation',
+  path: '/portal/invitation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalLoginRoute = PortalLoginRouteImport.update({
+  id: '/portal/login',
+  path: '/portal/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAccountPathRoute = AppAccountPathRouteImport.update({
   id: '/account/$path',
   path: '/account/$path',
@@ -266,6 +285,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalPortalIndexRoute = PortalPortalIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortalPortalRoute,
+} as any)
 const AppOwnershipsOwnershipIdExtractRoute =
   AppOwnershipsOwnershipIdExtractRouteImport.update({
     id: '/ownerships/$ownershipId_/extract',
@@ -303,6 +327,9 @@ export interface FileRoutesByFullPath {
   '/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
+  '/portal': typeof PortalPortalRouteWithChildren
+  '/portal/invitation': typeof PortalInvitationRoute
+  '/portal/login': typeof PortalLoginRoute
   '/admin/': typeof AdminIndexRoute
   '/account/$path': typeof AppAccountPathRoute
   '/credit-notes/$creditNoteId': typeof AppCreditNotesCreditNoteIdRoute
@@ -321,6 +348,7 @@ export interface FileRoutesByFullPath {
   '/tenants/': typeof AppTenantsIndexRoute
   '/admin/companies/': typeof AdminCompaniesIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
+  '/portal/': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
@@ -346,6 +374,8 @@ export interface FileRoutesByTo {
   '/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
+  '/portal/invitation': typeof PortalInvitationRoute
+  '/portal/login': typeof PortalLoginRoute
   '/': typeof AppIndexRoute
   '/admin': typeof AdminIndexRoute
   '/account/$path': typeof AppAccountPathRoute
@@ -365,6 +395,7 @@ export interface FileRoutesByTo {
   '/tenants': typeof AppTenantsIndexRoute
   '/admin/companies': typeof AdminCompaniesIndexRoute
   '/admin/users': typeof AdminUsersIndexRoute
+  '/portal': typeof PortalPortalIndexRoute
   '/ownerships/$ownershipId/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/ownerships/$ownershipId/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
@@ -393,6 +424,9 @@ export interface FileRoutesById {
   '/_app/team': typeof AppTeamRoute
   '/admin/events': typeof AdminEventsRoute
   '/invitations/$invitationId': typeof InvitationsInvitationIdRoute
+  '/portal/_portal': typeof PortalPortalRouteWithChildren
+  '/portal/invitation': typeof PortalInvitationRoute
+  '/portal/login': typeof PortalLoginRoute
   '/_app/': typeof AppIndexRoute
   '/admin/': typeof AdminIndexRoute
   '/_app/account/$path': typeof AppAccountPathRoute
@@ -412,6 +446,7 @@ export interface FileRoutesById {
   '/_app/tenants/': typeof AppTenantsIndexRoute
   '/admin/companies/': typeof AdminCompaniesIndexRoute
   '/admin/users/': typeof AdminUsersIndexRoute
+  '/portal/_portal/': typeof PortalPortalIndexRoute
   '/_app/ownerships/$ownershipId_/extract': typeof AppOwnershipsOwnershipIdExtractRoute
   '/_app/ownerships/$ownershipId_/pledges/$pledgeId': typeof AppOwnershipsOwnershipIdPledgesPledgeIdRoute
 }
@@ -441,6 +476,9 @@ export interface FileRouteTypes {
     | '/team'
     | '/admin/events'
     | '/invitations/$invitationId'
+    | '/portal'
+    | '/portal/invitation'
+    | '/portal/login'
     | '/admin/'
     | '/account/$path'
     | '/credit-notes/$creditNoteId'
@@ -459,6 +497,7 @@ export interface FileRouteTypes {
     | '/tenants/'
     | '/admin/companies/'
     | '/admin/users/'
+    | '/portal/'
     | '/ownerships/$ownershipId/extract'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   fileRoutesByTo: FileRoutesByTo
@@ -484,6 +523,8 @@ export interface FileRouteTypes {
     | '/team'
     | '/admin/events'
     | '/invitations/$invitationId'
+    | '/portal/invitation'
+    | '/portal/login'
     | '/'
     | '/admin'
     | '/account/$path'
@@ -503,6 +544,7 @@ export interface FileRouteTypes {
     | '/tenants'
     | '/admin/companies'
     | '/admin/users'
+    | '/portal'
     | '/ownerships/$ownershipId/extract'
     | '/ownerships/$ownershipId/pledges/$pledgeId'
   id:
@@ -530,6 +572,9 @@ export interface FileRouteTypes {
     | '/_app/team'
     | '/admin/events'
     | '/invitations/$invitationId'
+    | '/portal/_portal'
+    | '/portal/invitation'
+    | '/portal/login'
     | '/_app/'
     | '/admin/'
     | '/_app/account/$path'
@@ -549,6 +594,7 @@ export interface FileRouteTypes {
     | '/_app/tenants/'
     | '/admin/companies/'
     | '/admin/users/'
+    | '/portal/_portal/'
     | '/_app/ownerships/$ownershipId_/extract'
     | '/_app/ownerships/$ownershipId_/pledges/$pledgeId'
   fileRoutesById: FileRoutesById
@@ -568,6 +614,9 @@ export interface RootRouteChildren {
   SignUpRoute: typeof SignUpRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   InvitationsInvitationIdRoute: typeof InvitationsInvitationIdRoute
+  PortalPortalRoute: typeof PortalPortalRouteWithChildren
+  PortalInvitationRoute: typeof PortalInvitationRoute
+  PortalLoginRoute: typeof PortalLoginRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -748,6 +797,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InvitationsInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/_portal': {
+      id: '/portal/_portal'
+      path: '/portal'
+      fullPath: '/portal'
+      preLoaderRoute: typeof PortalPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/invitation': {
+      id: '/portal/invitation'
+      path: '/portal/invitation'
+      fullPath: '/portal/invitation'
+      preLoaderRoute: typeof PortalInvitationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/login': {
+      id: '/portal/login'
+      path: '/portal/login'
+      fullPath: '/portal/login'
+      preLoaderRoute: typeof PortalLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/account/$path': {
       id: '/_app/account/$path'
       path: '/account/$path'
@@ -867,6 +937,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/_portal/': {
+      id: '/portal/_portal/'
+      path: '/'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalPortalIndexRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
     '/_app/ownerships/$ownershipId_/extract': {
       id: '/_app/ownerships/$ownershipId_/extract'
       path: '/ownerships/$ownershipId/extract'
@@ -959,6 +1036,18 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
+interface PortalPortalRouteChildren {
+  PortalPortalIndexRoute: typeof PortalPortalIndexRoute
+}
+
+const PortalPortalRouteChildren: PortalPortalRouteChildren = {
+  PortalPortalIndexRoute: PortalPortalIndexRoute,
+}
+
+const PortalPortalRouteWithChildren = PortalPortalRoute._addFileChildren(
+  PortalPortalRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   AdminRoute: AdminRouteWithChildren,
@@ -974,6 +1063,9 @@ const rootRouteChildren: RootRouteChildren = {
   SignUpRoute: SignUpRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   InvitationsInvitationIdRoute: InvitationsInvitationIdRoute,
+  PortalPortalRoute: PortalPortalRouteWithChildren,
+  PortalInvitationRoute: PortalInvitationRoute,
+  PortalLoginRoute: PortalLoginRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

@@ -40,6 +40,9 @@ export const session = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     activeOrganizationId: text('active_organization_id'),
     impersonatedBy: text('impersonated_by'),
+    workspace: text('workspace', { enum: ['staff', 'portal'] })
+      .default('staff')
+      .notNull(),
   },
   (table) => [index('session_userId_idx').on(table.userId)],
 )

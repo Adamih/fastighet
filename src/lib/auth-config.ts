@@ -3,9 +3,9 @@ import { stripe as stripePlugin } from '@better-auth/stripe'
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
-import { admin, organization } from 'better-auth/plugins'
+import { admin, emailOTP, organization } from 'better-auth/plugins'
 import { tanstackStartCookies } from 'better-auth/tanstack-start'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, isNull, sql } from 'drizzle-orm'
 import type Stripe from 'stripe'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
@@ -15,6 +15,7 @@ import { tiers } from '#/features/billing/tiers'
 import { checkRoleRequest, roleEndpoints } from '#/features/team/custom-roles'
 import { stockholmDate } from '#/lib/dates'
 import { ac, roles } from '#/lib/permissions'
+import { workspaceForSignIn, workspaces } from '#/lib/workspace'
 import type { AnyEmail } from '#/server/mail/mailer'
 
 /**
@@ -77,6 +78,9 @@ function requestImpersonator(): string | null {
 
 const RESET_PASSWORD_TTL_SECONDS = 60 * 60
 
+/** How long a code for signing in to Mina sidor works. */
+export const SIGN_IN_CODE_SECONDS = 10 * 60
+
 /** How many custom roles a company can have. */
 export const MAX_CUSTOM_ROLES = 20
 
@@ -104,6 +108,23 @@ export function createAuth(
     name: organization.name,
   })
   const person = (user: { id: string; name: string }) => ({ id: user.id, name: user.name })
+  /** Whether a user has open access to some party's pages in the portal (`party_access`). */
+  const hasPortalAccess = async (by: { userId: string } | { email: string }) => {
+    const [row] = await db
+      .select({ id: schema.partyAccess.id })
+      .from(schema.partyAccess)
+      .innerJoin(schema.user, eq(schema.user.id, schema.partyAccess.userId))
+      .where(
+        and(
+          isNull(schema.partyAccess.revokedAt),
+          'userId' in by
+            ? eq(schema.partyAccess.userId, by.userId)
+            : eq(sql`lower(${schema.user.email})`, by.email.toLowerCase()),
+        ),
+      )
+      .limit(1)
+    return row !== undefined
+  }
   /** A subscription change from Stripe's webhook, for the company's audit log. */
   const subscriptionEvent = async (
     action: CompanyAction,
@@ -137,6 +158,15 @@ export function createAuth(
       '/admin/set-user-password',
       '/admin/remove-user',
       '/admin/update-user',
+      // Email codes only sign in to Mina sidor: no password resets, verification or email changes
+      // by code (the app has its own flows for those).
+      '/email-otp/check-verification-otp',
+      '/email-otp/verify-email',
+      '/email-otp/request-password-reset',
+      '/email-otp/reset-password',
+      '/forget-password/email-otp',
+      '/email-otp/request-email-change',
+      '/email-otp/change-email',
     ],
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     emailAndPassword: {
@@ -154,6 +184,13 @@ export function createAuth(
             expiresInMinutes: RESET_PASSWORD_TTL_SECONDS / 60,
           },
         }),
+    },
+    session: {
+      additionalFields: {
+        // `staff` or `portal`: which login page created the session (`src/lib/workspace.ts`).
+        // Set by the server below, never from a request.
+        workspace: { type: [...workspaces], required: true, input: false, defaultValue: 'staff' },
+      },
     },
     user: {
       // From account settings: the current address approves first, then the new one is
@@ -247,8 +284,18 @@ export function createAuth(
     databaseHooks: {
       session: {
         create: {
-          // Land returning users in their first company instead of the onboarding screen.
-          before: async (session) => {
+          // Every session belongs to the workspace of the login page that created it; any other
+          // way of creating one is refused. A portal session needs portal access. Staff sessions
+          // land returning users in their first company instead of the onboarding screen.
+          before: async (session, ctx) => {
+            const workspace = workspaceForSignIn(ctx?.path)
+            if (!workspace) throw new APIError('FORBIDDEN', { message: 'Inloggningen stöds inte.' })
+            if (workspace === 'portal') {
+              if (!(await hasPortalAccess({ userId: session.userId }))) {
+                throw new APIError('FORBIDDEN', { message: 'Ingen tillgång till Mina sidor.' })
+              }
+              return { data: { ...session, workspace, activeOrganizationId: null } }
+            }
             const [membership] = await db
               .select({ organizationId: schema.member.organizationId })
               .from(schema.member)
@@ -256,7 +303,11 @@ export function createAuth(
               .orderBy(asc(schema.member.createdAt))
               .limit(1)
             return {
-              data: { ...session, activeOrganizationId: membership?.organizationId ?? null },
+              data: {
+                ...session,
+                workspace,
+                activeOrganizationId: membership?.organizationId ?? null,
+              },
             }
           },
           // An admin starting to act as someone goes to the admin log.
@@ -354,6 +405,24 @@ export function createAuth(
               entityId: user.id,
               details: { name: user.name, role: member.role },
             }),
+        },
+      }),
+      // Signing in to Mina sidor with a code sent by email. Never creates an account (accounts
+      // come from portal invitations), and only people with portal access get a code; everyone
+      // else gets the same answer, so the form doesn't reveal who has an account.
+      emailOTP({
+        disableSignUp: true,
+        otpLength: 6,
+        expiresIn: SIGN_IN_CODE_SECONDS,
+        allowedAttempts: 3,
+        storeOTP: 'hashed',
+        sendVerificationOTP: async ({ email, otp, type }) => {
+          if (type !== 'sign-in' || !(await hasPortalAccess({ email }))) return
+          deliverEmail({
+            to: email,
+            template: 'signInCode',
+            props: { code: otp, expiresInMinutes: SIGN_IN_CODE_SECONDS / 60 },
+          })
         },
       }),
       // The admin dashboard (`/admin`) and impersonation. Admins are users with the role
