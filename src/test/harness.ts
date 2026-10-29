@@ -1,7 +1,7 @@
 import { Database as Sqlite } from 'bun:sqlite'
 import { afterEach } from 'bun:test'
-import { readdirSync, readFileSync } from 'node:fs'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
+import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
@@ -32,22 +32,8 @@ export function harness() {
   const sqlite = new Sqlite(':memory:')
   databases.push(sqlite)
   sqlite.exec('PRAGMA foreign_keys = ON')
-  const dir = 'drizzle'
-  for (const file of readdirSync(dir)
-    .filter((f) => f.endsWith('.sql'))
-    .sort()) {
-    for (const statement of readFileSync(`${dir}/${file}`, 'utf8').split(
-      '--> statement-breakpoint',
-    )) {
-      const sql = statement
-        .split('\n')
-        .filter((line) => !line.trim().startsWith('--'))
-        .join('\n')
-        .trim()
-      if (sql) sqlite.exec(sql)
-    }
-  }
   const db = drizzle(sqlite, { schema })
+  migrate(db, { migrationsFolder: 'drizzle' })
   Object.assign(db, {
     batch: async (statements: { run: () => unknown }[]) =>
       sqlite.transaction(() => statements.map((s) => s.run()))(),
