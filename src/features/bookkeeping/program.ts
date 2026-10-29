@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from 'drizzle-orm'
+import { desc, eq, gte, lte } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { user } from '#/db/auth-schema'
 import {
@@ -15,7 +15,7 @@ import { loadCompanyDetails } from '#/features/settings/program'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
 import { Conflict } from '#/server/errors'
-import { orgQuery } from '#/server/scoped'
+import { inCompany, orgQuery } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import { type AccountKey, accountKeys, accountPlan, defaultAccounts } from './accounts'
@@ -32,7 +32,7 @@ export const getBookkeepingSettings = Effect.gen(function* () {
   const row = yield* orgQuery((db, organizationId) =>
     db.query.organizationSettings.findFirst({
       columns: { financialYearStartMonth: true, bookkeepingAccounts: true },
-      where: eq(organizationSettings.organizationId, organizationId),
+      where: inCompany(organizationSettings, organizationId),
     }),
   )
   const plan = accountPlan(row?.bookkeepingAccounts ?? null)
@@ -41,10 +41,10 @@ export const getBookkeepingSettings = Effect.gen(function* () {
     accounts: plan,
     defaults: defaultAccounts,
   }
-})
+}).pipe(Effect.withSpan('bookkeeping.getBookkeepingSettings'))
 
-export const updateBookkeepingSettings = (input: UpdateBookkeepingSettingsInput) =>
-  Effect.gen(function* () {
+export const updateBookkeepingSettings = Effect.fn('bookkeeping.updateBookkeepingSettings')(
+  function* (input: UpdateBookkeepingSettingsInput) {
     yield* requirePermission(manage)
     yield* requireFeature('bookkeeping')
     // Only numbers that differ from BAS are stored, so a later change of defaults reaches them.
@@ -65,7 +65,8 @@ export const updateBookkeepingSettings = (input: UpdateBookkeepingSettingsInput)
         .onConflictDoUpdate({ target: organizationSettings.organizationId, set: values }),
     )
     return yield* getBookkeepingSettings
-  })
+  },
+)
 
 /** The postings in the period with their entries, and texts naming the avi or the payer. */
 const postingsIn = (period: ExportPeriodInput) =>
@@ -83,8 +84,9 @@ const postingsIn = (period: ExportPeriodInput) =>
         .leftJoin(invoice, eq(invoice.id, posting.invoiceId))
         .leftJoin(payment, eq(payment.id, posting.paymentId))
         .where(
-          and(
-            eq(posting.organizationId, organizationId),
+          inCompany(
+            posting,
+            organizationId,
             gte(posting.date, period.fromDate),
             lte(posting.date, period.toDate),
           ),
@@ -145,29 +147,30 @@ const listExportRows = orgQuery((db, organizationId) =>
     })
     .from(bookkeepingExport)
     .leftJoin(user, eq(user.id, bookkeepingExport.exportedByUserId))
-    .where(eq(bookkeepingExport.organizationId, organizationId))
+    .where(inCompany(bookkeepingExport, organizationId))
     .orderBy(desc(bookkeepingExport.createdAt))
     .limit(20),
 )
 
 /** What the export for a period will contain: vouchers per series and totals per account. */
-export const previewExport = (period: ExportPeriodInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(read)
-    yield* checkPeriod(period)
-    const { accounts } = yield* getBookkeepingSettings
-    const list = vouchers(yield* postingsIn(period), accounts)
-    return {
-      voucherCount: list.length,
-      series: {
-        F: list.filter((v) => v.series === 'F').length,
-        K: list.filter((v) => v.series === 'K').length,
-        B: list.filter((v) => v.series === 'B').length,
-      },
-      totals: accountTotals(list),
-      overlapping: yield* overlapping(period),
-    }
-  })
+export const previewExport = Effect.fn('bookkeeping.previewExport')(function* (
+  period: ExportPeriodInput,
+) {
+  yield* requirePermission(read)
+  yield* checkPeriod(period)
+  const { accounts } = yield* getBookkeepingSettings
+  const list = vouchers(yield* postingsIn(period), accounts)
+  return {
+    voucherCount: list.length,
+    series: {
+      F: list.filter((v) => v.series === 'F').length,
+      K: list.filter((v) => v.series === 'K').length,
+      B: list.filter((v) => v.series === 'B').length,
+    },
+    totals: accountTotals(list),
+    overlapping: yield* overlapping(period),
+  }
+})
 
 /** Bytes as base64, in chunks so large files don't overflow the call stack. */
 const toBase64 = (bytes: Uint8Array) => {
@@ -182,49 +185,48 @@ const toBase64 = (bytes: Uint8Array) => {
  * The SIE file for a period, as base64 PC8 bytes with its file name. Each export is recorded,
  * so a later export of an overlapping period can be warned about.
  */
-export const exportSie = (period: ExportPeriodInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(read)
-    yield* requireFeature('bookkeeping')
-    yield* checkPeriod(period)
-    const me = yield* CurrentUser
-    const seller = yield* loadCompanyDetails
-    const { accounts, financialYearStartMonth } = yield* getBookkeepingSettings
-    const list = vouchers(yield* postingsIn(period), accounts)
-    if (list.length === 0) {
-      return yield* new Conflict({ message: 'Det finns inget att exportera för perioden' })
-    }
-    const text = sieText(
-      {
-        companyName: seller.organizationName,
-        organizationNumber: seller.organizationNumber,
-        generatedOn: yield* today,
-        financialYear: financialYear(period.fromDate, financialYearStartMonth),
-      },
-      list,
-    )
-    yield* orgQuery((db, organizationId) =>
-      db.insert(bookkeepingExport).values({
-        organizationId,
-        fromDate: period.fromDate,
-        toDate: period.toDate,
-        voucherCount: list.length,
-        exportedByUserId: me.id,
-      }),
-    )
-    const company = (seller.organizationNumber ?? seller.organizationName)
-      .replace(/[^0-9A-Za-z]+/g, '')
-      .slice(0, 20)
-    return {
-      fileName: `fastighet_${company}_${period.fromDate}_${period.toDate}.se`,
-      base64: toBase64(encodePc8(text)),
+export const exportSie = Effect.fn('bookkeeping.exportSie')(function* (period: ExportPeriodInput) {
+  yield* requirePermission(read)
+  yield* requireFeature('bookkeeping')
+  yield* checkPeriod(period)
+  const me = yield* CurrentUser
+  const seller = yield* loadCompanyDetails
+  const { accounts, financialYearStartMonth } = yield* getBookkeepingSettings
+  const list = vouchers(yield* postingsIn(period), accounts)
+  if (list.length === 0) {
+    return yield* new Conflict({ message: 'Det finns inget att exportera för perioden' })
+  }
+  const text = sieText(
+    {
+      companyName: seller.organizationName,
+      organizationNumber: seller.organizationNumber,
+      generatedOn: yield* today,
+      financialYear: financialYear(period.fromDate, financialYearStartMonth),
+    },
+    list,
+  )
+  yield* orgQuery((db, organizationId) =>
+    db.insert(bookkeepingExport).values({
+      organizationId,
+      fromDate: period.fromDate,
+      toDate: period.toDate,
       voucherCount: list.length,
-    }
-  })
+      exportedByUserId: me.id,
+    }),
+  )
+  const company = (seller.organizationNumber ?? seller.organizationName)
+    .replace(/[^0-9A-Za-z]+/g, '')
+    .slice(0, 20)
+  return {
+    fileName: `fastighet_${company}_${period.fromDate}_${period.toDate}.se`,
+    base64: toBase64(encodePc8(text)),
+    voucherCount: list.length,
+  }
+})
 
 export const listExports = Effect.gen(function* () {
   yield* requirePermission(read)
   return yield* listExportRows
-})
+}).pipe(Effect.withSpan('bookkeeping.listExports'))
 
 export type ExportRow = Effect.Success<typeof listExports>[number]

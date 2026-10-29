@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm'
+import { eq, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { charge, paymentReminder } from '#/db/schema'
@@ -6,7 +6,7 @@ import { billingAvier } from '#/features/agreements/program'
 import type { ReceivableEntry } from '#/features/ledger/postings'
 import { receivableEntriesFor } from '#/features/ledger/program'
 import { loadCompanyDetails } from '#/features/settings/program'
-import { orgQuery } from '#/server/scoped'
+import { inCompany, orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
 import { automaticFeeWaiver, type FeeWaiver } from './rules'
 
@@ -34,38 +34,40 @@ export interface PendingFee {
 }
 
 /** Each avi's reminder fee that no avi has billed yet and nobody has waived. */
-export const pendingFees = (invoiceIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const result = new Map<string, PendingFee>()
-    const ids = [...new Set(invoiceIds)]
-    for (let i = 0; i < ids.length; i += IN_CHUNK) {
-      const batch = ids.slice(i, i + IN_CHUNK)
-      const rows = yield* orgQuery((db, organizationId) =>
-        db
-          .select({
-            reminderId: paymentReminder.id,
-            invoiceId: paymentReminder.invoiceId,
-            chargeId: paymentReminder.feeChargeId,
-            sentOn: paymentReminder.sentOn,
-            dueDate: paymentReminder.dueDate,
-          })
-          .from(paymentReminder)
-          .where(
-            and(
-              eq(paymentReminder.organizationId, organizationId),
-              inArray(paymentReminder.invoiceId, batch),
-              isNotNull(paymentReminder.feeChargeId),
-              isNull(paymentReminder.feeWaivedOn),
-            ),
+export const pendingFees = Effect.fn('reminders.pendingFees')(function* (
+  invoiceIds: readonly string[],
+) {
+  const result = new Map<string, PendingFee>()
+  const ids = [...new Set(invoiceIds)]
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const batch = ids.slice(i, i + IN_CHUNK)
+    const rows = yield* orgQuery((db, organizationId) =>
+      db
+        .select({
+          reminderId: paymentReminder.id,
+          invoiceId: paymentReminder.invoiceId,
+          chargeId: paymentReminder.feeChargeId,
+          sentOn: paymentReminder.sentOn,
+          dueDate: paymentReminder.dueDate,
+        })
+        .from(paymentReminder)
+        .where(
+          inCompany(
+            paymentReminder,
+            organizationId,
+            inArray(paymentReminder.invoiceId, batch),
+            isNotNull(paymentReminder.feeChargeId),
+            isNull(paymentReminder.feeWaivedOn),
           ),
-      )
-      const billed = yield* billingAvier(rows.map((r) => r.chargeId))
-      for (const { invoiceId, chargeId, ...fee } of rows) {
-        if (chargeId && !billed.has(chargeId)) result.set(invoiceId, { ...fee, chargeId })
-      }
+        ),
+    )
+    const billed = yield* billingAvier(rows.map((r) => r.chargeId))
+    for (const { invoiceId, chargeId, ...fee } of rows) {
+      if (chargeId && !billed.has(chargeId)) result.set(invoiceId, { ...fee, chargeId })
     }
-    return result
-  })
+  }
+  return result
+})
 
 /** The statements that waive a pending fee on `on`: why on the reminder, then the charge goes. */
 export const waiveStatements = (
@@ -79,15 +81,8 @@ export const waiveStatements = (
     db
       .update(paymentReminder)
       .set({ feeChargeId: null, feeWaivedOn: on, feeWaiver: why })
-      .where(
-        and(
-          eq(paymentReminder.id, fee.reminderId),
-          eq(paymentReminder.organizationId, organizationId),
-        ),
-      ),
-    db
-      .delete(charge)
-      .where(and(eq(charge.id, fee.chargeId), eq(charge.organizationId, organizationId))),
+      .where(inCompany(paymentReminder, organizationId, eq(paymentReminder.id, fee.reminderId))),
+    db.delete(charge).where(inCompany(charge, organizationId, eq(charge.id, fee.chargeId))),
   ] as const
 
 /**
@@ -95,24 +90,25 @@ export const waiveStatements = (
  * avi), the statements that waive the fees that then no longer stand (`automaticFeeWaiver`),
  * per avi, to write in the same batch as the payment.
  */
-export const feeWaiverStatements = (planned: ReadonlyMap<string, readonly ReceivableEntry[]>) =>
-  Effect.gen(function* () {
-    const builders = new Map<
-      string,
-      (db: Db, organizationId: string) => ReturnType<typeof waiveStatements>
-    >()
-    const fees = yield* pendingFees([...planned.keys()])
-    if (fees.size === 0) return builders
-    const settings = yield* reminderSettings
-    const existing = yield* receivableEntriesFor([...fees.keys()])
-    const on = yield* today
-    for (const [invoiceId, fee] of fees) {
-      const entries = [...(existing.get(invoiceId) ?? []), ...(planned.get(invoiceId) ?? [])]
-      const why = automaticFeeWaiver(entries, fee, settings)
-      if (!why) continue
-      builders.set(invoiceId, (db, organizationId) =>
-        waiveStatements(db, organizationId, fee, why, on),
-      )
-    }
-    return builders
-  })
+export const feeWaiverStatements = Effect.fn('reminders.feeWaiverStatements')(function* (
+  planned: ReadonlyMap<string, readonly ReceivableEntry[]>,
+) {
+  const builders = new Map<
+    string,
+    (db: Db, organizationId: string) => ReturnType<typeof waiveStatements>
+  >()
+  const fees = yield* pendingFees([...planned.keys()])
+  if (fees.size === 0) return builders
+  const settings = yield* reminderSettings
+  const existing = yield* receivableEntriesFor([...fees.keys()])
+  const on = yield* today
+  for (const [invoiceId, fee] of fees) {
+    const entries = [...(existing.get(invoiceId) ?? []), ...(planned.get(invoiceId) ?? [])]
+    const why = automaticFeeWaiver(entries, fee, settings)
+    if (!why) continue
+    builders.set(invoiceId, (db, organizationId) =>
+      waiveStatements(db, organizationId, fee, why, on),
+    )
+  }
+  return builders
+})

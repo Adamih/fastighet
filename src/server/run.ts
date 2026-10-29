@@ -1,6 +1,6 @@
 import { notFound, redirect } from '@tanstack/react-router'
 import { getRequest } from '@tanstack/react-start/server'
-import { and, asc, eq } from 'drizzle-orm'
+import { asc, eq } from 'drizzle-orm'
 import { Cause, Context, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable, user } from '#/db/schema'
@@ -9,6 +9,7 @@ import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
 import { m } from '#/paraglide/messages'
+import { inCompany } from '#/server/scoped'
 import { recordAudit } from './audit'
 import { requireCustomerSession } from './customer-access'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
@@ -39,7 +40,7 @@ const membershipQuery = (userId: string, organizationId?: string) =>
       .innerJoin(organization, eq(organization.id, member.organizationId))
       .where(
         organizationId
-          ? and(eq(member.userId, userId), eq(member.organizationId, organizationId))
+          ? inCompany(member, organizationId, eq(member.userId, userId))
           : eq(member.userId, userId),
       )
       .orderBy(asc(member.createdAt))

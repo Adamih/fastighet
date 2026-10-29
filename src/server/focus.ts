@@ -3,6 +3,7 @@ import { Effect } from 'effect'
 import { managementAssignment, managementGrant, organization, organizationRole } from '#/db/schema'
 import { cleanGrant, type Grant } from '#/lib/managed-access'
 import { appPermissions, type CustomRoles } from '#/lib/permissions'
+import { inCompany } from '#/server/scoped'
 import { CompanyNotInScope } from './errors'
 import { query } from './scoped'
 
@@ -38,7 +39,7 @@ export const customRolesOf = (organizationId: string) =>
       db
         .select({ role: organizationRole.role, permission: organizationRole.permission })
         .from(organizationRole)
-        .where(eq(organizationRole.organizationId, organizationId)),
+        .where(inCompany(organizationRole, organizationId)),
     ),
     (rows): CustomRoles =>
       Object.fromEntries(

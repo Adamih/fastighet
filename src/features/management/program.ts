@@ -26,7 +26,7 @@ import { requireOwnCompany, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { seesAllClients } from '#/server/focus'
 import { sendEmail } from '#/server/mail/mailer'
-import { query } from '#/server/scoped'
+import { inCompany, query } from '#/server/scoped'
 import { CurrentOrganization, CurrentUser } from '#/server/services'
 import { generateCode, hashCode, normalizeCode } from './codes'
 import type {
@@ -167,193 +167,194 @@ export const listClients = Effect.gen(function* () {
       usedBy: r.usedBy,
     })),
   }
-})
+}).pipe(Effect.withSpan('management.listClients'))
 
 /**
  * Creates a request for access and returns its code, which is shown only now. With an email, the
  * code and a link are sent there too; a failed email keeps the request (the code can be sent by
  * hand).
  */
-export const requestAccess = (input: RequestAccessInput, origin: string) =>
-  Effect.gen(function* () {
-    const org = yield* ownCompany('client', 'manage')
-    yield* requireFeature('clients')
-    const me = yield* CurrentUser
-    const grant = grantFromLevels(input.levels)
-    if (isEmptyGrant(grant)) return yield* new Conflict({ message: 'Välj minst en behörighet.' })
-    const now = yield* Clock.currentTimeMillis
-    const code = generateCode()
-    const expiresAt = new Date(now + REQUEST_DAYS * DAY)
-    const email = input.email.trim() || null
-    const codeHash = yield* Effect.promise(() => hashCode(code))
-    const [created] = yield* query((db) =>
-      db
-        .insert(managementRequest)
-        .values({
-          managingOrganizationId: org.id,
-          label: input.label.trim(),
-          email,
-          permissions: JSON.stringify(grant),
-          codeHash,
-          expiresAt,
-          createdBy: me.id,
-        })
-        .returning({ id: managementRequest.id }),
+export const requestAccess = Effect.fn('management.requestAccess')(function* (
+  input: RequestAccessInput,
+  origin: string,
+) {
+  const org = yield* ownCompany('client', 'manage')
+  yield* requireFeature('clients')
+  const me = yield* CurrentUser
+  const grant = grantFromLevels(input.levels)
+  if (isEmptyGrant(grant)) return yield* new Conflict({ message: 'Välj minst en behörighet.' })
+  const now = yield* Clock.currentTimeMillis
+  const code = generateCode()
+  const expiresAt = new Date(now + REQUEST_DAYS * DAY)
+  const email = input.email.trim() || null
+  const codeHash = yield* Effect.promise(() => hashCode(code))
+  const [created] = yield* query((db) =>
+    db
+      .insert(managementRequest)
+      .values({
+        managingOrganizationId: org.id,
+        label: input.label.trim(),
+        email,
+        permissions: JSON.stringify(grant),
+        codeHash,
+        expiresAt,
+        createdBy: me.id,
+      })
+      .returning({ id: managementRequest.id }),
+  )
+  const link = `${origin}/management?code=${encodeURIComponent(code)}`
+  let emailed = false
+  if (email) {
+    const sent = yield* Effect.exit(
+      sendEmail({
+        to: email,
+        template: 'managementRequest',
+        props: {
+          senderName: me.name,
+          managingName: org.name,
+          code,
+          acceptUrl: link,
+          expiresOn: stockholmDate(expiresAt.getTime()),
+        },
+      }),
     )
-    const link = `${origin}/management?code=${encodeURIComponent(code)}`
-    let emailed = false
-    if (email) {
-      const sent = yield* Effect.exit(
-        sendEmail({
-          to: email,
-          template: 'managementRequest',
-          props: {
-            senderName: me.name,
-            managingName: org.name,
-            code,
-            acceptUrl: link,
-            expiresOn: stockholmDate(expiresAt.getTime()),
-          },
-        }),
-      )
-      if (Exit.isFailure(sent)) yield* Effect.logError(sent.cause)
-      emailed = Exit.isSuccess(sent)
-    }
-    return {
-      requestId: created.id,
-      code,
-      link,
-      emailed,
-      expiresOn: stockholmDate(expiresAt.getTime()),
-    }
-  })
+    if (Exit.isFailure(sent)) yield* Effect.logError(sent.cause)
+    emailed = Exit.isSuccess(sent)
+  }
+  return {
+    requestId: created.id,
+    code,
+    link,
+    emailed,
+    expiresOn: stockholmDate(expiresAt.getTime()),
+  }
+})
 
 /** Withdraws a request that hasn't been used, so its code stops working. */
-export const withdrawRequest = (requestId: string) =>
-  Effect.gen(function* () {
-    const org = yield* ownCompany('client', 'manage')
-    const now = yield* Clock.currentTimeMillis
-    const updated = yield* query((db) =>
-      db
-        .update(managementRequest)
-        .set({ withdrawnAt: new Date(now) })
-        .where(
-          and(
-            eq(managementRequest.id, requestId),
-            eq(managementRequest.managingOrganizationId, org.id),
-            isNull(managementRequest.usedAt),
-            isNull(managementRequest.withdrawnAt),
-          ),
-        )
-        .returning({ id: managementRequest.id }),
-    )
-    if (updated.length === 0) {
-      return yield* new Conflict({ message: 'Förfrågan är redan använd eller återkallad.' })
-    }
-  })
+export const withdrawRequest = Effect.fn('management.withdrawRequest')(function* (
+  requestId: string,
+) {
+  const org = yield* ownCompany('client', 'manage')
+  const now = yield* Clock.currentTimeMillis
+  const updated = yield* query((db) =>
+    db
+      .update(managementRequest)
+      .set({ withdrawnAt: new Date(now) })
+      .where(
+        and(
+          eq(managementRequest.id, requestId),
+          eq(managementRequest.managingOrganizationId, org.id),
+          isNull(managementRequest.usedAt),
+          isNull(managementRequest.withdrawnAt),
+        ),
+      )
+      .returning({ id: managementRequest.id }),
+  )
+  if (updated.length === 0) {
+    return yield* new Conflict({ message: 'Förfrågan är redan använd eller återkallad.' })
+  }
+})
 
 /**
  * Sets who works on a managed company, and their role there (null: their role at home). Replaces
  * the earlier list. Only the company's own members can be assigned.
  */
-export const assignStaff = (input: AssignStaffInput) =>
-  Effect.gen(function* () {
-    const org = yield* ownCompany('client', 'manage')
-    yield* requireFeature('clients')
-    const [grant] = yield* query((db) =>
-      db
-        .select({ id: managementGrant.id })
-        .from(managementGrant)
-        .where(
-          and(
-            eq(managementGrant.managingOrganizationId, org.id),
-            eq(managementGrant.managedOrganizationId, input.managedOrganizationId),
-            isNull(managementGrant.revokedAt),
-          ),
+export const assignStaff = Effect.fn('management.assignStaff')(function* (input: AssignStaffInput) {
+  const org = yield* ownCompany('client', 'manage')
+  yield* requireFeature('clients')
+  const [grant] = yield* query((db) =>
+    db
+      .select({ id: managementGrant.id })
+      .from(managementGrant)
+      .where(
+        and(
+          eq(managementGrant.managingOrganizationId, org.id),
+          eq(managementGrant.managedOrganizationId, input.managedOrganizationId),
+          isNull(managementGrant.revokedAt),
         ),
-    )
-    if (!grant) return yield* new NotFound({ entity: 'client', id: input.managedOrganizationId })
+      ),
+  )
+  if (!grant) return yield* new NotFound({ entity: 'client', id: input.managedOrganizationId })
 
-    const userIds = [...new Set(input.staff.map((s) => s.userId))]
-    const members =
-      userIds.length === 0
-        ? []
-        : yield* query((db) =>
-            db
-              .select({ userId: member.userId })
-              .from(member)
-              .where(and(eq(member.organizationId, org.id), inArray(member.userId, userIds))),
-          )
-    if (members.length !== userIds.length) {
-      return yield* new Conflict({ message: 'Bara bolagets egna användare kan tilldelas.' })
-    }
-    // A built-in assignment role, or one of the company's own roles.
-    const roleNames = [...new Set(input.staff.flatMap((s) => (s.role ? [s.role] : [])))]
-    if (roleNames.some((r) => !isAssignmentRole(r) && !Object.hasOwn(org.customRoles, r))) {
-      return yield* new Conflict({ message: 'Rollen finns inte längre. Välj en annan.' })
-    }
+  const userIds = [...new Set(input.staff.map((s) => s.userId))]
+  const members =
+    userIds.length === 0
+      ? []
+      : yield* query((db) =>
+          db
+            .select({ userId: member.userId })
+            .from(member)
+            .where(and(eq(member.organizationId, org.id), inArray(member.userId, userIds))),
+        )
+  if (members.length !== userIds.length) {
+    return yield* new Conflict({ message: 'Bara bolagets egna användare kan tilldelas.' })
+  }
+  // A built-in assignment role, or one of the company's own roles.
+  const roleNames = [...new Set(input.staff.flatMap((s) => (s.role ? [s.role] : [])))]
+  if (roleNames.some((r) => !isAssignmentRole(r) && !Object.hasOwn(org.customRoles, r))) {
+    return yield* new Conflict({ message: 'Rollen finns inte längre. Välj en annan.' })
+  }
 
-    const scope = and(
-      eq(managementAssignment.managingOrganizationId, org.id),
-      eq(managementAssignment.managedOrganizationId, input.managedOrganizationId),
-    )
-    yield* query(async (db) => {
-      const remove = db.delete(managementAssignment).where(scope)
-      if (userIds.length === 0) return void (await remove)
-      await db.batch([
-        remove,
-        db.insert(managementAssignment).values(
-          userIds.map((userId) => ({
-            managingOrganizationId: org.id,
-            managedOrganizationId: input.managedOrganizationId,
-            userId,
-            role: input.staff.find((s) => s.userId === userId)?.role ?? null,
-          })),
-        ),
-      ])
-    })
+  const scope = and(
+    eq(managementAssignment.managingOrganizationId, org.id),
+    eq(managementAssignment.managedOrganizationId, input.managedOrganizationId),
+  )
+  yield* query(async (db) => {
+    const remove = db.delete(managementAssignment).where(scope)
+    if (userIds.length === 0) return void (await remove)
+    await db.batch([
+      remove,
+      db.insert(managementAssignment).values(
+        userIds.map((userId) => ({
+          managingOrganizationId: org.id,
+          managedOrganizationId: input.managedOrganizationId,
+          userId,
+          role: input.staff.find((s) => s.userId === userId)?.role ?? null,
+        })),
+      ),
+    ])
   })
+})
 
 /**
  * The manager ends its own access to a client, e.g. when the contract ends. The client sees it
  * in its log, since it happened to its data.
  */
-export const endClient = (grantId: string) =>
-  Effect.gen(function* () {
-    const org = yield* ownCompany('client', 'manage')
-    const me = yield* CurrentUser
-    const [found] = yield* query((db) =>
-      db
-        .select({ managedOrganizationId: managementGrant.managedOrganizationId })
-        .from(managementGrant)
-        .where(
-          and(
-            eq(managementGrant.id, grantId),
-            eq(managementGrant.managingOrganizationId, org.id),
-            isNull(managementGrant.revokedAt),
-          ),
+export const endClient = Effect.fn('management.endClient')(function* (grantId: string) {
+  const org = yield* ownCompany('client', 'manage')
+  const me = yield* CurrentUser
+  const [found] = yield* query((db) =>
+    db
+      .select({ managedOrganizationId: managementGrant.managedOrganizationId })
+      .from(managementGrant)
+      .where(
+        and(
+          eq(managementGrant.id, grantId),
+          eq(managementGrant.managingOrganizationId, org.id),
+          isNull(managementGrant.revokedAt),
         ),
-    )
-    if (!found) return yield* new NotFound({ entity: 'grant', id: grantId })
-    const now = new Date(yield* Clock.currentTimeMillis)
-    yield* query((db) =>
-      db.batch([
-        db
-          .update(managementGrant)
-          .set({ revokedAt: now, revokedBy: me.id })
-          .where(eq(managementGrant.id, grantId)),
-        db.insert(auditEvent).values({
-          organizationId: found.managedOrganizationId,
-          userId: me.id,
-          userName: me.name,
-          actorOrganizationId: org.id,
-          actorOrganizationName: org.name,
-          action: 'management.end_client',
-          entityId: null,
-        }),
-      ]),
-    )
-  })
+      ),
+  )
+  if (!found) return yield* new NotFound({ entity: 'grant', id: grantId })
+  const now = new Date(yield* Clock.currentTimeMillis)
+  yield* query((db) =>
+    db.batch([
+      db
+        .update(managementGrant)
+        .set({ revokedAt: now, revokedBy: me.id })
+        .where(eq(managementGrant.id, grantId)),
+      db.insert(auditEvent).values({
+        organizationId: found.managedOrganizationId,
+        userId: me.id,
+        userName: me.name,
+        actorOrganizationId: org.id,
+        actorOrganizationName: org.name,
+        action: 'management.end_client',
+        entityId: null,
+      }),
+    ]),
+  )
+})
 
 // --- The managed company ("Förvaltare").
 
@@ -437,7 +438,7 @@ export const listManagers = Effect.gen(function* () {
         .map((a) => ({ name: a.name, role: a.role })),
     }
   })
-})
+}).pipe(Effect.withSpan('management.listManagers'))
 
 /** Finds a usable request by its code. Failed attempts count towards the limit. */
 const findRequest = (input: string) =>
@@ -517,90 +518,90 @@ const checkNewManager = (managingOrganizationId: string, managingName: string) =
   })
 
 /** What a code asks for, before the owner decides. */
-export const previewRequest = (code: string) =>
-  Effect.gen(function* () {
-    yield* ownCompany('grant', 'manage')
-    const request = yield* findRequest(code)
-    yield* checkNewManager(request.managingOrganizationId, request.managingName)
-    const grant = readGrant(request.permissions)
-    return {
-      managingName: request.managingName,
-      label: request.label,
-      levels: levelsFromGrant(grant),
-      preset: presetOf(grant),
-      expiresOn: stockholmDate(request.expiresAt.getTime()),
-    }
-  })
+export const previewRequest = Effect.fn('management.previewRequest')(function* (code: string) {
+  yield* ownCompany('grant', 'manage')
+  const request = yield* findRequest(code)
+  yield* checkNewManager(request.managingOrganizationId, request.managingName)
+  const grant = readGrant(request.permissions)
+  return {
+    managingName: request.managingName,
+    label: request.label,
+    levels: levelsFromGrant(grant),
+    preset: presetOf(grant),
+    expiresOn: stockholmDate(request.expiresAt.getTime()),
+  }
+})
 
 /** Approves a request: the managing company gets access with the permissions the owner chose. */
-export const acceptRequest = (input: AcceptRequestInput) =>
-  Effect.gen(function* () {
-    const org = yield* ownCompany('grant', 'manage')
-    const me = yield* CurrentUser
-    if (!input.processorAgreement) {
-      return yield* new Conflict({
-        message: 'Bekräfta att det finns ett personuppgiftsbiträdesavtal med förvaltaren.',
-      })
-    }
-    const grant = grantFromLevels(input.levels)
-    if (isEmptyGrant(grant)) return yield* new Conflict({ message: 'Välj minst en behörighet.' })
-    const request = yield* findRequest(input.code)
-    yield* checkNewManager(request.managingOrganizationId, request.managingName)
+export const acceptRequest = Effect.fn('management.acceptRequest')(function* (
+  input: AcceptRequestInput,
+) {
+  const org = yield* ownCompany('grant', 'manage')
+  const me = yield* CurrentUser
+  if (!input.processorAgreement) {
+    return yield* new Conflict({
+      message: 'Bekräfta att det finns ett personuppgiftsbiträdesavtal med förvaltaren.',
+    })
+  }
+  const grant = grantFromLevels(input.levels)
+  if (isEmptyGrant(grant)) return yield* new Conflict({ message: 'Välj minst en behörighet.' })
+  const request = yield* findRequest(input.code)
+  yield* checkNewManager(request.managingOrganizationId, request.managingName)
 
-    const usedAt = new Date(yield* Clock.currentTimeMillis)
-    const grantId = crypto.randomUUID()
-    // One batch: the request is marked used only if still unused, and the grant is written only
-    // for the request this company just used, so a code can never give access twice.
-    yield* query((db) =>
-      db.batch([
+  const usedAt = new Date(yield* Clock.currentTimeMillis)
+  const grantId = crypto.randomUUID()
+  // One batch: the request is marked used only if still unused, and the grant is written only
+  // for the request this company just used, so a code can never give access twice.
+  yield* query((db) =>
+    db.batch([
+      db
+        .update(managementRequest)
+        .set({ usedAt, usedByOrganizationId: org.id })
+        .where(
+          and(
+            eq(managementRequest.id, request.id),
+            isNull(managementRequest.usedAt),
+            isNull(managementRequest.withdrawnAt),
+          ),
+        ),
+      db.insert(managementGrant).select(
         db
-          .update(managementRequest)
-          .set({ usedAt, usedByOrganizationId: org.id })
+          .select({
+            id: sql`${grantId}`.as('id'),
+            managedOrganizationId: sql`${org.id}`.as('managed_organization_id'),
+            managingOrganizationId: managementRequest.managingOrganizationId,
+            permissions: sql`${JSON.stringify(grant)}`.as('permissions'),
+            requestId: managementRequest.id,
+            grantedBy: sql`${me.id}`.as('granted_by'),
+            createdAt: sql`${usedAt.getTime()}`.as('created_at'),
+            updatedAt: sql`null`.as('updated_at'),
+            revokedAt: sql`null`.as('revoked_at'),
+            revokedBy: sql`null`.as('revoked_by'),
+          })
+          .from(managementRequest)
           .where(
             and(
               eq(managementRequest.id, request.id),
-              isNull(managementRequest.usedAt),
-              isNull(managementRequest.withdrawnAt),
+              eq(managementRequest.usedByOrganizationId, org.id),
+              eq(managementRequest.usedAt, usedAt),
             ),
           ),
-        db.insert(managementGrant).select(
-          db
-            .select({
-              id: sql`${grantId}`.as('id'),
-              managedOrganizationId: sql`${org.id}`.as('managed_organization_id'),
-              managingOrganizationId: managementRequest.managingOrganizationId,
-              permissions: sql`${JSON.stringify(grant)}`.as('permissions'),
-              requestId: managementRequest.id,
-              grantedBy: sql`${me.id}`.as('granted_by'),
-              createdAt: sql`${usedAt.getTime()}`.as('created_at'),
-              updatedAt: sql`null`.as('updated_at'),
-              revokedAt: sql`null`.as('revoked_at'),
-              revokedBy: sql`null`.as('revoked_by'),
-            })
-            .from(managementRequest)
-            .where(
-              and(
-                eq(managementRequest.id, request.id),
-                eq(managementRequest.usedByOrganizationId, org.id),
-                eq(managementRequest.usedAt, usedAt),
-              ),
-            ),
-        ),
-      ]),
-    )
-    const [created] = yield* query((db) =>
-      db
-        .select({ id: managementGrant.id })
-        .from(managementGrant)
-        .where(eq(managementGrant.id, grantId)),
-    )
-    if (!created) {
-      return yield* new Conflict({
-        message: 'Koden gäller inte. Kontrollera den, eller be förvaltaren om en ny.',
-      })
-    }
-    return { grantId, managingName: request.managingName }
-  })
+      ),
+    ]),
+  )
+  const [created] = yield* query((db) =>
+    db
+      .select({ id: managementGrant.id })
+      .from(managementGrant)
+      .where(eq(managementGrant.id, grantId)),
+  )
+  if (!created) {
+    return yield* new Conflict({
+      message: 'Koden gäller inte. Kontrollera den, eller be förvaltaren om en ny.',
+    })
+  }
+  return { grantId, managingName: request.managingName }
+})
 
 const activeGrant = (grantId: string) =>
   Effect.gen(function* () {
@@ -621,39 +622,37 @@ const activeGrant = (grantId: string) =>
   })
 
 /** Changes what a manager may do. Applies from their next request. */
-export const updateGrant = (input: UpdateGrantInput) =>
-  Effect.gen(function* () {
-    yield* ownCompany('grant', 'manage')
-    yield* activeGrant(input.grantId)
-    const grant: Grant = grantFromLevels(input.levels)
-    if (isEmptyGrant(grant)) {
-      return yield* new Conflict({
-        message: 'Välj minst en behörighet, eller återkalla åtkomsten.',
-      })
-    }
-    const now = yield* Clock.currentTimeMillis
-    yield* query((db) =>
-      db
-        .update(managementGrant)
-        .set({ permissions: JSON.stringify(grant), updatedAt: new Date(now) })
-        .where(eq(managementGrant.id, input.grantId)),
-    )
-  })
+export const updateGrant = Effect.fn('management.updateGrant')(function* (input: UpdateGrantInput) {
+  yield* ownCompany('grant', 'manage')
+  yield* activeGrant(input.grantId)
+  const grant: Grant = grantFromLevels(input.levels)
+  if (isEmptyGrant(grant)) {
+    return yield* new Conflict({
+      message: 'Välj minst en behörighet, eller återkalla åtkomsten.',
+    })
+  }
+  const now = yield* Clock.currentTimeMillis
+  yield* query((db) =>
+    db
+      .update(managementGrant)
+      .set({ permissions: JSON.stringify(grant), updatedAt: new Date(now) })
+      .where(eq(managementGrant.id, input.grantId)),
+  )
+})
 
 /** Ends a manager's access. Its staff lose access on their next request. */
-export const revokeGrant = (grantId: string) =>
-  Effect.gen(function* () {
-    yield* ownCompany('grant', 'manage')
-    yield* activeGrant(grantId)
-    const me = yield* CurrentUser
-    const now = yield* Clock.currentTimeMillis
-    yield* query((db) =>
-      db
-        .update(managementGrant)
-        .set({ revokedAt: new Date(now), revokedBy: me.id })
-        .where(eq(managementGrant.id, grantId)),
-    )
-  })
+export const revokeGrant = Effect.fn('management.revokeGrant')(function* (grantId: string) {
+  yield* ownCompany('grant', 'manage')
+  yield* activeGrant(grantId)
+  const me = yield* CurrentUser
+  const now = yield* Clock.currentTimeMillis
+  yield* query((db) =>
+    db
+      .update(managementGrant)
+      .set({ revokedAt: new Date(now), revokedBy: me.id })
+      .where(eq(managementGrant.id, grantId)),
+  )
+})
 
 /**
  * What other companies' staff changed in this company, newest first. The company's own changes
@@ -673,8 +672,9 @@ export const managerActivity = Effect.gen(function* () {
       })
       .from(auditEvent)
       .where(
-        and(
-          eq(auditEvent.organizationId, org.id),
+        inCompany(
+          auditEvent,
+          org.id,
           sql`coalesce(${auditEvent.actorOrganizationId}, '') <> ${org.id}`,
         ),
       )
@@ -690,7 +690,7 @@ export const managerActivity = Effect.gen(function* () {
           db
             .select({ id: agreement.id, kind: agreement.kind })
             .from(agreement)
-            .where(and(eq(agreement.organizationId, org.id), inArray(agreement.id, agreementIds))),
+            .where(inCompany(agreement, org.id, inArray(agreement.id, agreementIds))),
         )
   const kindOf = new Map(kinds.map((k) => [k.id, k.kind]))
   return rows.map((r) => ({
@@ -698,4 +698,4 @@ export const managerActivity = Effect.gen(function* () {
     at: r.at.getTime(),
     agreementKind: r.entityId ? (kindOf.get(r.entityId) ?? null) : null,
   }))
-})
+}).pipe(Effect.withSpan('management.managerActivity'))

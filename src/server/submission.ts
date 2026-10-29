@@ -1,8 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { submission } from '#/db/schema'
 import type { Permissions } from '#/lib/permissions'
 import { decodeSubmissionResult, encodeSubmissionResult } from '#/lib/submission-result'
+import { inCompany } from '#/server/scoped'
 import { requirePermission } from './authorize'
 import { Conflict, UncertainSubmission } from './errors'
 import { orgQuery } from './scoped'
@@ -24,8 +25,9 @@ export function once<A, E, Input extends { requestId?: string }>(
     const { requestId = crypto.randomUUID(), ...payload } = input
     const encoded = JSON.stringify(payload)
     const scope = (organizationId: string) =>
-      and(
-        eq(submission.organizationId, organizationId),
+      inCompany(
+        submission,
+        organizationId,
         eq(submission.userId, user.id),
         eq(submission.operation, operation),
         eq(submission.requestId, requestId),

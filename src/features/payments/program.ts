@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { desc, eq, inArray } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { invoice, party, payment, paymentImport } from '#/db/schema'
@@ -20,8 +20,8 @@ import { settlementStatements } from '#/features/ledger/settlement'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
-import { Conflict, NotFound } from '#/server/errors'
-import { orgQuery } from '#/server/scoped'
+import { Conflict } from '#/server/errors'
+import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import { Camt054Error, parseCamt054 } from './camt054'
@@ -126,7 +126,7 @@ const aviOwners = (invoiceIds: readonly string[]) =>
               recipientName: invoice.recipientName,
             })
             .from(invoice)
-            .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.id, batch))),
+            .where(inCompany(invoice, organizationId, inArray(invoice.id, batch))),
         )),
       )
     }
@@ -136,150 +136,146 @@ const aviOwners = (invoiceIds: readonly string[]) =>
 // ---------------------------------------------------------------------------------------------
 // Import
 
-export const importPayments = (input: ImportPaymentsInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(book)
-    const me = yield* CurrentUser
-    const parsed = yield* Effect.try({
-      try: () => parseCamt054(input.content),
-      catch: (e) =>
-        new Conflict({
-          message:
-            e instanceof Camt054Error
-              ? `${e.message}. Välj en camt.054-fil från banken.`
-              : 'Filen kunde inte läsas. Välj en camt.054-fil från banken.',
-        }),
-    })
-
-    // Skip payments seen before (in an earlier file, or twice in this one).
-    const seen = new Set<string>()
-    for (const refs of chunks(
-      [...new Set(parsed.payments.map((p) => p.bankReference))],
-      IN_CHUNK,
-    )) {
-      const rows = yield* orgQuery((db, organizationId) =>
-        db
-          .select({ bankReference: payment.bankReference })
-          .from(payment)
-          .where(
-            and(eq(payment.organizationId, organizationId), inArray(payment.bankReference, refs)),
-          ),
-      )
-      for (const r of rows) seen.add(r.bankReference)
-    }
-    const fresh = parsed.payments.filter((p) => {
-      if (seen.has(p.bankReference)) return false
-      seen.add(p.bankReference)
-      return true
-    })
-
-    // The avi each OCR names tells whose payment it is; their open avier decide the split.
-    const named = yield* avierForOcrs(fresh.map((p) => p.reference))
-    const partyIds = [...new Set([...named.values()].map((a) => a.partyId))]
-    const open = yield* openAvierFor(partyIds)
-    const results = matchPayments(fresh, named, open)
-    const owners = yield* aviOwners([
-      ...[...named.values()].map((a) => a.id),
-      ...[...open.values()].flat().map((a) => a.id),
-    ])
-    // Fee waivers and late interest go with the last payment in the file that settles the avi.
-    const settled = yield* settlementStatements(
-      plannedEntries(fresh.map((p, i) => ({ ...p, allocations: results[i].allocations }))),
-    )
-    const lastSettling = new Map<string, number>()
-    results.forEach((r, i) => {
-      for (const a of r.allocations) if (a.invoiceId) lastSettling.set(a.invoiceId, i)
-    })
-    const settledAt = new Map<number, string[]>()
-    for (const invoiceId of settled.keys()) {
-      const last = lastSettling.get(invoiceId) ?? -1
-      settledAt.set(last, [...(settledAt.get(last) ?? []), invoiceId])
-    }
-
-    const importId = crypto.randomUUID()
-    yield* orgQuery((db, organizationId) =>
-      db.insert(paymentImport).values({
-        id: importId,
-        organizationId,
-        fileName: input.fileName,
-        messageId: parsed.messageId,
-        importedByUserId: me.id,
-        paymentCount: fresh.length,
-        duplicateCount: parsed.payments.length - fresh.length,
-        totalOre: fresh.reduce((sum, p) => sum + p.amountOre, 0),
+export const importPayments = Effect.fn('payments.importPayments')(function* (
+  input: ImportPaymentsInput,
+) {
+  yield* requirePermission(book)
+  const me = yield* CurrentUser
+  const parsed = yield* Effect.try({
+    try: () => parseCamt054(input.content),
+    catch: (e) =>
+      new Conflict({
+        message:
+          e instanceof Camt054Error
+            ? `${e.message}. Välj en camt.054-fil från banken.`
+            : 'Filen kunde inte läsas. Välj en camt.054-fil från banken.',
       }),
-    )
+  })
 
-    // A payment, its posting and its allocations always land in the same batch, so a failure
-    // part-way leaves no half-booked payment; importing the file again picks up the rest.
-    const perPayment = (db: Db, organizationId: string) =>
-      fresh.map((p, i) => {
-        const match = results[i]
-        const id = crypto.randomUUID()
-        const ocr = p.reference?.replace(/\D/g, '') ?? ''
-        const namedAvi = named.get(ocr)
-        return [
-          db.insert(payment).values({
-            id,
-            organizationId,
-            importId,
-            bankReference: p.bankReference,
-            bookingDate: p.bookingDate,
-            amountOre: p.amountOre,
-            reference: p.reference,
-            payerName: p.payerName,
-            status: match.status,
-          }),
-          ...postingStatements(
-            db,
-            organizationId,
-            { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: id },
-            paymentEntries(id, p.amountOre),
-          ),
-          ...(match.partyId && namedAvi
-            ? allocationStatements(
-                db,
-                organizationId,
-                { id, bookingDate: p.bookingDate },
-                match.allocations,
-                owners,
-                { partyId: match.partyId, agreementId: namedAvi.agreementId },
-              )
-            : []),
-          ...(settledAt.get(i) ?? []).flatMap(
-            (invoiceId) => settled.get(invoiceId)?.(db, organizationId) ?? [],
-          ),
-        ]
-      })
-    yield* orgQuery(async (db, organizationId) => {
-      let batch: ReturnType<typeof perPayment>[number] = []
-      for (const statements of perPayment(db, organizationId)) {
-        if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) {
-          const [first, ...rest] = batch
-          await db.batch([first, ...rest])
-          batch = []
-        }
-        batch = [...batch, ...statements]
-      }
-      if (batch.length > 0) {
+  // Skip payments seen before (in an earlier file, or twice in this one).
+  const seen = new Set<string>()
+  for (const refs of chunks([...new Set(parsed.payments.map((p) => p.bankReference))], IN_CHUNK)) {
+    const rows = yield* orgQuery((db, organizationId) =>
+      db
+        .select({ bankReference: payment.bankReference })
+        .from(payment)
+        .where(inCompany(payment, organizationId, inArray(payment.bankReference, refs))),
+    )
+    for (const r of rows) seen.add(r.bankReference)
+  }
+  const fresh = parsed.payments.filter((p) => {
+    if (seen.has(p.bankReference)) return false
+    seen.add(p.bankReference)
+    return true
+  })
+
+  // The avi each OCR names tells whose payment it is; their open avier decide the split.
+  const named = yield* avierForOcrs(fresh.map((p) => p.reference))
+  const partyIds = [...new Set([...named.values()].map((a) => a.partyId))]
+  const open = yield* openAvierFor(partyIds)
+  const results = matchPayments(fresh, named, open)
+  const owners = yield* aviOwners([
+    ...[...named.values()].map((a) => a.id),
+    ...[...open.values()].flat().map((a) => a.id),
+  ])
+  // Fee waivers and late interest go with the last payment in the file that settles the avi.
+  const settled = yield* settlementStatements(
+    plannedEntries(fresh.map((p, i) => ({ ...p, allocations: results[i].allocations }))),
+  )
+  const lastSettling = new Map<string, number>()
+  results.forEach((r, i) => {
+    for (const a of r.allocations) if (a.invoiceId) lastSettling.set(a.invoiceId, i)
+  })
+  const settledAt = new Map<number, string[]>()
+  for (const invoiceId of settled.keys()) {
+    const last = lastSettling.get(invoiceId) ?? -1
+    settledAt.set(last, [...(settledAt.get(last) ?? []), invoiceId])
+  }
+
+  const importId = crypto.randomUUID()
+  yield* orgQuery((db, organizationId) =>
+    db.insert(paymentImport).values({
+      id: importId,
+      organizationId,
+      fileName: input.fileName,
+      messageId: parsed.messageId,
+      importedByUserId: me.id,
+      paymentCount: fresh.length,
+      duplicateCount: parsed.payments.length - fresh.length,
+      totalOre: fresh.reduce((sum, p) => sum + p.amountOre, 0),
+    }),
+  )
+
+  // A payment, its posting and its allocations always land in the same batch, so a failure
+  // part-way leaves no half-booked payment; importing the file again picks up the rest.
+  const perPayment = (db: Db, organizationId: string) =>
+    fresh.map((p, i) => {
+      const match = results[i]
+      const id = crypto.randomUUID()
+      const ocr = p.reference?.replace(/\D/g, '') ?? ''
+      const namedAvi = named.get(ocr)
+      return [
+        db.insert(payment).values({
+          id,
+          organizationId,
+          importId,
+          bankReference: p.bankReference,
+          bookingDate: p.bookingDate,
+          amountOre: p.amountOre,
+          reference: p.reference,
+          payerName: p.payerName,
+          status: match.status,
+        }),
+        ...postingStatements(
+          db,
+          organizationId,
+          { date: p.bookingDate, kind: 'payment', description: 'Inbetalning', paymentId: id },
+          paymentEntries(id, p.amountOre),
+        ),
+        ...(match.partyId && namedAvi
+          ? allocationStatements(
+              db,
+              organizationId,
+              { id, bookingDate: p.bookingDate },
+              match.allocations,
+              owners,
+              { partyId: match.partyId, agreementId: namedAvi.agreementId },
+            )
+          : []),
+        ...(settledAt.get(i) ?? []).flatMap(
+          (invoiceId) => settled.get(invoiceId)?.(db, organizationId) ?? [],
+        ),
+      ]
+    })
+  yield* orgQuery(async (db, organizationId) => {
+    let batch: ReturnType<typeof perPayment>[number] = []
+    for (const statements of perPayment(db, organizationId)) {
+      if (batch.length > 0 && batch.length + statements.length > BATCH_STATEMENTS) {
         const [first, ...rest] = batch
         await db.batch([first, ...rest])
+        batch = []
       }
-    })
-
-    const matched = results.filter((r) => r.status === 'matched')
-    return {
-      importId,
-      imported: fresh.length,
-      matched: matched.length,
-      /** Matched payments that left something on a party's credit balance. */
-      toCredit: matched.filter((r) => r.allocations.some((a) => a.invoiceId === null)).length,
-      unmatched: results.length - matched.length,
-      duplicates: parsed.payments.length - fresh.length,
-      skippedDebits: parsed.skippedDebits,
-      skippedOtherCurrency: parsed.skippedOtherCurrency,
+      batch = [...batch, ...statements]
+    }
+    if (batch.length > 0) {
+      const [first, ...rest] = batch
+      await db.batch([first, ...rest])
     }
   })
+
+  const matched = results.filter((r) => r.status === 'matched')
+  return {
+    importId,
+    imported: fresh.length,
+    matched: matched.length,
+    /** Matched payments that left something on a party's credit balance. */
+    toCredit: matched.filter((r) => r.allocations.some((a) => a.invoiceId === null)).length,
+    unmatched: results.length - matched.length,
+    duplicates: parsed.payments.length - fresh.length,
+    skippedDebits: parsed.skippedDebits,
+    skippedOtherCurrency: parsed.skippedOtherCurrency,
+  }
+})
 
 // ---------------------------------------------------------------------------------------------
 // Reading
@@ -291,61 +287,57 @@ const statusesFor: Record<PaymentFilter, readonly (typeof payment.$inferSelect)[
   all: ['matched', 'review', 'unmatched', 'ignored'],
 }
 
-export const listPayments = (filter: PaymentFilter) =>
-  Effect.gen(function* () {
-    yield* requirePermission(read)
-    const rows = yield* orgQuery((db, organizationId) =>
-      db.query.payment.findMany({
-        where: and(
-          eq(payment.organizationId, organizationId),
-          inArray(payment.status, [...statusesFor[filter]]),
+export const listPayments = Effect.fn('payments.listPayments')(function* (filter: PaymentFilter) {
+  yield* requirePermission(read)
+  const rows = yield* orgQuery((db, organizationId) =>
+    db.query.payment.findMany({
+      where: inCompany(payment, organizationId, inArray(payment.status, [...statusesFor[filter]])),
+      orderBy: [desc(payment.bookingDate), desc(payment.createdAt)],
+    }),
+  )
+  const allocated = yield* paymentAllocations(rows)
+  // Where a payment went, or for one waiting the avi its OCR names. Avi details are shown
+  // only to those who may read invoices.
+  const canReadInvoices = yield* hasPermission({ invoice: ['read'] })
+  const named = canReadInvoices
+    ? yield* avierForOcrs(rows.map((r) => r.reference))
+    : new Map<string, NamedAvi>()
+  const labels = canReadInvoices
+    ? yield* aviOwners(
+        [...allocated.values()].flatMap((a) =>
+          a.allocations.flatMap((x) => (x.invoiceId ? [x.invoiceId] : [])),
         ),
-        orderBy: [desc(payment.bookingDate), desc(payment.createdAt)],
-      }),
-    )
-    const allocated = yield* paymentAllocations(rows)
-    // Where a payment went, or for one waiting the avi its OCR names. Avi details are shown
-    // only to those who may read invoices.
-    const canReadInvoices = yield* hasPermission({ invoice: ['read'] })
-    const named = canReadInvoices
-      ? yield* avierForOcrs(rows.map((r) => r.reference))
-      : new Map<string, NamedAvi>()
-    const labels = canReadInvoices
-      ? yield* aviOwners(
-          [...allocated.values()].flatMap((a) =>
-            a.allocations.flatMap((x) => (x.invoiceId ? [x.invoiceId] : [])),
-          ),
-        )
-      : new Map<string, { id: string; recipientName: string } & AviOwner>()
-    return rows.map((r) => {
-      const { allocations, unallocatedOre } = allocated.get(r.id) ?? {
-        allocations: [],
-        unallocatedOre: r.amountOre,
-      }
-      const ocr = r.reference?.replace(/\D/g, '') ?? ''
-      const firstAvi = allocations.find((a) => a.invoiceId)?.invoiceId
-      const first = firstAvi ? labels.get(firstAvi) : named.get(ocr)
-      return {
-        ...r,
-        unallocatedOre,
-        allocations: canReadInvoices
-          ? allocations.map((a) => ({
-              ...a,
-              number: a.invoiceId ? (labels.get(a.invoiceId)?.number ?? 0) : undefined,
-            }))
-          : [],
-        invoice: first
-          ? { id: first.id, number: first.number, recipientName: first.recipientName }
-          : null,
-      }
-    })
+      )
+    : new Map<string, { id: string; recipientName: string } & AviOwner>()
+  return rows.map((r) => {
+    const { allocations, unallocatedOre } = allocated.get(r.id) ?? {
+      allocations: [],
+      unallocatedOre: r.amountOre,
+    }
+    const ocr = r.reference?.replace(/\D/g, '') ?? ''
+    const firstAvi = allocations.find((a) => a.invoiceId)?.invoiceId
+    const first = firstAvi ? labels.get(firstAvi) : named.get(ocr)
+    return {
+      ...r,
+      unallocatedOre,
+      allocations: canReadInvoices
+        ? allocations.map((a) => ({
+            ...a,
+            number: a.invoiceId ? (labels.get(a.invoiceId)?.number ?? 0) : undefined,
+          }))
+        : [],
+      invoice: first
+        ? { id: first.id, number: first.number, recipientName: first.recipientName }
+        : null,
+    }
   })
+})
 
 export const listPaymentImports = requirePermission(read).pipe(
   Effect.andThen(
     orgQuery((db, organizationId) =>
       db.query.paymentImport.findMany({
-        where: eq(paymentImport.organizationId, organizationId),
+        where: inCompany(paymentImport, organizationId),
         orderBy: desc(paymentImport.createdAt),
         limit: 20,
       }),
@@ -365,7 +357,7 @@ export const listPayers = requirePermission({ ...book, invoice: ['read', 'manage
           .selectDistinct({ id: party.id, name: party.name })
           .from(invoice)
           .innerJoin(party, eq(party.id, invoice.partyId))
-          .where(eq(invoice.organizationId, organizationId))
+          .where(inCompany(invoice, organizationId))
           .orderBy(party.name),
       )
       const open = yield* openAvierFor(rows.map((r) => r.id))
@@ -402,7 +394,7 @@ const avierForOcrs = (references: readonly (string | null)[]) =>
             recipientName: invoice.recipientName,
           })
           .from(invoice)
-          .where(and(eq(invoice.organizationId, organizationId), inArray(invoice.ocr, batch))),
+          .where(inCompany(invoice, organizationId, inArray(invoice.ocr, batch))),
       )
       for (const { ocr, ...row } of rows) found.set(ocr, row)
     }
@@ -416,10 +408,9 @@ const getPayment = (paymentId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
       db.query.payment.findFirst({
-        where: and(eq(payment.id, paymentId), eq(payment.organizationId, organizationId)),
+        where: inCompany(payment, organizationId, eq(payment.id, paymentId)),
       }),
-    )
-    if (!row) return yield* new NotFound({ entity: 'payment', id: paymentId })
+    ).pipe(orNotFound('payment', paymentId))
     return row
   })
 
@@ -428,7 +419,7 @@ const setPayment = (paymentId: string, values: Partial<typeof payment.$inferInse
     db
       .update(payment)
       .set(values)
-      .where(and(eq(payment.id, paymentId), eq(payment.organizationId, organizationId))),
+      .where(inCompany(payment, organizationId, eq(payment.id, paymentId))),
   )
 
 /** How a waiting payment would be split if matched to `partyId`: oldest avi first, then credit. */
@@ -441,10 +432,9 @@ const planAssignment = (input: AssignPaymentInput) =>
     const payer = yield* orgQuery((db, organizationId) =>
       db.query.party.findFirst({
         columns: { id: true, name: true },
-        where: and(eq(party.id, input.partyId), eq(party.organizationId, organizationId)),
+        where: inCompany(party, organizationId, eq(party.id, input.partyId)),
       }),
-    )
-    if (!payer) return yield* new NotFound({ entity: 'party', id: input.partyId })
+    ).pipe(orNotFound('party', input.partyId))
     const { unallocatedOre } = (yield* paymentAllocations([p])).get(p.id) ?? {
       unallocatedOre: p.amountOre,
     }
@@ -458,101 +448,101 @@ const planAssignment = (input: AssignPaymentInput) =>
   })
 
 /** "Koppla": where a waiting payment will go if matched to the party, before confirming. */
-export const previewAssignment = (input: AssignPaymentInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(book)
-    const { allocations, owners } = yield* planAssignment(input)
-    return allocations.map((a) => ({
-      ...a,
-      number: a.invoiceId ? (owners.get(a.invoiceId)?.number ?? 0) : undefined,
-    }))
-  })
+export const previewAssignment = Effect.fn('payments.previewAssignment')(function* (
+  input: AssignPaymentInput,
+) {
+  yield* requirePermission(book)
+  const { allocations, owners } = yield* planAssignment(input)
+  return allocations.map((a) => ({
+    ...a,
+    number: a.invoiceId ? (owners.get(a.invoiceId)?.number ?? 0) : undefined,
+  }))
+})
 
 /**
  * Matches a waiting payment to a party by hand: what is unallocated of it settles their open
  * avier, oldest first, and the rest goes to their credit balance.
  */
-export const assignPayment = (input: AssignPaymentInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(book)
-    const { p, payer, allocations, owners } = yield* planAssignment(input)
-    const agreementId = [...owners.values()][0]?.agreementId ?? null
-    const settled = yield* settlementStatements(plannedEntries([{ ...p, allocations }]))
-    yield* orgQuery((db, organizationId) => {
-      const [first, ...rest] = [
-        db
-          .update(payment)
-          .set({ status: 'matched', note: 'Kopplad manuellt' })
-          .where(and(eq(payment.id, p.id), eq(payment.organizationId, organizationId))),
-        ...allocationStatements(db, organizationId, p, allocations, owners, {
-          partyId: payer.id,
-          agreementId,
-        }),
-        ...[...settled.values()].flatMap((statements) => statements(db, organizationId)),
-      ]
-      return db.batch([first, ...rest])
-    })
+export const assignPayment = Effect.fn('payments.assignPayment')(function* (
+  input: AssignPaymentInput,
+) {
+  yield* requirePermission(book)
+  const { p, payer, allocations, owners } = yield* planAssignment(input)
+  const agreementId = [...owners.values()][0]?.agreementId ?? null
+  const settled = yield* settlementStatements(plannedEntries([{ ...p, allocations }]))
+  yield* orgQuery((db, organizationId) => {
+    const [first, ...rest] = [
+      db
+        .update(payment)
+        .set({ status: 'matched', note: 'Kopplad manuellt' })
+        .where(inCompany(payment, organizationId, eq(payment.id, p.id))),
+      ...allocationStatements(db, organizationId, p, allocations, owners, {
+        partyId: payer.id,
+        agreementId,
+      }),
+      ...[...settled.values()].flatMap((statements) => statements(db, organizationId)),
+    ]
+    return db.batch([first, ...rest])
   })
+})
 
 /** For payments that are not rent, e.g. a deposit or a refund handled elsewhere. */
-export const ignorePayment = (paymentId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const p = yield* getPayment(paymentId)
-    if (p.status === 'matched') {
-      return yield* new Conflict({ message: 'Ångra kopplingen innan du ignorerar betalningen' })
-    }
-    // An ignored payment stays unallocated in the ledger; it is handled outside the avier.
-    yield* setPayment(p.id, { status: 'ignored' })
-  })
+export const ignorePayment = Effect.fn('payments.ignorePayment')(function* (paymentId: string) {
+  yield* requirePermission(manage)
+  const p = yield* getPayment(paymentId)
+  if (p.status === 'matched') {
+    return yield* new Conflict({ message: 'Ångra kopplingen innan du ignorerar betalningen' })
+  }
+  // An ignored payment stays unallocated in the ledger; it is handled outside the avier.
+  yield* setPayment(p.id, { status: 'ignored' })
+})
 
 /**
  * The statements that undo payments' allocations and put them back for handling. What a payment
  * put on a credit balance must still be there: credit already used on an avi or paid back can't
  * be taken back.
  */
-export const undoPaymentStatements = (paymentIds: readonly string[], on: string) =>
-  Effect.gen(function* () {
-    const live = yield* livePostings({ kinds: ['allocation'], paymentIds })
-    const toCredit = new Map<string, number>()
-    for (const { entries } of live) {
-      for (const e of entries) {
-        if (e.account === 'receivable' && !e.invoiceId && e.partyId) {
-          toCredit.set(e.partyId, (toCredit.get(e.partyId) ?? 0) - e.amountOre)
-        }
+export const undoPaymentStatements = Effect.fn('payments.undoPaymentStatements')(function* (
+  paymentIds: readonly string[],
+  on: string,
+) {
+  const live = yield* livePostings({ kinds: ['allocation'], paymentIds })
+  const toCredit = new Map<string, number>()
+  for (const { entries } of live) {
+    for (const e of entries) {
+      if (e.account === 'receivable' && !e.invoiceId && e.partyId) {
+        toCredit.set(e.partyId, (toCredit.get(e.partyId) ?? 0) - e.amountOre)
       }
     }
-    const balances = yield* creditBalances([...toCredit.keys()])
-    for (const [partyId, amountOre] of toCredit) {
-      const balance = balances.get(partyId) ?? 0
-      if (balance < amountOre) {
-        return yield* new Conflict({
-          message: `Betalningen gav ${formatSek(amountOre)} tillgodo, men ${formatSek(amountOre - balance)} av det har redan räknats av på en avi eller betalats tillbaka. Det kan inte ångras.`,
-        })
-      }
+  }
+  const balances = yield* creditBalances([...toCredit.keys()])
+  for (const [partyId, amountOre] of toCredit) {
+    const balance = balances.get(partyId) ?? 0
+    if (balance < amountOre) {
+      return yield* new Conflict({
+        message: `Betalningen gav ${formatSek(amountOre)} tillgodo, men ${formatSek(amountOre - balance)} av det har redan räknats av på en avi eller betalats tillbaka. Det kan inte ångras.`,
+      })
     }
-    return (db: Db, organizationId: string) => [
-      db
-        .update(payment)
-        .set({ status: 'unmatched', note: null })
-        .where(
-          and(eq(payment.organizationId, organizationId), inArray(payment.id, [...paymentIds])),
-        ),
-      ...reversalStatements(db, organizationId, live, on, () => 'Ångrad koppling av inbetalning'),
-    ]
-  })
+  }
+  return (db: Db, organizationId: string) => [
+    db
+      .update(payment)
+      .set({ status: 'unmatched', note: null })
+      .where(inCompany(payment, organizationId, inArray(payment.id, [...paymentIds]))),
+    ...reversalStatements(db, organizationId, live, on, () => 'Ångrad koppling av inbetalning'),
+  ]
+})
 
 /** Puts a matched or ignored payment back for handling; reverses what it settled. */
-export const undoPayment = (paymentId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(book)
-    const p = yield* getPayment(paymentId)
-    if (p.status !== 'matched' && p.status !== 'ignored') {
-      return yield* new Conflict({ message: 'Betalningen är inte hanterad' })
-    }
-    const statements = yield* undoPaymentStatements([p.id], yield* today)
-    yield* orgQuery((db, organizationId) => {
-      const [first, ...rest] = statements(db, organizationId)
-      return db.batch([first, ...rest])
-    })
+export const undoPayment = Effect.fn('payments.undoPayment')(function* (paymentId: string) {
+  yield* requirePermission(book)
+  const p = yield* getPayment(paymentId)
+  if (p.status !== 'matched' && p.status !== 'ignored') {
+    return yield* new Conflict({ message: 'Betalningen är inte hanterad' })
+  }
+  const statements = yield* undoPaymentStatements([p.id], yield* today)
+  yield* orgQuery((db, organizationId) => {
+    const [first, ...rest] = statements(db, organizationId)
+    return db.batch([first, ...rest])
   })
+})

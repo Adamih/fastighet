@@ -87,4 +87,4 @@ export const portfolio = Effect.gen(function* () {
       .sort((a, b) => a.bookingDate.localeCompare(b.bookingDate))
       .slice(0, LIST_LIMIT),
   }
-})
+}).pipe(Effect.withSpan('portfolio.portfolio'))

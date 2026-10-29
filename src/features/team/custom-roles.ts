@@ -4,6 +4,7 @@ import { managementAssignment, member, organizationRole, organizationSettings } 
 import { tierOf } from '#/features/billing/store'
 import { cheapestTierFor, tierAllows, tiers } from '#/features/billing/tiers'
 import { type AppPermissions, appPermissions, reservedRoleNames } from '#/lib/permissions'
+import { inCompany } from '#/server/scoped'
 
 // Our rules for custom roles (Better Auth's dynamic access control), checked before its role
 // endpoints run (`hooks` in `lib/auth-config.ts`). Better Auth already checks that the caller may
@@ -34,8 +35,9 @@ async function roleInUse(db: Db, organizationId: string, key: string) {
     .select({ id: member.id })
     .from(member)
     .where(
-      and(
-        eq(member.organizationId, organizationId),
+      inCompany(
+        member,
+        organizationId,
         or(
           eq(member.role, key),
           like(member.role, `${key},%`),
@@ -65,7 +67,7 @@ async function tierProblem(db: Db, organizationId: string) {
   const [settings] = await db
     .select({ kind: organizationSettings.kind })
     .from(organizationSettings)
-    .where(eq(organizationSettings.organizationId, organizationId))
+    .where(inCompany(organizationSettings, organizationId))
   const needed = cheapestTierFor(settings?.kind ?? 'landlord', 'roles')
   return needed
     ? `Egna roller ingår inte i ${tiers[tier].name()}. De finns i ${needed.name()} och uppåt (Abonnemang).`
@@ -88,7 +90,7 @@ async function storedRole(
   const [row] = await db
     .select({ role: organizationRole.role })
     .from(organizationRole)
-    .where(and(eq(organizationRole.organizationId, organizationId), condition))
+    .where(inCompany(organizationRole, organizationId, condition))
   return row ?? null
 }
 

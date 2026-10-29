@@ -11,18 +11,19 @@ import type { ReceivableEntry } from './postings'
  * avi, dated by when the money arrived. Every program that settles avier with dated money (bank
  * import, "Koppla", payment by hand) goes through here.
  */
-export const settlementStatements = (planned: ReadonlyMap<string, readonly ReceivableEntry[]>) =>
-  Effect.gen(function* () {
-    const waivers = yield* feeWaiverStatements(planned)
-    const interest = yield* lateInterestStatements(planned)
-    const ids = new Set([...waivers.keys(), ...interest.keys()])
-    return new Map(
-      [...ids].map((id) => [
-        id,
-        (db: Db, organizationId: string) => [
-          ...(waivers.get(id)?.(db, organizationId) ?? []),
-          ...(interest.get(id)?.(db, organizationId) ?? []),
-        ],
-      ]),
-    )
-  })
+export const settlementStatements = Effect.fn('ledger.settlementStatements')(function* (
+  planned: ReadonlyMap<string, readonly ReceivableEntry[]>,
+) {
+  const waivers = yield* feeWaiverStatements(planned)
+  const interest = yield* lateInterestStatements(planned)
+  const ids = new Set([...waivers.keys(), ...interest.keys()])
+  return new Map(
+    [...ids].map((id) => [
+      id,
+      (db: Db, organizationId: string) => [
+        ...(waivers.get(id)?.(db, organizationId) ?? []),
+        ...(interest.get(id)?.(db, organizationId) ?? []),
+      ],
+    ]),
+  )
+})

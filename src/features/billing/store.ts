@@ -3,6 +3,7 @@ import { and, count, eq, inArray } from 'drizzle-orm'
 import type Stripe from 'stripe'
 import type { Db } from '#/db'
 import { member, organizationSettings, subscription, unit } from '#/db/schema'
+import { inCompany } from '#/server/scoped'
 import { isTierId, type PlanUsage, resolveTier, type TierId, tierIds, tiers } from './tiers'
 
 // A company's tier and usage, read with plain Drizzle so Better Auth's hooks (`auth-config.ts`)
@@ -29,7 +30,7 @@ export async function planState(db: Db, organizationId: string) {
   const [settings] = await db
     .select({ kind: organizationSettings.kind, planOverride: organizationSettings.planOverride })
     .from(organizationSettings)
-    .where(eq(organizationSettings.organizationId, organizationId))
+    .where(inCompany(organizationSettings, organizationId))
   const kind = settings?.kind ?? 'landlord'
   const paying = await payingSubscription(db, organizationId)
   return {
@@ -49,12 +50,12 @@ export async function usageOf(db: Db, organizationId: string): Promise<PlanUsage
   const units = await db
     .select({ kind: unit.kind, n: count() })
     .from(unit)
-    .where(eq(unit.organizationId, organizationId))
+    .where(inCompany(unit, organizationId))
     .groupBy(unit.kind)
   const [members] = await db
     .select({ n: count() })
     .from(member)
-    .where(eq(member.organizationId, organizationId))
+    .where(inCompany(member, organizationId))
   const of = (kind: string) => units.find((u) => u.kind === kind)?.n ?? 0
   return {
     apartments: of('apartment'),

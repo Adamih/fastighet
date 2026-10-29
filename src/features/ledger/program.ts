@@ -1,10 +1,10 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { eq, inArray, isNull } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { invoice, ledgerEntry, posting } from '#/db/schema'
 import type { OpenAvi } from '#/features/payments/matching'
-import { orgQuery } from '#/server/scoped'
+import { inCompany, orgQuery } from '#/server/scoped'
 import type { PostingKind } from './kinds'
 import {
   creditBalance,
@@ -77,35 +77,37 @@ export function postingStatements(
 }
 
 /** Each avi's receivable entries, with their posting's kind and date. */
-export const receivableEntriesFor = (invoiceIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const rows: { invoiceId: string | null; kind: PostingKind; date: string; amountOre: number }[] =
-      []
-    for (const ids of chunks([...new Set(invoiceIds)])) {
-      rows.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db
-            .select({
-              invoiceId: ledgerEntry.invoiceId,
-              kind: posting.kind,
-              date: posting.date,
-              amountOre: ledgerEntry.amountOre,
-            })
-            .from(ledgerEntry)
-            .innerJoin(posting, eq(posting.id, ledgerEntry.postingId))
-            .where(
-              and(
-                eq(ledgerEntry.organizationId, organizationId),
-                eq(ledgerEntry.account, 'receivable'),
-                inArray(ledgerEntry.invoiceId, ids),
-              ),
+export const receivableEntriesFor = Effect.fn('ledger.receivableEntriesFor')(function* (
+  invoiceIds: readonly string[],
+) {
+  const rows: { invoiceId: string | null; kind: PostingKind; date: string; amountOre: number }[] =
+    []
+  for (const ids of chunks([...new Set(invoiceIds)])) {
+    rows.push(
+      ...(yield* orgQuery((db, organizationId) =>
+        db
+          .select({
+            invoiceId: ledgerEntry.invoiceId,
+            kind: posting.kind,
+            date: posting.date,
+            amountOre: ledgerEntry.amountOre,
+          })
+          .from(ledgerEntry)
+          .innerJoin(posting, eq(posting.id, ledgerEntry.postingId))
+          .where(
+            inCompany(
+              ledgerEntry,
+              organizationId,
+              eq(ledgerEntry.account, 'receivable'),
+              inArray(ledgerEntry.invoiceId, ids),
             ),
-        )),
-      )
-    }
-    const byInvoice = groupBy(rows, (r) => r.invoiceId ?? '')
-    return new Map<string, ReceivableEntry[]>(invoiceIds.map((id) => [id, byInvoice.get(id) ?? []]))
-  })
+          ),
+      )),
+    )
+  }
+  const byInvoice = groupBy(rows, (r) => r.invoiceId ?? '')
+  return new Map<string, ReceivableEntry[]>(invoiceIds.map((id) => [id, byInvoice.get(id) ?? []]))
+})
 
 /** What each avi's receivable entries add up to (see `invoiceMoney`). Avier with no entries owe nothing. */
 export const invoiceMoneyFor = (invoiceIds: readonly string[]) =>
@@ -127,13 +129,11 @@ export const allInvoiceMoney = Effect.gen(function* () {
       })
       .from(ledgerEntry)
       .innerJoin(posting, eq(posting.id, ledgerEntry.postingId))
-      .where(
-        and(eq(ledgerEntry.organizationId, organizationId), eq(ledgerEntry.account, 'receivable')),
-      ),
+      .where(inCompany(ledgerEntry, organizationId, eq(ledgerEntry.account, 'receivable'))),
   )
   const byInvoice = groupBy(rows, (r) => r.invoiceId ?? '')
   return (invoiceId: string) => invoiceMoney(byInvoice.get(invoiceId) ?? [])
-})
+}).pipe(Effect.withSpan('ledger.allInvoiceMoney'))
 
 const reversedBy = alias(posting, 'reversed_by')
 
@@ -141,37 +141,37 @@ const reversedBy = alias(posting, 'reversed_by')
  * Postings of these kinds that touch an avi or a payment and haven't been reversed (and aren't
  * reversals themselves), with their entries, so they can be reversed or summed.
  */
-export const livePostings = (filter: {
+export const livePostings = Effect.fn('ledger.livePostings')(function* (filter: {
   kinds: readonly PostingKind[]
   invoiceId?: string
   invoiceIds?: readonly string[]
   paymentIds?: readonly string[]
-}) =>
-  Effect.gen(function* () {
-    const rows = yield* orgQuery((db, organizationId) =>
-      db
-        .select({ posting, entry: ledgerEntry })
-        .from(posting)
-        .innerJoin(ledgerEntry, eq(ledgerEntry.postingId, posting.id))
-        .leftJoin(reversedBy, eq(reversedBy.reversesPostingId, posting.id))
-        .where(
-          and(
-            eq(posting.organizationId, organizationId),
-            inArray(posting.kind, [...filter.kinds]),
-            isNull(posting.reversesPostingId),
-            isNull(reversedBy.id),
-            filter.invoiceId ? eq(posting.invoiceId, filter.invoiceId) : undefined,
-            filter.invoiceIds ? inArray(posting.invoiceId, [...filter.invoiceIds]) : undefined,
-            filter.paymentIds ? inArray(posting.paymentId, [...filter.paymentIds]) : undefined,
-          ),
+}) {
+  const rows = yield* orgQuery((db, organizationId) =>
+    db
+      .select({ posting, entry: ledgerEntry })
+      .from(posting)
+      .innerJoin(ledgerEntry, eq(ledgerEntry.postingId, posting.id))
+      .leftJoin(reversedBy, eq(reversedBy.reversesPostingId, posting.id))
+      .where(
+        inCompany(
+          posting,
+          organizationId,
+          inArray(posting.kind, [...filter.kinds]),
+          isNull(posting.reversesPostingId),
+          isNull(reversedBy.id),
+          filter.invoiceId ? eq(posting.invoiceId, filter.invoiceId) : undefined,
+          filter.invoiceIds ? inArray(posting.invoiceId, [...filter.invoiceIds]) : undefined,
+          filter.paymentIds ? inArray(posting.paymentId, [...filter.paymentIds]) : undefined,
         ),
-    )
-    const grouped = groupBy(rows, (r) => r.posting.id)
-    return [...grouped.values()].map((group) => ({
-      posting: group[0].posting,
-      entries: group.map((g) => g.entry),
-    }))
-  })
+      ),
+  )
+  const grouped = groupBy(rows, (r) => r.posting.id)
+  return [...grouped.values()].map((group) => ({
+    posting: group[0].posting,
+    entries: group.map((g) => g.entry),
+  }))
+})
 
 export type LivePosting = Effect.Success<ReturnType<typeof livePostings>>[number]
 
@@ -226,30 +226,31 @@ export function reversalStatements(
  * What each payment is matched to: the avier its live allocations settle, with amounts, and
  * what is still unallocated.
  */
-export const paymentAllocations = (payments: readonly { id: string; amountOre: number }[]) =>
-  Effect.gen(function* () {
-    const allocations = new Map<string, { invoiceId: string | null; amountOre: number }[]>()
-    for (const batch of chunks(payments.map((p) => p.id))) {
-      for (const { posting: p, entries } of yield* livePostings({
-        kinds: ['allocation'],
-        paymentIds: batch,
-      })) {
-        // To an avi, or (no avi) to the party's credit balance.
-        const receivable = entries.find((e) => e.account === 'receivable')
-        if (!p.paymentId || !receivable) continue
-        const list = allocations.get(p.paymentId) ?? []
-        list.push({ invoiceId: receivable.invoiceId, amountOre: -receivable.amountOre })
-        allocations.set(p.paymentId, list)
-      }
+export const paymentAllocations = Effect.fn('ledger.paymentAllocations')(function* (
+  payments: readonly { id: string; amountOre: number }[],
+) {
+  const allocations = new Map<string, { invoiceId: string | null; amountOre: number }[]>()
+  for (const batch of chunks(payments.map((p) => p.id))) {
+    for (const { posting: p, entries } of yield* livePostings({
+      kinds: ['allocation'],
+      paymentIds: batch,
+    })) {
+      // To an avi, or (no avi) to the party's credit balance.
+      const receivable = entries.find((e) => e.account === 'receivable')
+      if (!p.paymentId || !receivable) continue
+      const list = allocations.get(p.paymentId) ?? []
+      list.push({ invoiceId: receivable.invoiceId, amountOre: -receivable.amountOre })
+      allocations.set(p.paymentId, list)
     }
-    return new Map(
-      payments.map((p) => {
-        const list = allocations.get(p.id) ?? []
-        const allocatedOre = list.reduce((s, a) => s + a.amountOre, 0)
-        return [p.id, { allocations: list, unallocatedOre: p.amountOre - allocatedOre }]
-      }),
-    )
-  })
+  }
+  return new Map(
+    payments.map((p) => {
+      const list = allocations.get(p.id) ?? []
+      const allocatedOre = list.reduce((s, a) => s + a.amountOre, 0)
+      return [p.id, { allocations: list, unallocatedOre: p.amountOre - allocatedOre }]
+    }),
+  )
+})
 
 /** The avi's party and agreement, for entries on its receivable. */
 export const invoiceOwner = (invoiceId: string) =>
@@ -257,64 +258,68 @@ export const invoiceOwner = (invoiceId: string) =>
     db
       .select({ partyId: invoice.partyId, agreementId: invoice.agreementId })
       .from(invoice)
-      .where(and(eq(invoice.id, invoiceId), eq(invoice.organizationId, organizationId))),
+      .where(inCompany(invoice, organizationId, eq(invoice.id, invoiceId))),
   ).pipe(Effect.map(([row]) => row ?? null))
 
 /** Each party's credit balance (tillgodo): their receivable entries that aren't on an avi. */
-export const creditBalances = (partyIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const rows: { partyId: string | null; amountOre: number }[] = []
-    for (const ids of chunks([...new Set(partyIds)])) {
-      rows.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db
-            .select({ partyId: ledgerEntry.partyId, amountOre: ledgerEntry.amountOre })
-            .from(ledgerEntry)
-            .where(
-              and(
-                eq(ledgerEntry.organizationId, organizationId),
-                eq(ledgerEntry.account, 'receivable'),
-                isNull(ledgerEntry.invoiceId),
-                inArray(ledgerEntry.partyId, ids),
-              ),
+export const creditBalances = Effect.fn('ledger.creditBalances')(function* (
+  partyIds: readonly string[],
+) {
+  const rows: { partyId: string | null; amountOre: number }[] = []
+  for (const ids of chunks([...new Set(partyIds)])) {
+    rows.push(
+      ...(yield* orgQuery((db, organizationId) =>
+        db
+          .select({ partyId: ledgerEntry.partyId, amountOre: ledgerEntry.amountOre })
+          .from(ledgerEntry)
+          .where(
+            inCompany(
+              ledgerEntry,
+              organizationId,
+              eq(ledgerEntry.account, 'receivable'),
+              isNull(ledgerEntry.invoiceId),
+              inArray(ledgerEntry.partyId, ids),
             ),
-        )),
-      )
-    }
-    const byParty = groupBy(rows, (r) => r.partyId ?? '')
-    return new Map(partyIds.map((id) => [id, creditBalance(byParty.get(id) ?? [])]))
-  })
+          ),
+      )),
+    )
+  }
+  const byParty = groupBy(rows, (r) => r.partyId ?? '')
+  return new Map(partyIds.map((id) => [id, creditBalance(byParty.get(id) ?? [])]))
+})
 
 /** Each party's avier with something still owed (not voided), for splitting payments. */
-export const openAvierFor = (partyIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const rows: { id: string; number: number; dueDate: string; partyId: string }[] = []
-    for (const ids of chunks([...new Set(partyIds)])) {
-      rows.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db
-            .select({
-              id: invoice.id,
-              number: invoice.number,
-              dueDate: invoice.dueDate,
-              partyId: invoice.partyId,
-            })
-            .from(invoice)
-            .where(
-              and(
-                eq(invoice.organizationId, organizationId),
-                inArray(invoice.partyId, ids),
-                isNull(invoice.voidedAt),
-              ),
+export const openAvierFor = Effect.fn('ledger.openAvierFor')(function* (
+  partyIds: readonly string[],
+) {
+  const rows: { id: string; number: number; dueDate: string; partyId: string }[] = []
+  for (const ids of chunks([...new Set(partyIds)])) {
+    rows.push(
+      ...(yield* orgQuery((db, organizationId) =>
+        db
+          .select({
+            id: invoice.id,
+            number: invoice.number,
+            dueDate: invoice.dueDate,
+            partyId: invoice.partyId,
+          })
+          .from(invoice)
+          .where(
+            inCompany(
+              invoice,
+              organizationId,
+              inArray(invoice.partyId, ids),
+              isNull(invoice.voidedAt),
             ),
-        )),
-      )
-    }
-    const money = yield* invoiceMoneyFor(rows.map((r) => r.id))
-    const result = new Map<string, OpenAvi[]>(partyIds.map((id) => [id, []]))
-    for (const r of rows) {
-      const owedOre = money.get(r.id)?.owedOre ?? 0
-      if (owedOre > 0) result.get(r.partyId)?.push({ ...r, owedOre })
-    }
-    return result
-  })
+          ),
+      )),
+    )
+  }
+  const money = yield* invoiceMoneyFor(rows.map((r) => r.id))
+  const result = new Map<string, OpenAvi[]>(partyIds.map((id) => [id, []]))
+  for (const r of rows) {
+    const owedOre = money.get(r.id)?.owedOre ?? 0
+    if (owedOre > 0) result.get(r.partyId)?.push({ ...r, owedOre })
+  }
+  return result
+})

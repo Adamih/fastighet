@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { eq, inArray, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { agreement, charge, pledge } from '#/db/schema'
@@ -9,7 +9,7 @@ import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
-import { orgQuery } from '#/server/scoped'
+import { inCompany, orgQuery } from '#/server/scoped'
 import { CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import {
@@ -48,37 +48,34 @@ const columns = {
  * stood on `asOf` (today by default): later notices are left out and releases after it don't
  * count yet. Callers check read access (the bostadsrätt's own).
  */
-export const pledgesFor = (agreementIds: readonly string[], asOf?: string) =>
-  Effect.gen(function* () {
-    if (agreementIds.length === 0) return new Map<string, PledgeView[]>()
-    const rows = yield* orgQuery((db, organizationId) =>
-      db
-        .select(columns)
-        .from(pledge)
-        .where(
-          and(
-            eq(pledge.organizationId, organizationId),
-            inArray(pledge.agreementId, [...agreementIds]),
-          ),
-        ),
-    )
-    const on = asOf ?? (yield* today)
-    const byAgreement = new Map<string, PledgeView[]>()
-    for (const id of agreementIds) {
-      const own = rows
-        .filter((r) => r.agreementId === id && r.notifiedOn <= on)
-        .map((r) => ({
-          ...r,
-          createdAt: r.createdAt.getTime(),
-          confirmedAt: r.confirmedAt?.getTime() ?? null,
-          releaseConfirmedAt: r.releaseConfirmedAt?.getTime() ?? null,
-          // A release after `asOf` hadn't happened yet.
-          ...(r.releasedOn && r.releasedOn > on ? { releasedOn: null, releaseNote: null } : {}),
-        }))
-      byAgreement.set(id, inPriorityOrder(own, on))
-    }
-    return byAgreement
-  })
+export const pledgesFor = Effect.fn('pledges.pledgesFor')(function* (
+  agreementIds: readonly string[],
+  asOf?: string,
+) {
+  if (agreementIds.length === 0) return new Map<string, PledgeView[]>()
+  const rows = yield* orgQuery((db, organizationId) =>
+    db
+      .select(columns)
+      .from(pledge)
+      .where(inCompany(pledge, organizationId, inArray(pledge.agreementId, [...agreementIds]))),
+  )
+  const on = asOf ?? (yield* today)
+  const byAgreement = new Map<string, PledgeView[]>()
+  for (const id of agreementIds) {
+    const own = rows
+      .filter((r) => r.agreementId === id && r.notifiedOn <= on)
+      .map((r) => ({
+        ...r,
+        createdAt: r.createdAt.getTime(),
+        confirmedAt: r.confirmedAt?.getTime() ?? null,
+        releaseConfirmedAt: r.releaseConfirmedAt?.getTime() ?? null,
+        // A release after `asOf` hadn't happened yet.
+        ...(r.releasedOn && r.releasedOn > on ? { releasedOn: null, releaseNote: null } : {}),
+      }))
+    byAgreement.set(id, inPriorityOrder(own, on))
+  }
+  return byAgreement
+})
 
 type PledgeRow = Omit<
   typeof pledge.$inferSelect,
@@ -94,11 +91,12 @@ type PledgeRow = Omit<
 export type PledgeView = PledgeRow & { active: boolean; priority: number | null }
 
 /** How many pledges are in force on each bostadsrätt today, for lists. */
-export const activePledgeCounts = (agreementIds: readonly string[]) =>
-  Effect.gen(function* () {
-    const pledges = yield* pledgesFor(agreementIds)
-    return new Map([...pledges].map(([id, list]) => [id, list.filter((p) => p.active).length]))
-  })
+export const activePledgeCounts = Effect.fn('pledges.activePledgeCounts')(function* (
+  agreementIds: readonly string[],
+) {
+  const pledges = yield* pledgesFor(agreementIds)
+  return new Map([...pledges].map(([id, list]) => [id, list.filter((p) => p.active).length]))
+})
 
 const registerProblemMessages: Record<RegisterProblem, string> = {
   future: 'Datumet då underrättelsen kom in kan inte vara i framtiden',
@@ -115,53 +113,55 @@ const releaseProblemMessages: Record<ReleaseProblem, string> = {
  * Registers a lender's notice on a bostadsrätt, with the förening's pantsättningsavgift as a
  * one-off amount on it when it charges one (unless the board skips it), in the same batch.
  */
-export const registerPledge = (input: RegisterPledgeInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const me = yield* CurrentUser
-    const [ownership] = yield* orgQuery((db, organizationId) =>
-      db
-        .select({ id: agreement.id, startDate: agreement.startDate, endDate: agreement.endDate })
-        .from(agreement)
-        .where(
-          and(
-            eq(agreement.id, input.ownershipId),
-            eq(agreement.organizationId, organizationId),
-            eq(agreement.kind, 'tenant_ownership'),
-          ),
-        ),
-    )
-    if (!ownership) return yield* new NotFound({ entity: 'ownership', id: input.ownershipId })
-    const problem = registerProblem(ownership, input.notifiedOn, yield* today)
-    if (problem) return yield* new Conflict({ message: registerProblemMessages[problem] })
-    const creditorName = input.creditorName.trim()
-    const fee = yield* feeCharge('pledge_fee', yield* loadFeeTerms, {
-      charge: input.chargeFee ?? false,
-      date: input.notifiedOn,
-      agreement: ownership,
-      description: `Pantsättningsavgift, ${creditorName}`,
-    })
-    const orgNumber = blankToNull(input.creditorOrganizationNumber)
-    const id = crypto.randomUUID()
-    yield* orgQuery((db, organizationId) =>
-      db.batch([
-        db.insert(pledge).values({
-          id,
+export const registerPledge = Effect.fn('pledges.registerPledge')(function* (
+  input: RegisterPledgeInput,
+) {
+  yield* requirePermission(manage)
+  const me = yield* CurrentUser
+  const [ownership] = yield* orgQuery((db, organizationId) =>
+    db
+      .select({ id: agreement.id, startDate: agreement.startDate, endDate: agreement.endDate })
+      .from(agreement)
+      .where(
+        inCompany(
+          agreement,
           organizationId,
-          agreementId: ownership.id,
-          creditorName,
-          creditorOrganizationNumber: orgNumber && formatOrganizationNumber(orgNumber),
-          reference: blankToNull(input.reference),
-          notifiedOn: input.notifiedOn,
-          note: blankToNull(input.note),
-          registeredBy: me.id,
-          confirmationEmail: blankToNull(input.confirmationEmail ?? ''),
-        }),
-        ...(fee ? [db.insert(charge).values({ ...fee, organizationId })] : []),
-      ]),
-    )
-    return { id, ownershipId: ownership.id, feeOre: fee?.amountOre ?? null }
+          eq(agreement.id, input.ownershipId),
+          eq(agreement.kind, 'tenant_ownership'),
+        ),
+      ),
+  )
+  if (!ownership) return yield* new NotFound({ entity: 'ownership', id: input.ownershipId })
+  const problem = registerProblem(ownership, input.notifiedOn, yield* today)
+  if (problem) return yield* new Conflict({ message: registerProblemMessages[problem] })
+  const creditorName = input.creditorName.trim()
+  const fee = yield* feeCharge('pledge_fee', yield* loadFeeTerms, {
+    charge: input.chargeFee ?? false,
+    date: input.notifiedOn,
+    agreement: ownership,
+    description: `Pantsättningsavgift, ${creditorName}`,
   })
+  const orgNumber = blankToNull(input.creditorOrganizationNumber)
+  const id = crypto.randomUUID()
+  yield* orgQuery((db, organizationId) =>
+    db.batch([
+      db.insert(pledge).values({
+        id,
+        organizationId,
+        agreementId: ownership.id,
+        creditorName,
+        creditorOrganizationNumber: orgNumber && formatOrganizationNumber(orgNumber),
+        reference: blankToNull(input.reference),
+        notifiedOn: input.notifiedOn,
+        note: blankToNull(input.note),
+        registeredBy: me.id,
+        confirmationEmail: blankToNull(input.confirmationEmail ?? ''),
+      }),
+      ...(fee ? [db.insert(charge).values({ ...fee, organizationId })] : []),
+    ]),
+  )
+  return { id, ownershipId: ownership.id, feeOre: fee?.amountOre ?? null }
+})
 
 /**
  * The statements that release pledges, guarded so a pledge already released is left alone (the
@@ -181,45 +181,40 @@ export const releaseStatements = (
         releaseNote: release.note,
         releasedBy: release.userId,
       })
-      .where(
-        and(
-          eq(pledge.id, id),
-          eq(pledge.organizationId, organizationId),
-          isNull(pledge.releasedOn),
-        ),
-      ),
+      .where(inCompany(pledge, organizationId, eq(pledge.id, id), isNull(pledge.releasedOn))),
   )
 
 /** Registers that a pledge no longer applies, at the lender's request or to correct a mistake. */
-export const releasePledge = (input: ReleasePledgeInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const me = yield* CurrentUser
-    const [found] = yield* orgQuery((db, organizationId) =>
-      db
-        .select({
-          id: pledge.id,
-          agreementId: pledge.agreementId,
-          notifiedOn: pledge.notifiedOn,
-          releasedOn: pledge.releasedOn,
-        })
-        .from(pledge)
-        .where(and(eq(pledge.id, input.pledgeId), eq(pledge.organizationId, organizationId))),
-    )
-    if (!found) return yield* new NotFound({ entity: 'pledge', id: input.pledgeId })
-    const problem = releaseProblem(found, input.releasedOn, yield* today)
-    if (problem) return yield* new Conflict({ message: releaseProblemMessages[problem] })
-    yield* orgQuery((db, organizationId) =>
-      db.batch(
-        releaseStatements(db, organizationId, [found.id], {
-          releasedOn: input.releasedOn,
-          note: blankToNull(input.note),
-          userId: me.id,
-        }) as [ReturnType<typeof releaseStatements>[number]],
-      ),
-    )
-    return { id: found.id, ownershipId: found.agreementId }
-  })
+export const releasePledge = Effect.fn('pledges.releasePledge')(function* (
+  input: ReleasePledgeInput,
+) {
+  yield* requirePermission(manage)
+  const me = yield* CurrentUser
+  const [found] = yield* orgQuery((db, organizationId) =>
+    db
+      .select({
+        id: pledge.id,
+        agreementId: pledge.agreementId,
+        notifiedOn: pledge.notifiedOn,
+        releasedOn: pledge.releasedOn,
+      })
+      .from(pledge)
+      .where(inCompany(pledge, organizationId, eq(pledge.id, input.pledgeId))),
+  )
+  if (!found) return yield* new NotFound({ entity: 'pledge', id: input.pledgeId })
+  const problem = releaseProblem(found, input.releasedOn, yield* today)
+  if (problem) return yield* new Conflict({ message: releaseProblemMessages[problem] })
+  yield* orgQuery((db, organizationId) =>
+    db.batch(
+      releaseStatements(db, organizationId, [found.id], {
+        releasedOn: input.releasedOn,
+        note: blankToNull(input.note),
+        userId: me.id,
+      }) as [ReturnType<typeof releaseStatements>[number]],
+    ),
+  )
+  return { id: found.id, ownershipId: found.agreementId }
+})
 
 /** The seller's pledges in force on `date`, for the sale warning and its releases. */
 export const activePledgesOf = (agreementId: string, date: string) =>

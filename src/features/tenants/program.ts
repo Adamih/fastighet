@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
+import { asc, desc, eq, inArray, ne, or } from 'drizzle-orm'
 import { Effect } from 'effect'
 import { invoice, party } from '#/db/schema'
 import type { Charge } from '#/features/agreements/charges'
@@ -11,8 +11,8 @@ import { invoiceMoneyFor } from '#/features/ledger/program'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { hasPermission, requirePermission } from '#/server/authorize'
-import { Conflict, NotFound } from '#/server/errors'
-import { orgQuery } from '#/server/scoped'
+import { Conflict } from '#/server/errors'
+import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
 import { today } from '#/server/today'
 import { formatOrganizationNumber } from './organization-number'
 import type { CreateTenantInput, UpdateTenantInput } from './schemas'
@@ -50,7 +50,7 @@ export const listTenants = Effect.gen(function* () {
   const showLeases = yield* hasPermission({ lease: ['read'], property: ['read'] })
   const rows = yield* orgQuery((db, organizationId) =>
     db.query.party.findMany({
-      where: eq(party.organizationId, organizationId),
+      where: inCompany(party, organizationId),
       orderBy: asc(party.name),
       with: {
         agreements: {
@@ -80,20 +80,19 @@ export const listTenants = Effect.gen(function* () {
         }))
       : [],
   }))
-})
+}).pipe(Effect.withSpan('tenants.listTenants'))
 
 /** The tenant with every agreement they are on, for the checks below. No permission check. */
 const loadTenant = (tenantId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
       db.query.party.findFirst({
-        where: and(eq(party.id, tenantId), eq(party.organizationId, organizationId)),
+        where: inCompany(party, organizationId, eq(party.id, tenantId)),
         with: {
           agreements: { with: { agreement: { with: { leaseTerms: true, charges: true } } } },
         },
       }),
-    )
-    if (!row) return yield* new NotFound({ entity: 'tenant', id: tenantId })
+    ).pipe(orNotFound('tenant', tenantId))
     const { agreements, ...found } = row
     return { ...found, leases: partyAgreements(agreements, yield* today) }
   })
@@ -102,53 +101,53 @@ const loadTenant = (tenantId: string) =>
  * The tenant with their leases and invoices, newest first; the leases only for those who may
  * read leases, the invoices only for those who may read invoices.
  */
-export const getTenant = (tenantId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(read)
-    const found = yield* loadTenant(tenantId)
-    const showLeases = yield* hasPermission({ lease: ['read'] })
-    const showInvoices = yield* hasPermission({ invoice: ['read'] })
-    const invoices = showInvoices
-      ? yield* orgQuery((db, organizationId) =>
-          db.query.invoice.findMany({
-            columns: {
-              id: true,
-              number: true,
-              periodStart: true,
-              periodEnd: true,
-              dueDate: true,
-              totalOre: true,
-              creditedOre: true,
-              voidedAt: true,
-            },
-            // Every avi on their agreements, and any addressed to them.
-            where: and(
-              eq(invoice.organizationId, organizationId),
-              or(
-                eq(invoice.partyId, found.id),
-                found.leases.length > 0
-                  ? inArray(
-                      invoice.agreementId,
-                      found.leases.map((l) => l.id),
-                    )
-                  : undefined,
-              ),
+export const getTenant = Effect.fn('tenants.getTenant')(function* (tenantId: string) {
+  yield* requirePermission(read)
+  const found = yield* loadTenant(tenantId)
+  const showLeases = yield* hasPermission({ lease: ['read'] })
+  const showInvoices = yield* hasPermission({ invoice: ['read'] })
+  const invoices = showInvoices
+    ? yield* orgQuery((db, organizationId) =>
+        db.query.invoice.findMany({
+          columns: {
+            id: true,
+            number: true,
+            periodStart: true,
+            periodEnd: true,
+            dueDate: true,
+            totalOre: true,
+            creditedOre: true,
+            voidedAt: true,
+          },
+          // Every avi on their agreements, and any addressed to them.
+          where: inCompany(
+            invoice,
+            organizationId,
+            or(
+              eq(invoice.partyId, found.id),
+              found.leases.length > 0
+                ? inArray(
+                    invoice.agreementId,
+                    found.leases.map((l) => l.id),
+                  )
+                : undefined,
             ),
-            orderBy: desc(invoice.number),
-          }),
-        )
-      : []
-    const on = yield* today
-    const money = yield* invoiceMoneyFor(invoices.map((i) => i.id))
-    return {
-      ...found,
-      leases: showLeases ? found.leases : [],
-      invoices: invoices.map((i) => {
-        const m = money.get(i.id) as InvoiceMoney
-        return { ...i, ...m, status: statusFromMoney(i, m, on) }
-      }),
-    }
-  })
+          ),
+          orderBy: desc(invoice.number),
+        }),
+      )
+    : []
+  const on = yield* today
+  const money = yield* invoiceMoneyFor(invoices.map((i) => i.id))
+  return {
+    ...found,
+    leases: showLeases ? found.leases : [],
+    invoices: invoices.map((i) => {
+      const m = money.get(i.id) as InvoiceMoney
+      return { ...i, ...m, status: statusFromMoney(i, m, on) }
+    }),
+  }
+})
 
 const normalize = (input: CreateTenantInput) => ({
   kind: input.kind,
@@ -171,8 +170,9 @@ const ensureUniqueOrganizationNumber = (organizationNumber: string | null, excep
     const existing = yield* orgQuery((db, organizationId) =>
       db.query.party.findFirst({
         columns: { name: true },
-        where: and(
-          eq(party.organizationId, organizationId),
+        where: inCompany(
+          party,
+          organizationId,
           eq(party.organizationNumber, organizationNumber),
           exceptId ? ne(party.id, exceptId) : undefined,
         ),
@@ -185,48 +185,43 @@ const ensureUniqueOrganizationNumber = (organizationNumber: string | null, excep
     }
   })
 
-export const createTenant = (input: CreateTenantInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const values = normalize(input)
-    yield* ensureUniqueOrganizationNumber(values.organizationNumber)
-    const [created] = yield* orgQuery((db, organizationId) =>
-      db
-        .insert(party)
-        .values({ organizationId, ...values })
-        .returning(),
-    )
-    return created
-  })
+export const createTenant = Effect.fn('tenants.createTenant')(function* (input: CreateTenantInput) {
+  yield* requirePermission(manage)
+  const values = normalize(input)
+  yield* ensureUniqueOrganizationNumber(values.organizationNumber)
+  const [created] = yield* orgQuery((db, organizationId) =>
+    db
+      .insert(party)
+      .values({ organizationId, ...values })
+      .returning(),
+  )
+  return created
+})
 
 /** Issued invoices keep the recipient details they were created with. */
-export const updateTenant = (input: UpdateTenantInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const current = yield* loadTenant(input.tenantId)
-    const values = normalize(input)
-    yield* ensureUniqueOrganizationNumber(values.organizationNumber, current.id)
-    yield* orgQuery((db, organizationId) =>
-      db
-        .update(party)
-        .set(values)
-        .where(and(eq(party.id, current.id), eq(party.organizationId, organizationId))),
-    )
-    return yield* getTenant(current.id)
-  })
+export const updateTenant = Effect.fn('tenants.updateTenant')(function* (input: UpdateTenantInput) {
+  yield* requirePermission(manage)
+  const current = yield* loadTenant(input.tenantId)
+  const values = normalize(input)
+  yield* ensureUniqueOrganizationNumber(values.organizationNumber, current.id)
+  yield* orgQuery((db, organizationId) =>
+    db
+      .update(party)
+      .set(values)
+      .where(inCompany(party, organizationId, eq(party.id, current.id))),
+  )
+  return yield* getTenant(current.id)
+})
 
-export const deleteTenant = (tenantId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const current = yield* loadTenant(tenantId)
-    if (current.leases.length > 0) {
-      return yield* new Conflict({
-        message: `${current.name} har avtal och kan inte tas bort. Ta bort avtalen först.`,
-      })
-    }
-    yield* orgQuery((db, organizationId) =>
-      db
-        .delete(party)
-        .where(and(eq(party.id, current.id), eq(party.organizationId, organizationId))),
-    )
-  })
+export const deleteTenant = Effect.fn('tenants.deleteTenant')(function* (tenantId: string) {
+  yield* requirePermission(manage)
+  const current = yield* loadTenant(tenantId)
+  if (current.leases.length > 0) {
+    return yield* new Conflict({
+      message: `${current.name} har avtal och kan inte tas bort. Ta bort avtalen först.`,
+    })
+  }
+  yield* orgQuery((db, organizationId) =>
+    db.delete(party).where(inCompany(party, organizationId, eq(party.id, current.id))),
+  )
+})

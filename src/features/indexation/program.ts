@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
+import { desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
 import { Effect, Exit } from 'effect'
 import {
   agreement,
@@ -8,6 +8,7 @@ import {
   indexClause,
   invoice,
   kpi,
+  unit,
 } from '#/db/schema'
 import {
   dayBefore,
@@ -25,7 +26,7 @@ import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
-import { orgQuery, query } from '#/server/scoped'
+import { inCompany, orgQuery, query } from '#/server/scoped'
 import { KpiSource } from '#/server/services'
 import { today } from '#/server/today'
 import {
@@ -59,9 +60,10 @@ const leaseForClause = (leaseId: string) =>
   Effect.gen(function* () {
     const row = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findFirst({
-        where: and(
+        where: inCompany(
+          agreement,
+          organizationId,
           eq(agreement.id, leaseId),
-          eq(agreement.organizationId, organizationId),
           eq(agreement.kind, 'lease'),
         ),
         with: { leaseTerms: true, units: { with: { unit: { columns: { kind: true } } } } },
@@ -77,63 +79,55 @@ const leaseForClause = (leaseId: string) =>
   })
 
 /** Adds or changes the lease's index clause, after checking that the lease may have one. */
-export const setIndexClause = (input: IndexClauseInput) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    yield* requireFeature('commercial')
-    const lease = yield* leaseForClause(input.leaseId)
-    const problem = clauseProblem(lease)
-    if (problem) return yield* new Conflict({ message: clauseProblemMessages[problem] })
-    const values = {
-      sharePercent: input.sharePercent,
-      baseMonth: input.baseMonth,
-      adjustmentMonth: input.adjustmentMonth,
-      floorAtBase: input.floorAtBase,
-    }
-    yield* orgQuery((db, organizationId) =>
-      db
-        .insert(indexClause)
-        .values({ agreementId: lease.id, organizationId, ...values })
-        .onConflictDoUpdate({ target: indexClause.agreementId, set: values }),
-    )
-  })
+export const setIndexClause = Effect.fn('indexation.setIndexClause')(function* (
+  input: IndexClauseInput,
+) {
+  yield* requirePermission(manage)
+  yield* requireFeature('commercial')
+  const lease = yield* leaseForClause(input.leaseId)
+  const problem = clauseProblem(lease)
+  if (problem) return yield* new Conflict({ message: clauseProblemMessages[problem] })
+  const values = {
+    sharePercent: input.sharePercent,
+    baseMonth: input.baseMonth,
+    adjustmentMonth: input.adjustmentMonth,
+    floorAtBase: input.floorAtBase,
+  }
+  yield* orgQuery((db, organizationId) =>
+    db
+      .insert(indexClause)
+      .values({ agreementId: lease.id, organizationId, ...values })
+      .onConflictDoUpdate({ target: indexClause.agreementId, set: values }),
+  )
+})
 
 /**
  * Removes the clause. A clause that an indexation has used stays, as the record of why the
  * lease has its index supplement.
  */
-export const removeIndexClause = (leaseId: string) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    const lease = yield* leaseForClause(leaseId)
-    const [used] = yield* orgQuery((db, organizationId) =>
-      db
-        .select({ id: indexAdjustment.id })
-        .from(indexAdjustment)
-        .where(
-          and(
-            eq(indexAdjustment.organizationId, organizationId),
-            eq(indexAdjustment.agreementId, lease.id),
-          ),
-        )
-        .limit(1),
-    )
-    if (used) {
-      return yield* new Conflict({
-        message: 'Indexklausulen har använts i en indexuppräkning och kan inte tas bort',
-      })
-    }
-    yield* orgQuery((db, organizationId) =>
-      db
-        .delete(indexClause)
-        .where(
-          and(
-            eq(indexClause.agreementId, lease.id),
-            eq(indexClause.organizationId, organizationId),
-          ),
-        ),
-    )
-  })
+export const removeIndexClause = Effect.fn('indexation.removeIndexClause')(function* (
+  leaseId: string,
+) {
+  yield* requirePermission(manage)
+  const lease = yield* leaseForClause(leaseId)
+  const [used] = yield* orgQuery((db, organizationId) =>
+    db
+      .select({ id: indexAdjustment.id })
+      .from(indexAdjustment)
+      .where(inCompany(indexAdjustment, organizationId, eq(indexAdjustment.agreementId, lease.id)))
+      .limit(1),
+  )
+  if (used) {
+    return yield* new Conflict({
+      message: 'Indexklausulen har använts i en indexuppräkning och kan inte tas bort',
+    })
+  }
+  yield* orgQuery((db, organizationId) =>
+    db
+      .delete(indexClause)
+      .where(inCompany(indexClause, organizationId, eq(indexClause.agreementId, lease.id))),
+  )
+})
 
 /** The lease's adjustments, newest first, for its page. */
 export const indexAdjustments = (leaseId: string) =>
@@ -141,12 +135,7 @@ export const indexAdjustments = (leaseId: string) =>
     db
       .select()
       .from(indexAdjustment)
-      .where(
-        and(
-          eq(indexAdjustment.organizationId, organizationId),
-          eq(indexAdjustment.agreementId, leaseId),
-        ),
-      )
+      .where(inCompany(indexAdjustment, organizationId, eq(indexAdjustment.agreementId, leaseId)))
       .orderBy(desc(indexAdjustment.effectiveDate)),
   )
 
@@ -178,7 +167,7 @@ export const syncKpi = Effect.gen(function* () {
   if (fresh.length === 0) return 0
   yield* query((db) => db.insert(kpi).values(fresh).onConflictDoNothing())
   return fresh.length
-})
+}).pipe(Effect.withSpan('indexation.syncKpi'))
 
 export type IndexationStatus = 'ready' | 'done' | 'missing_kpi' | 'no_rent' | 'invalid_clause'
 
@@ -187,7 +176,7 @@ const plan = (year: number) =>
   Effect.gen(function* () {
     const rows = yield* orgQuery((db, organizationId) =>
       db.query.agreement.findMany({
-        where: and(eq(agreement.organizationId, organizationId), eq(agreement.kind, 'lease')),
+        where: inCompany(agreement, organizationId, eq(agreement.kind, 'lease')),
         orderBy: agreement.number,
         with: {
           indexClause: true,
@@ -234,8 +223,9 @@ const plan = (year: number) =>
             })
             .from(indexAdjustment)
             .where(
-              and(
-                eq(indexAdjustment.organizationId, organizationId),
+              inCompany(
+                indexAdjustment,
+                organizationId,
                 inArray(
                   indexAdjustment.agreementId,
                   leases.map((l) => l.row.id),
@@ -299,14 +289,15 @@ const plan = (year: number) =>
   })
 
 /** What the indexation for `year` would do, lease by lease. */
-export const indexationPreview = (year: number) =>
-  Effect.gen(function* () {
-    yield* requirePermission(read)
-    return (yield* plan(year)).map(({ current: _, agreement: __, recipientEmail, ...row }) => ({
-      ...row,
-      hasEmail: recipientEmail !== null,
-    }))
-  })
+export const indexationPreview = Effect.fn('indexation.indexationPreview')(function* (
+  year: number,
+) {
+  yield* requirePermission(read)
+  return (yield* plan(year)).map(({ current: _, agreement: __, recipientEmail, ...row }) => ({
+    ...row,
+    hasEmail: recipientEmail !== null,
+  }))
+})
 
 export type IndexationRow = Effect.Success<ReturnType<typeof indexationPreview>>[number]
 
@@ -316,205 +307,196 @@ export type IndexationRow = Effect.Success<ReturnType<typeof indexationPreview>>
  * that date that avier have already billed are made up on the next avi. Leases already adjusted
  * for the date are skipped, so the run can be repeated. A missing KPI value blocks the run.
  */
-export const runIndexation = (year: number, options: { notify: boolean } = { notify: false }) =>
-  Effect.gen(function* () {
-    yield* requirePermission(manage)
-    yield* requireFeature('commercial')
-    const rows = yield* plan(year)
-    const missing = [
-      ...new Set(
-        rows
-          .filter((r) => r.status === 'missing_kpi')
-          .flatMap((r) => [
-            r.baseKpi === null ? r.baseMonth : null,
-            r.kpi === null ? r.kpiMonth : null,
-          ])
-          .filter((m): m is string => m !== null),
-      ),
-    ].sort()
-    if (missing.length > 0) {
-      return yield* new Conflict({
-        message: `KPI för ${missing.map(monthLabel).join(', ')} finns inte än. SCB publicerar KPI i mitten av månaden efter.`,
-      })
-    }
-    const on = yield* today
-    const seller = options.notify ? yield* loadCompanyDetails : null
-    let adjusted = 0
-    const notices = { sent: 0, noEmail: 0, failed: 0 }
-    for (const r of rows) {
-      if (r.status !== 'ready' || r.newSupplementOre === null) continue
-      const supplement = r.newSupplementOre
-      // Periods of avier in force that already cover the adjustment date.
-      const invoiced = yield* orgQuery((db, organizationId) =>
-        db
-          .select({ start: invoice.periodStart, end: invoice.periodEnd })
-          .from(invoice)
-          .where(
-            and(
-              eq(invoice.organizationId, organizationId),
-              eq(invoice.agreementId, r.leaseId),
-              gte(invoice.periodEnd, r.effectiveDate),
-              isNull(invoice.voidedAt),
-              sql`${invoice.creditedOre} < ${invoice.totalOre}`,
-            ),
-          )
-          .orderBy(desc(invoice.periodEnd)),
-      )
-      const old = {
-        amountOre: r.currentSupplementOre,
-        interval: 'yearly' as const,
-        fromDate: r.effectiveDate,
-        toDate: null,
-      }
-      const difference = retroactiveDifference(
-        old,
-        supplement,
-        r.effectiveDate,
-        r.agreement,
-        invoiced,
-      )
-      const chargeId = supplement === 0 ? null : crypto.randomUUID()
-      const adjustmentId = crypto.randomUUID()
-      yield* orgQuery((db, organizationId): Promise<unknown> => {
-        const statements = [
-          ...(r.current
-            ? [
-                db
-                  .update(charge)
-                  .set({ toDate: dayBefore(r.effectiveDate) })
-                  .where(
-                    and(eq(charge.id, r.current.id), eq(charge.organizationId, organizationId)),
-                  ),
-              ]
-            : []),
-          ...(chargeId
-            ? [
-                db.insert(charge).values({
-                  id: chargeId,
-                  organizationId,
-                  agreementId: r.leaseId,
-                  kind: 'index',
-                  amountOre: supplement,
-                  interval: 'yearly',
-                  vat: r.vat,
-                  fromDate: r.effectiveDate,
-                }),
-              ]
-            : []),
-          // After the charge it points at.
-          db.insert(indexAdjustment).values({
-            id: adjustmentId,
+export const runIndexation = Effect.fn('indexation.runIndexation')(function* (
+  year: number,
+  options: { notify: boolean } = { notify: false },
+) {
+  yield* requirePermission(manage)
+  yield* requireFeature('commercial')
+  const rows = yield* plan(year)
+  const missing = [
+    ...new Set(
+      rows
+        .filter((r) => r.status === 'missing_kpi')
+        .flatMap((r) => [
+          r.baseKpi === null ? r.baseMonth : null,
+          r.kpi === null ? r.kpiMonth : null,
+        ])
+        .filter((m): m is string => m !== null),
+    ),
+  ].sort()
+  if (missing.length > 0) {
+    return yield* new Conflict({
+      message: `KPI för ${missing.map(monthLabel).join(', ')} finns inte än. SCB publicerar KPI i mitten av månaden efter.`,
+    })
+  }
+  const on = yield* today
+  const seller = options.notify ? yield* loadCompanyDetails : null
+  let adjusted = 0
+  const notices = { sent: 0, noEmail: 0, failed: 0 }
+  for (const r of rows) {
+    if (r.status !== 'ready' || r.newSupplementOre === null) continue
+    const supplement = r.newSupplementOre
+    // Periods of avier in force that already cover the adjustment date.
+    const invoiced = yield* orgQuery((db, organizationId) =>
+      db
+        .select({ start: invoice.periodStart, end: invoice.periodEnd })
+        .from(invoice)
+        .where(
+          inCompany(
+            invoice,
             organizationId,
-            agreementId: r.leaseId,
-            effectiveDate: r.effectiveDate,
-            baseMonth: r.baseMonth,
-            baseKpiHundredths: r.baseKpi as number,
-            kpiMonth: r.kpiMonth,
-            kpiHundredths: r.kpi as number,
-            baseRentOre: r.baseRentPerYearOre,
-            supplementOre: supplement,
-            chargeId,
-          }),
-          ...(difference !== 0 && invoiced[0]
-            ? [
-                db.insert(charge).values({
-                  organizationId,
-                  agreementId: r.leaseId,
-                  kind: 'one_off',
-                  description: retroactiveDescription('index', r.effectiveDate, invoiced[0].end),
-                  amountOre: difference,
-                  interval: 'once',
-                  vat: r.vat,
-                  fromDate: on,
-                }),
-              ]
-            : []),
-        ]
-        const [first, ...rest] = statements
-        return db.batch([first, ...rest])
-      })
-      adjusted += 1
-
-      // The rent has changed whether or not the notice gets through; a failed email is counted,
-      // and the adjustment shows that no notice was sent.
-      if (!seller) continue
-      if (!r.recipientEmail) {
-        notices.noEmail += 1
-        continue
-      }
-      const sent = yield* Effect.exit(
-        sendEmail({
-          to: r.recipientEmail,
-          template: 'rentAdjustment',
-          props: {
-            recipientName: r.tenantName,
-            organizationName: seller.organizationName,
-            leaseLabel: `avtal ${r.number}`,
-            effectiveDate: r.effectiveDate,
-            baseRent: formatSek(r.baseRentPerYearOre),
-            previousSupplement: formatSek(r.currentSupplementOre),
-            newSupplement: formatSek(supplement),
-            newRent: formatSek(r.baseRentPerYearOre + supplement),
-            vatNote: r.vat ? 'exkl. moms' : null,
-            share: `${r.sharePercent} %`,
-            kpi: `${formatKpi(r.kpi as number)} (${monthLabel(r.kpiMonth)})`,
-            baseKpi: `${formatKpi(r.baseKpi as number)} (${monthLabel(r.baseMonth)})`,
-            retroactive: difference !== 0 && invoiced[0] ? formatSek(difference) : null,
-            sellerDetails: sellerDetails(seller, r.vat),
-          },
-        }),
-      )
-      if (Exit.isFailure(sent)) {
-        notices.failed += 1
-        yield* Effect.logError(sent.cause)
-        continue
-      }
-      notices.sent += 1
-      yield* orgQuery((db, organizationId) =>
-        db
-          .update(indexAdjustment)
-          .set({ notifiedAt: new Date() })
-          .where(
-            and(
-              eq(indexAdjustment.id, adjustmentId),
-              eq(indexAdjustment.organizationId, organizationId),
-            ),
+            eq(invoice.agreementId, r.leaseId),
+            gte(invoice.periodEnd, r.effectiveDate),
+            isNull(invoice.voidedAt),
+            sql`${invoice.creditedOre} < ${invoice.totalOre}`,
           ),
-      )
+        )
+        .orderBy(desc(invoice.periodEnd)),
+    )
+    const old = {
+      amountOre: r.currentSupplementOre,
+      interval: 'yearly' as const,
+      fromDate: r.effectiveDate,
+      toDate: null,
     }
-    return { adjusted, skipped: rows.length - adjusted, notices }
-  })
+    const difference = retroactiveDifference(
+      old,
+      supplement,
+      r.effectiveDate,
+      r.agreement,
+      invoiced,
+    )
+    const chargeId = supplement === 0 ? null : crypto.randomUUID()
+    const adjustmentId = crypto.randomUUID()
+    yield* orgQuery((db, organizationId): Promise<unknown> => {
+      const statements = [
+        ...(r.current
+          ? [
+              db
+                .update(charge)
+                .set({ toDate: dayBefore(r.effectiveDate) })
+                .where(inCompany(charge, organizationId, eq(charge.id, r.current.id))),
+            ]
+          : []),
+        ...(chargeId
+          ? [
+              db.insert(charge).values({
+                id: chargeId,
+                organizationId,
+                agreementId: r.leaseId,
+                kind: 'index',
+                amountOre: supplement,
+                interval: 'yearly',
+                vat: r.vat,
+                fromDate: r.effectiveDate,
+              }),
+            ]
+          : []),
+        // After the charge it points at.
+        db.insert(indexAdjustment).values({
+          id: adjustmentId,
+          organizationId,
+          agreementId: r.leaseId,
+          effectiveDate: r.effectiveDate,
+          baseMonth: r.baseMonth,
+          baseKpiHundredths: r.baseKpi as number,
+          kpiMonth: r.kpiMonth,
+          kpiHundredths: r.kpi as number,
+          baseRentOre: r.baseRentPerYearOre,
+          supplementOre: supplement,
+          chargeId,
+        }),
+        ...(difference !== 0 && invoiced[0]
+          ? [
+              db.insert(charge).values({
+                organizationId,
+                agreementId: r.leaseId,
+                kind: 'one_off',
+                description: retroactiveDescription('index', r.effectiveDate, invoiced[0].end),
+                amountOre: difference,
+                interval: 'once',
+                vat: r.vat,
+                fromDate: on,
+              }),
+            ]
+          : []),
+      ]
+      const [first, ...rest] = statements
+      return db.batch([first, ...rest])
+    })
+    adjusted += 1
+
+    // The rent has changed whether or not the notice gets through; a failed email is counted,
+    // and the adjustment shows that no notice was sent.
+    if (!seller) continue
+    if (!r.recipientEmail) {
+      notices.noEmail += 1
+      continue
+    }
+    const sent = yield* Effect.exit(
+      sendEmail({
+        to: r.recipientEmail,
+        template: 'rentAdjustment',
+        props: {
+          recipientName: r.tenantName,
+          organizationName: seller.organizationName,
+          leaseLabel: `avtal ${r.number}`,
+          effectiveDate: r.effectiveDate,
+          baseRent: formatSek(r.baseRentPerYearOre),
+          previousSupplement: formatSek(r.currentSupplementOre),
+          newSupplement: formatSek(supplement),
+          newRent: formatSek(r.baseRentPerYearOre + supplement),
+          vatNote: r.vat ? 'exkl. moms' : null,
+          share: `${r.sharePercent} %`,
+          kpi: `${formatKpi(r.kpi as number)} (${monthLabel(r.kpiMonth)})`,
+          baseKpi: `${formatKpi(r.baseKpi as number)} (${monthLabel(r.baseMonth)})`,
+          retroactive: difference !== 0 && invoiced[0] ? formatSek(difference) : null,
+          sellerDetails: sellerDetails(seller, r.vat),
+        },
+      }),
+    )
+    if (Exit.isFailure(sent)) {
+      notices.failed += 1
+      yield* Effect.logError(sent.cause)
+      continue
+    }
+    notices.sent += 1
+    yield* orgQuery((db, organizationId) =>
+      db
+        .update(indexAdjustment)
+        .set({ notifiedAt: new Date() })
+        .where(inCompany(indexAdjustment, organizationId, eq(indexAdjustment.id, adjustmentId))),
+    )
+  }
+  return { adjusted, skipped: rows.length - adjusted, notices }
+})
 
 /**
  * That a lease's index clause, if it has one, stays valid with these terms: a lease edit can't
  * make it residential, open-ended or shorter than three years.
  */
-export const checkClauseAllows = (
+export const checkClauseAllows = Effect.fn('indexation.checkClauseAllows')(function* (
   leaseId: string,
   terms: { startDate: string; termEndDate: string | null; unitIds: readonly string[] },
-) =>
-  Effect.gen(function* () {
-    const clause = yield* orgQuery((db, organizationId) =>
-      db.query.indexClause.findFirst({
-        columns: { agreementId: true },
-        where: and(
-          eq(indexClause.agreementId, leaseId),
-          eq(indexClause.organizationId, organizationId),
-        ),
-      }),
-    )
-    if (!clause) return
-    const units = yield* orgQuery((db, organizationId) =>
-      db.query.unit.findMany({
-        columns: { kind: true },
-        where: (u, { and: all, eq: is, inArray: within }) =>
-          all(is(u.organizationId, organizationId), within(u.id, [...terms.unitIds])),
-      }),
-    )
-    const problem = clauseProblem({ ...terms, unitKinds: units.map((u) => u.kind) })
-    if (problem) {
-      return yield* new Conflict({
-        message: `Avtalet har en indexklausul. ${clauseProblemMessages[problem]}`,
-      })
-    }
-  })
+) {
+  const clause = yield* orgQuery((db, organizationId) =>
+    db.query.indexClause.findFirst({
+      columns: { agreementId: true },
+      where: inCompany(indexClause, organizationId, eq(indexClause.agreementId, leaseId)),
+    }),
+  )
+  if (!clause) return
+  const units = yield* orgQuery((db, organizationId) =>
+    db.query.unit.findMany({
+      columns: { kind: true },
+      where: inCompany(unit, organizationId, inArray(unit.id, [...terms.unitIds])),
+    }),
+  )
+  const problem = clauseProblem({ ...terms, unitKinds: units.map((u) => u.kind) })
+  if (problem) {
+    return yield* new Conflict({
+      message: `Avtalet har en indexklausul. ${clauseProblemMessages[problem]}`,
+    })
+  }
+})

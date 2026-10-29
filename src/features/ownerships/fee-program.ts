@@ -14,7 +14,7 @@ const basisPointsOf = (kind: BrfFeeKind, terms: FeeTerms) =>
  * dated no earlier than the bostadsrätt's first day, so its first avi bills it. Fails when the
  * prisbasbelopp for the year isn't known yet.
  */
-export const feeCharge = (
+export const feeCharge = Effect.fn('ownerships.feeCharge')(function* (
   kind: BrfFeeKind,
   terms: FeeTerms,
   input: {
@@ -23,27 +23,26 @@ export const feeCharge = (
     readonly agreement: { readonly id: string; readonly startDate: string }
     readonly description: string
   },
-) =>
-  Effect.gen(function* () {
-    const basisPoints = basisPointsOf(kind, terms)
-    if (!input.charge || basisPoints === null) return null
-    const fee = feeFor(basisPoints, terms.priceBaseAmounts, input.date)
-    if ('missing' in fee) {
-      return yield* new Conflict({
-        message: `Prisbasbeloppet för ${fee.missing} finns inte än. Avstå från avgiften eller vänta tills det är fastställt.`,
-      })
-    }
-    return {
-      agreementId: input.agreement.id,
-      kind,
-      description: input.description,
-      amountOre: fee.ore,
-      interval: 'once' as const,
-      // A BRF's fees from its members are outside VAT.
-      vat: false,
-      fromDate: maxDate(input.date, input.agreement.startDate),
-    }
-  })
+) {
+  const basisPoints = basisPointsOf(kind, terms)
+  if (!input.charge || basisPoints === null) return null
+  const fee = feeFor(basisPoints, terms.priceBaseAmounts, input.date)
+  if ('missing' in fee) {
+    return yield* new Conflict({
+      message: `Prisbasbeloppet för ${fee.missing} finns inte än. Avstå från avgiften eller vänta tills det är fastställt.`,
+    })
+  }
+  return {
+    agreementId: input.agreement.id,
+    kind,
+    description: input.description,
+    amountOre: fee.ore,
+    interval: 'once' as const,
+    // A BRF's fees from its members are outside VAT.
+    vat: false,
+    fromDate: maxDate(input.date, input.agreement.startDate),
+  }
+})
 
 /** The fee terms for the pledge and sale forms' previews; only those who register them need it. */
 export const getFeeTerms = requirePermission({ lease: ['manage'] }).pipe(

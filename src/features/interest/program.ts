@@ -1,11 +1,11 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { inArray, isNull } from 'drizzle-orm'
 import { Effect } from 'effect'
 import type { Db } from '#/db'
 import { charge, invoice, lateInterest, referenceRate } from '#/db/schema'
 import type { ReceivableEntry } from '#/features/ledger/postings'
 import { receivableEntriesFor } from '#/features/ledger/program'
 import { loadCompanyDetails } from '#/features/settings/program'
-import { orgQuery, query } from '#/server/scoped'
+import { inCompany, orgQuery, query } from '#/server/scoped'
 import { today } from '#/server/today'
 import { lateInterest as interestFor } from './rules'
 
@@ -29,72 +29,74 @@ export const referenceRates = query((db) =>
  * same batch as the payment. Only when the company charges interest; once per avi; never on an
  * agreement that has ended, which has no next avi; never below the company's minimum.
  */
-export const lateInterestStatements = (planned: ReadonlyMap<string, readonly ReceivableEntry[]>) =>
-  Effect.gen(function* () {
-    const builders = new Map<
-      string,
-      (db: Db, organizationId: string) => ReturnType<typeof chargeStatements>
-    >()
-    const settings = yield* loadCompanyDetails
-    if (!settings.lateInterest || planned.size === 0) return builders
-    const on = yield* today
-    const ids = [...planned.keys()]
-    const avier: {
-      id: string
-      number: number
-      dueDate: string
-      agreementId: string
-      agreementEnds: string | null
-      charged: string | null
-    }[] = []
-    for (let i = 0; i < ids.length; i += IN_CHUNK) {
-      const batch = ids.slice(i, i + IN_CHUNK)
-      avier.push(
-        ...(yield* orgQuery((db, organizationId) =>
-          db.query.invoice.findMany({
-            columns: { id: true, number: true, dueDate: true, agreementId: true },
-            where: and(
-              eq(invoice.organizationId, organizationId),
-              inArray(invoice.id, batch),
-              isNull(invoice.voidedAt),
-            ),
-            with: {
-              agreement: { columns: { endDate: true } },
-              lateInterest: { columns: { id: true } },
-            },
-          }),
-        )).map(({ agreement, lateInterest: charged, ...row }) => ({
-          ...row,
-          agreementEnds: agreement.endDate,
-          charged: charged?.id ?? null,
-        })),
-      )
-    }
-    const due = avier.filter(
-      (a) => !a.charged && a.dueDate < on && (a.agreementEnds === null || a.agreementEnds >= on),
+export const lateInterestStatements = Effect.fn('interest.lateInterestStatements')(function* (
+  planned: ReadonlyMap<string, readonly ReceivableEntry[]>,
+) {
+  const builders = new Map<
+    string,
+    (db: Db, organizationId: string) => ReturnType<typeof chargeStatements>
+  >()
+  const settings = yield* loadCompanyDetails
+  if (!settings.lateInterest || planned.size === 0) return builders
+  const on = yield* today
+  const ids = [...planned.keys()]
+  const avier: {
+    id: string
+    number: number
+    dueDate: string
+    agreementId: string
+    agreementEnds: string | null
+    charged: string | null
+  }[] = []
+  for (let i = 0; i < ids.length; i += IN_CHUNK) {
+    const batch = ids.slice(i, i + IN_CHUNK)
+    avier.push(
+      ...(yield* orgQuery((db, organizationId) =>
+        db.query.invoice.findMany({
+          columns: { id: true, number: true, dueDate: true, agreementId: true },
+          where: inCompany(
+            invoice,
+            organizationId,
+            inArray(invoice.id, batch),
+            isNull(invoice.voidedAt),
+          ),
+          with: {
+            agreement: { columns: { endDate: true } },
+            lateInterest: { columns: { id: true } },
+          },
+        }),
+      )).map(({ agreement, lateInterest: charged, ...row }) => ({
+        ...row,
+        agreementEnds: agreement.endDate,
+        charged: charged?.id ?? null,
+      })),
     )
-    if (due.length === 0) return builders
-    const rates = yield* referenceRates
-    const existing = yield* receivableEntriesFor(due.map((a) => a.id))
-    const minimumOre = Math.max(100, settings.lateInterestMinimumOre ?? 0)
-    for (const avi of due) {
-      const entries = [...(existing.get(avi.id) ?? []), ...(planned.get(avi.id) ?? [])]
-      const interest = interestFor(entries, avi.dueDate, rates)
-      if (!interest) continue
-      if ('missingRateFor' in interest) {
-        // A payment never fails for this; the interest just isn't charged.
-        yield* Effect.logWarning(
-          `No reference rate for ${interest.missingRateFor}; no late interest on avi ${avi.number}. Add it in a migration.`,
-        )
-        continue
-      }
-      if (interest.ore < minimumOre) continue
-      builders.set(avi.id, (db, organizationId) =>
-        chargeStatements(db, organizationId, avi, interest, on),
+  }
+  const due = avier.filter(
+    (a) => !a.charged && a.dueDate < on && (a.agreementEnds === null || a.agreementEnds >= on),
+  )
+  if (due.length === 0) return builders
+  const rates = yield* referenceRates
+  const existing = yield* receivableEntriesFor(due.map((a) => a.id))
+  const minimumOre = Math.max(100, settings.lateInterestMinimumOre ?? 0)
+  for (const avi of due) {
+    const entries = [...(existing.get(avi.id) ?? []), ...(planned.get(avi.id) ?? [])]
+    const interest = interestFor(entries, avi.dueDate, rates)
+    if (!interest) continue
+    if ('missingRateFor' in interest) {
+      // A payment never fails for this; the interest just isn't charged.
+      yield* Effect.logWarning(
+        `No reference rate for ${interest.missingRateFor}; no late interest on avi ${avi.number}. Add it in a migration.`,
       )
+      continue
     }
-    return builders
-  })
+    if (interest.ore < minimumOre) continue
+    builders.set(avi.id, (db, organizationId) =>
+      chargeStatements(db, organizationId, avi, interest, on),
+    )
+  }
+  return builders
+})
 
 function chargeStatements(
   db: Db,
