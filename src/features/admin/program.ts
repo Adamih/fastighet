@@ -6,6 +6,7 @@ import {
   member,
   organization,
   organizationSettings,
+  partyAccess,
   session,
   subscription,
   unit,
@@ -184,6 +185,13 @@ export const getUser = Effect.fn('admin.getUser')(function* (userId: string) {
     banReason: row.banReason,
     banExpires: row.banExpires?.getTime() ?? null,
     companies: yield* membershipsOf([row.id]),
+    /** Open links to parties' pages in Mina sidor (`party_access`). */
+    portalAccess: (yield* query((db) =>
+      db
+        .select({ id: partyAccess.id })
+        .from(partyAccess)
+        .where(and(eq(partyAccess.userId, row.id), isNull(partyAccess.revokedAt))),
+    )).length,
     sessions: sessions.map((s) => ({
       ...s,
       createdAt: s.createdAt.getTime(),

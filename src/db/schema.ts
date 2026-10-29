@@ -1049,6 +1049,12 @@ export const auditEvent = sqliteTable(
       onDelete: 'set null',
     }),
     impersonatedByName: text('impersonated_by_name'),
+    /**
+     * A write from Mina sidor: the party the tenant or member acted as (then there is no actor
+     * company, and `actorOrganizationName` holds the party's name). No foreign key, so the log
+     * never stops a party being deleted.
+     */
+    actorPartyId: text('actor_party_id'),
     createdAt: createdAt(),
   },
   (t) => [

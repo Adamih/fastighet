@@ -40,6 +40,21 @@ test('accepting creates a verified account without a password and gives access',
   ).toEqual({ name: 'Anna', email_verified: 1 })
   expect(h.sqlite.query('SELECT * FROM account WHERE user_id = ?').all(accepted.userId)).toEqual([])
   expect(access(h)).toEqual([{ party_id: 'anna', user_id: accepted.userId, revoked_at: null }])
+  // In the company's log, done by the tenant as the party.
+  expect(
+    h.sqlite
+      .query(
+        "SELECT user_id, actor_organization_id, actor_party_id, actor_organization_name FROM audit_event WHERE action = 'portal.accept'",
+      )
+      .all(),
+  ).toEqual([
+    {
+      user_id: accepted.userId,
+      actor_organization_id: null,
+      actor_party_id: 'anna',
+      actor_organization_name: 'Anna',
+    },
+  ])
   // Used once.
   expect(await fail(h.run(acceptPortalInvitation(code, null)))).toContain('redan använd')
   expect(await h.run(previewPortalInvitation(code))).toMatchObject({ ok: false })

@@ -55,7 +55,7 @@ const membershipQuery = (userId: string, organizationId?: string) =>
   )
 
 /** The admin behind an impersonated session, for the banner and the audit log. */
-const impersonator = (adminId: string | null | undefined) =>
+export const impersonator = (adminId: string | null | undefined) =>
   Effect.gen(function* () {
     if (!adminId) return null
     const [admin] = yield* query((db) =>
@@ -110,7 +110,7 @@ const loadRequestContext = Effect.gen(function* () {
 })
 
 /** The company the browser is looking at: the header from `src/start.ts`, or during SSR the URL. */
-function requestedCompany(): string | null {
+export function requestedCompany(): string | null {
   const request = getRequest()
   return request.headers.get(COMPANY_HEADER) || companyFromSearch(new URL(request.url).search)
 }
@@ -138,6 +138,8 @@ export function toThrowable(cause: Cause.Cause<unknown>): unknown {
         return appError('forbidden', m.form_error_forbidden())
       case 'Conflict':
         return appError('conflict', e.message)
+      case 'NoPortalAccess':
+        return appError('forbidden', 'Du har inte längre tillgång till Mina sidor.')
       case 'WrongWorkspace':
         return redirect({ to: e.wanted === 'portal' ? '/portal/login' : '/login' })
       case 'DatabaseError':

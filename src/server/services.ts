@@ -1,5 +1,6 @@
 import { Context, Data, type Effect } from 'effect'
 import type { Db } from '#/db'
+import type { TierId } from '#/features/billing/tiers'
 import type { Grant } from '#/lib/managed-access'
 import type { CustomRoles, Permissions } from '#/lib/permissions'
 import type { Mailer } from './mail/mailer'
@@ -133,6 +134,39 @@ export const SubmissionReplay = Context.Reference<{ readonly mark: () => void }>
   { defaultValue: () => ({ mark: () => {} }) },
 )
 
+/**
+ * The signed-in person in Mina sidor (`runPortal`). Never a company member there: what they see
+ * comes from their `party_access` links.
+ */
+export class PortalUser extends Context.Service<
+  PortalUser,
+  {
+    readonly id: string
+    readonly email: string
+    readonly name: string
+    /** The admin acting as this user (Better Auth's impersonation), if one is. */
+    readonly impersonatedBy?: { readonly id: string; readonly name: string } | null
+  }
+>()('app/PortalUser') {}
+
+/**
+ * The company in focus in Mina sidor, and the user's parties there. Portal programs read only
+ * what these parties are on (`portalQuery`, `inParties`).
+ */
+export class PortalCompany extends Context.Service<
+  PortalCompany,
+  {
+    readonly id: string
+    readonly name: string
+    readonly kind: 'landlord' | 'brf' | 'manager'
+    /** Its tier: portal views tied to features the app gates follow it. */
+    readonly tier: TierId
+    /** The person's parties in the company, by name. */
+    readonly parties: readonly { readonly id: string; readonly name: string }[]
+    readonly partyIds: readonly string[]
+  }
+>()('app/PortalCompany') {}
+
 /** Built once per Worker isolate from `AppLive` (`live.ts`); the same for every request. */
 export type ProcessServices = Database | Mailer | KpiSource | Billing
 
@@ -144,3 +178,6 @@ export type RequestServices =
   | PermissionChecker
 
 export type AppServices = ProcessServices | RequestServices
+
+/** What portal programs get from `runPortal` (`src/server/portal.ts`). */
+export type PortalServices = ProcessServices | PortalUser | PortalCompany

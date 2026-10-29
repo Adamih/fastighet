@@ -34,6 +34,9 @@ export class UncertainSubmission extends Data.TaggedError('UncertainSubmission')
  * The session belongs to the other workspace (`src/lib/workspace.ts`): a Mina sidor session in the
  * app, or the reverse. `wanted` is the workspace asked for; its login page explains.
  */
+/** Signed in to Mina sidor, but no longer with access to any party's pages. */
+export class NoPortalAccess extends Data.TaggedError('NoPortalAccess') {}
+
 export class WrongWorkspace extends Data.TaggedError('WrongWorkspace')<{
   readonly wanted: 'staff' | 'portal'
 }> {}
@@ -53,6 +56,7 @@ export const appErrors = [
   DatabaseError,
   UncertainSubmission,
   WrongWorkspace,
+  NoPortalAccess,
 ] as const
 
 export type AppError = InstanceType<(typeof appErrors)[number]>

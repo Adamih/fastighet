@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { auditValues } from './audit'
+import { auditValues, portalAuditValues } from './audit'
 
 const context = {
   organizationId: 'org',
@@ -29,5 +29,27 @@ test('a write by an admin acting as the user names the admin too', () => {
     userId: 'user',
     impersonatedById: 'boss',
     impersonatedByName: 'Ada Admin',
+  })
+})
+
+test('a write from Mina sidor names the person and the party, and no actor company', () => {
+  expect(
+    portalAuditValues(
+      {
+        organizationId: 'org',
+        user: { id: 'tenant-user', name: 'Anna' },
+        party: { id: 'anna', name: 'Anna Svensson' },
+      },
+      { action: 'portal.accept', entityId: 'anna' },
+    ),
+  ).toMatchObject({
+    organizationId: 'org',
+    userId: 'tenant-user',
+    userName: 'Anna',
+    actorOrganizationId: null,
+    actorOrganizationName: 'Anna Svensson',
+    actorPartyId: 'anna',
+    action: 'portal.accept',
+    entityId: 'anna',
   })
 })

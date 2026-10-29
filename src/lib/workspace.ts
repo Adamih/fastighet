@@ -35,3 +35,20 @@ export const workspaceHome = (workspace: Workspace) => (workspace === 'portal' ?
 /** A session's workspace; sessions from before workspaces existed are the app's. */
 export const sessionWorkspace = (session: { workspace?: string | null }): Workspace =>
   session.workspace === 'portal' ? 'portal' : 'staff'
+
+/**
+ * Sent with Better Auth's impersonate request when an admin starts acting as the user in Mina
+ * sidor. Only admins can impersonate (the admin plugin checks), and a portal session still needs
+ * portal access.
+ */
+export const IMPERSONATE_WORKSPACE_HEADER = 'x-fastighet-workspace'
+
+/**
+ * Better Auth endpoints a Mina sidor session may never use: companies, teams, roles, invitations
+ * and subscriptions, and the admin dashboard (except ending an admin's impersonation). They don't
+ * go through `runApp`, so the workspace is checked in a hook.
+ */
+export function blockedForPortal(path: string): boolean {
+  if (path === '/admin/stop-impersonating') return false
+  return ['/organization/', '/admin/', '/subscription/'].some((prefix) => path.startsWith(prefix))
+}

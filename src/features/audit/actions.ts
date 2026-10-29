@@ -62,6 +62,8 @@ export const auditActions = {
   'pledge.release': action(m.audit_pledge_release, 'pledge'),
   'pledge.confirm': action(m.audit_pledge_confirm, 'pledge'),
   'portal.invite': action(m.audit_portal_invite, 'party'),
+  // Recorded with the tenant as the actor (`actor_party_id`), not a company.
+  'portal.accept': action(m.audit_portal_accept, 'party'),
   'portal.resend_invitation': action(m.audit_portal_resend_invitation),
   'portal.revoke_invitation': action(m.audit_portal_revoke_invitation),
   'portal.revoke_access': action(m.audit_portal_revoke_access),

@@ -15,7 +15,13 @@ import { tiers } from '#/features/billing/tiers'
 import { checkRoleRequest, roleEndpoints } from '#/features/team/custom-roles'
 import { stockholmDate } from '#/lib/dates'
 import { ac, roles } from '#/lib/permissions'
-import { workspaceForSignIn, workspaces } from '#/lib/workspace'
+import {
+  blockedForPortal,
+  IMPERSONATE_WORKSPACE_HEADER,
+  sessionWorkspace,
+  workspaceForSignIn,
+  workspaces,
+} from '#/lib/workspace'
 import type { AnyEmail } from '#/server/mail/mailer'
 
 /**
@@ -221,6 +227,13 @@ export function createAuth(
     // (its organization hooks don't cover roles). See `features/team/custom-roles.ts`.
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // A Mina sidor session stays out of everything that belongs to the app.
+        if (blockedForPortal(ctx.path)) {
+          const current = await getSessionFromCtx(ctx)
+          if (current && sessionWorkspace(current.session as { workspace?: string }) === 'portal') {
+            throw new APIError('FORBIDDEN', { message: 'Inte tillgängligt från Mina sidor.' })
+          }
+        }
         if (!roleEndpoints.has(ctx.path)) return
         const session = await getSessionFromCtx(ctx)
         const body = (ctx.body ?? {}) as Record<string, unknown>
@@ -288,8 +301,14 @@ export function createAuth(
           // way of creating one is refused. A portal session needs portal access. Staff sessions
           // land returning users in their first company instead of the onboarding screen.
           before: async (session, ctx) => {
-            const workspace = workspaceForSignIn(ctx?.path)
-            if (!workspace) throw new APIError('FORBIDDEN', { message: 'Inloggningen stöds inte.' })
+            const signedIn = workspaceForSignIn(ctx?.path)
+            if (!signedIn) throw new APIError('FORBIDDEN', { message: 'Inloggningen stöds inte.' })
+            // An admin chooses where to act as the user: the app, or Mina sidor.
+            const workspace =
+              ctx?.path === '/admin/impersonate-user' &&
+              (ctx.headers ?? ctx.request?.headers)?.get(IMPERSONATE_WORKSPACE_HEADER) === 'portal'
+                ? 'portal'
+                : signedIn
             if (workspace === 'portal') {
               if (!(await hasPortalAccess({ userId: session.userId }))) {
                 throw new APIError('FORBIDDEN', { message: 'Ingen tillgång till Mina sidor.' })

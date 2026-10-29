@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
-import { organization, party, partyAccess, portalInvitation, user } from '#/db/schema'
+import { auditEvent, organization, party, partyAccess, portalInvitation, user } from '#/db/schema'
+import { portalAuditValues } from '#/server/audit'
 import { Conflict } from '#/server/errors'
 import { query } from '#/server/scoped'
 import { hashInvitationCode } from './codes'
@@ -84,6 +85,7 @@ export const acceptPortalInvitation = Effect.fn('portal.acceptPortalInvitation')
       .where(eq(sql`lower(${user.email})`, found.email)),
   )
   const userId = existing?.id ?? crypto.randomUUID()
+  const name = found.partyKind === 'person' ? found.partyName : found.email
   yield* query((db) =>
     db.batch([
       existing
@@ -91,7 +93,7 @@ export const acceptPortalInvitation = Effect.fn('portal.acceptPortalInvitation')
         : db.insert(user).values({
             id: userId,
             // A company's people name themselves later; a person is the party.
-            name: found.partyKind === 'person' ? found.partyName : found.email,
+            name,
             email: found.email,
             emailVerified: true,
             createdAt: now,
@@ -112,6 +114,17 @@ export const acceptPortalInvitation = Effect.fn('portal.acceptPortalInvitation')
           createdAt: now,
         })
         .onConflictDoNothing(),
+      // The company's audit log, with the tenant as the actor.
+      db.insert(auditEvent).values(
+        portalAuditValues(
+          {
+            organizationId: found.organizationId,
+            user: { id: userId, name },
+            party: { id: found.partyId, name: found.partyName },
+          },
+          { action: 'portal.accept', entityId: found.partyId },
+        ),
+      ),
     ]),
   )
   return { email: found.email, userId, organizationId: found.organizationId }

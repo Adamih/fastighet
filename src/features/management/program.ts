@@ -671,6 +671,8 @@ export const managerActivity = Effect.gen(function* () {
           auditEvent,
           org.id,
           sql`coalesce(${auditEvent.actorOrganizationId}, '') <> ${org.id}`,
+          // Tenants' own changes in Mina sidor are not another company's staff.
+          isNull(auditEvent.actorPartyId),
         ),
       )
       .orderBy(desc(auditEvent.createdAt))

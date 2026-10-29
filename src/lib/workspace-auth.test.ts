@@ -34,13 +34,19 @@ async function fixture() {
   const now = new Date()
   // staff: a member with a password. tenant: portal access only. both: a member with portal
   // access. stranger: neither.
-  for (const id of ['staff', 'tenant', 'both', 'stranger']) {
+  for (const id of ['staff', 'tenant', 'both', 'stranger', 'admin']) {
     db.insert(schema.user)
-      .values({ id, name: id, email: `${id}@example.se`, emailVerified: true })
+      .values({
+        id,
+        name: id,
+        email: `${id}@example.se`,
+        emailVerified: true,
+        role: id === 'admin' ? 'admin' : null,
+      })
       .run()
   }
   const password = await hashPassword(PASSWORD)
-  for (const id of ['staff', 'both']) {
+  for (const id of ['staff', 'both', 'admin']) {
     db.insert(schema.account)
       .values({
         id: `acc-${id}`,
@@ -86,14 +92,26 @@ async function fixture() {
     stripe: { client: new Stripe('sk_test_unused'), webhookSecret: '' },
     syncQuantity: async () => {},
   })
-  const post = (path: string, body: object) =>
+  const post = (path: string, body: object, headers: Record<string, string> = {}) =>
     auth.handler(
       new Request(`http://localhost:3000/api/auth/${path}`, {
         method: 'POST',
-        headers: { origin: 'http://localhost:3000', 'content-type': 'application/json' },
+        headers: {
+          origin: 'http://localhost:3000',
+          'content-type': 'application/json',
+          ...headers,
+        },
         body: JSON.stringify(body),
       }),
     )
+  /** The session cookie a sign-in response sets, to send with later requests. */
+  const cookieOf = (response: Response) => {
+    const cookie = response.headers
+      .getSetCookie()
+      .find((c) => c.startsWith('better-auth.session_token='))
+    if (!cookie) throw new Error('no session cookie')
+    return cookie.split(';')[0]
+  }
   const sessions = (userId: string) =>
     sqlite
       .query('SELECT workspace, active_organization_id FROM session WHERE user_id = ?')
@@ -102,7 +120,14 @@ async function fixture() {
     const sent = emails.filter((e) => e.to === email && e.template === 'signInCode').at(-1)
     return sent?.template === 'signInCode' ? sent.props.code : null
   }
-  return { auth, post, sessions, codeFor, emails, sqlite }
+  /** Signs in with a code (Mina sidor) or the password (the app) and returns the cookie. */
+  const signIn = async (email: string, via: 'code' | 'password') => {
+    if (via === 'password')
+      return cookieOf(await post('sign-in/email', { email, password: PASSWORD }))
+    await post('email-otp/send-verification-otp', { email, type: 'sign-in' })
+    return cookieOf(await post('sign-in/email-otp', { email, otp: codeFor(email) }))
+  }
+  return { auth, post, sessions, codeFor, emails, sqlite, signIn }
 }
 
 test('an emailed code signs a tenant in to Mina sidor, never to a company', async () => {
@@ -197,4 +222,31 @@ test('codes are for signing in only: resets, verification and email changes by c
     type: 'forget-password',
   })
   expect(f.emails).toEqual([])
+})
+
+test('a Mina sidor session is refused company, team and admin endpoints; the same person in the app is not', async () => {
+  const f = await fixture()
+  const portal = await f.signIn('both@example.se', 'code')
+  const invite = { email: 'new@example.se', role: 'member', organizationId: 'company' }
+  expect((await f.post('organization/invite-member', invite, { cookie: portal })).status).toBe(403)
+  expect(
+    (await f.post('organization/set-active', { organizationId: 'company' }, { cookie: portal }))
+      .status,
+  ).toBe(403)
+  const app = await f.signIn('both@example.se', 'password')
+  expect((await f.post('organization/invite-member', invite, { cookie: app })).status).toBe(200)
+})
+
+test('an admin acts as a user in Mina sidor only when asked, and only with portal access', async () => {
+  const f = await fixture()
+  const admin = await f.signIn('admin@example.se', 'password')
+  const asPortal = { cookie: admin, 'x-fastighet-workspace': 'portal' }
+  expect((await f.post('admin/impersonate-user', { userId: 'tenant' }, asPortal)).status).toBe(200)
+  expect(f.sessions('tenant')).toEqual([{ workspace: 'portal', active_organization_id: null }])
+  expect(
+    (await f.post('admin/impersonate-user', { userId: 'staff' }, { cookie: admin })).status,
+  ).toBe(200)
+  expect(f.sessions('staff')).toEqual([{ workspace: 'staff', active_organization_id: 'company' }])
+  // No portal access: no Mina sidor session.
+  expect((await f.post('admin/impersonate-user', { userId: 'staff' }, asPortal)).status).toBe(403)
 })

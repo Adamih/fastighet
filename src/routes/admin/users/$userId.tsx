@@ -18,6 +18,7 @@ import { submissionError } from '#/lib/app-errors'
 import { authClient } from '#/lib/auth-client'
 import { authErrorMessage } from '#/lib/auth-errors'
 import { stockholmDate } from '#/lib/dates'
+import { IMPERSONATE_WORKSPACE_HEADER } from '#/lib/workspace'
 import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/admin/users/$userId')({
@@ -40,20 +41,27 @@ function UserPage() {
   const [impersonating, setImpersonating] = useState(false)
   const [impersonateError, setImpersonateError] = useState<string | null>(null)
 
-  // The browser gets the user's session; a full load starts the app afresh as them.
-  const impersonate = async () => {
+  // The browser gets the user's session, in the app or in Mina sidor; a full load starts that
+  // workspace afresh as them.
+  const impersonate = async (workspace: 'staff' | 'portal') => {
     setImpersonating(true)
     setImpersonateError(null)
-    const result = await authClient.admin.impersonateUser({ userId: user.id })
+    const result = await authClient.admin.impersonateUser({
+      userId: user.id,
+      fetchOptions:
+        workspace === 'portal' ? { headers: { [IMPERSONATE_WORKSPACE_HEADER]: 'portal' } } : {},
+    })
     if (result.error) {
       setImpersonateError(authErrorMessage(result.error))
       setImpersonating(false)
       return
     }
-    window.location.assign('/')
+    window.location.assign(workspace === 'portal' ? '/portal' : '/')
   }
 
-  const mayImpersonate = !user.isSelf && !user.isAdmin && !user.banned && user.companies.length > 0
+  const mayActAs = !user.isSelf && !user.isAdmin && !user.banned
+  const mayImpersonate = mayActAs && user.companies.length > 0
+  const mayImpersonatePortal = mayActAs && user.portalAccess > 0
   const error = impersonateError ?? (action.error ? submissionError(action.error).message : null)
 
   return (
@@ -66,14 +74,27 @@ function UserPage() {
         actions={
           !user.isSelf && (
             <>
-              <Button
-                className="flex-1 sm:flex-none"
-                disabled={!mayImpersonate || impersonating}
-                onClick={impersonate}
-              >
-                <UserRound aria-hidden="true" />
-                {impersonating ? m.admin_impersonating() : m.admin_impersonate()}
-              </Button>
+              {(mayImpersonate || !mayImpersonatePortal) && (
+                <Button
+                  className="flex-1 sm:flex-none"
+                  disabled={!mayImpersonate || impersonating}
+                  onClick={() => impersonate('staff')}
+                >
+                  <UserRound aria-hidden="true" />
+                  {impersonating ? m.admin_impersonating() : m.admin_impersonate()}
+                </Button>
+              )}
+              {mayImpersonatePortal && (
+                <Button
+                  variant={mayImpersonate ? 'outline' : 'default'}
+                  className="flex-1 sm:flex-none"
+                  disabled={impersonating}
+                  onClick={() => impersonate('portal')}
+                >
+                  <UserRound aria-hidden="true" />
+                  {impersonating ? m.admin_impersonating() : m.admin_impersonate_portal()}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 className="flex-1 sm:flex-none"
@@ -104,7 +125,7 @@ function UserPage() {
           )
         }
       />
-      {!user.isSelf && !mayImpersonate && !user.isAdmin && (
+      {!user.isSelf && !mayImpersonate && !mayImpersonatePortal && !user.isAdmin && (
         <p className="text-[13px] text-muted-foreground">
           {user.banned ? m.admin_impersonate_banned() : m.admin_impersonate_no_company()}
         </p>

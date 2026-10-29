@@ -33,3 +33,14 @@ test('programs filter domain tables on the company only with inCompany', async (
   }
   expect(offenders).toEqual([])
 })
+
+test('portal programs read through portalQuery, never orgQuery', async () => {
+  const offenders: string[] = []
+  for await (const path of new Glob('src/features/portal/**/*.ts').scan('.')) {
+    if (path.endsWith('.test.ts')) continue
+    const text = await Bun.file(path).text()
+    const portal = /\b(portalQuery|PortalCompany)\b/.test(text)
+    if (portal && /\borgQuery\b/.test(text)) offenders.push(path)
+  }
+  expect(offenders).toEqual([])
+})
