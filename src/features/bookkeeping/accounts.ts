@@ -1,5 +1,7 @@
+import { Schema } from 'effect'
 import type { ChargeKind } from '#/features/agreements/kinds'
 import type { LedgerAccount } from '#/features/ledger/kinds'
+import { storedJson } from '#/lib/schemas'
 
 // Client-safe: which bookkeeping accounts (kontoplan) the ledger's entries go to in the SIE
 // export. Defaults follow BAS; a company can change each number in settings.
@@ -46,20 +48,21 @@ export const defaultAccounts: AccountPlan = {
 /** A BAS account number: four digits. */
 export const isAccountNumber = (value: string) => /^\d{4}$/.test(value.trim())
 
-/** The company's plan: its own numbers where set, BAS otherwise. Unknown keys are ignored. */
+/** The stored numbers: an object, each value checked on its own below. */
+const storedAccounts = storedJson(Schema.Record(Schema.String, Schema.Unknown))
+
+/**
+ * The company's plan: its own numbers where set, BAS otherwise. Unknown keys, and values that
+ * aren't four-digit strings, are ignored.
+ */
 export function accountPlan(stored: string | null): AccountPlan {
-  let custom: Partial<Record<AccountKey, string>> = {}
-  try {
-    custom = stored ? (JSON.parse(stored) as Partial<Record<AccountKey, string>>) : {}
-  } catch {
-    custom = {}
-  }
+  const custom = storedAccounts(stored) ?? {}
   return Object.fromEntries(
     accountKeys.map((key) => {
       const number = custom[key]
       return [
         key,
-        number && isAccountNumber(number)
+        typeof number === 'string' && isAccountNumber(number)
           ? { ...defaultAccounts[key], number: number.trim() }
           : defaultAccounts[key],
       ]

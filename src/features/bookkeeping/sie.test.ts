@@ -63,6 +63,14 @@ describe('accounts', () => {
     expect(custom.bank.number).toBe('1930')
     expect(accountPlan('not json').receivable.number).toBe('1510')
   })
+
+  test('a stored number that is not a string, or a value that is not an object, means BAS', () => {
+    const custom = accountPlan(JSON.stringify({ rent: 3910, bank: '1940' }))
+    expect(custom.rent.number).toBe('3911')
+    expect(custom.bank.number).toBe('1940')
+    expect(accountPlan('["3910"]').rent.number).toBe('3911')
+    expect(accountPlan('null').rent.number).toBe('3911')
+  })
 })
 
 describe('vouchers', () => {

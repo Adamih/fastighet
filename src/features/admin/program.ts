@@ -1,5 +1,5 @@
 import { and, count, desc, eq, inArray, isNull, like, or, sql } from 'drizzle-orm'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
 import {
   adminEvent,
   managementGrant,
@@ -13,6 +13,7 @@ import {
 } from '#/db/schema'
 import { planState, usageOf } from '#/features/billing/store'
 import { isTierId, resolveTier, type TierId, tiers } from '#/features/billing/tiers'
+import { storedJson } from '#/lib/schemas'
 import { Conflict, NotFound } from '#/server/errors'
 import { inCompany, query } from '#/server/scoped'
 import { AdminAuth, type AdminAuthError, AdminUser } from '#/server/services'
@@ -347,6 +348,9 @@ export const setPlanOverride = Effect.fn('admin.setPlanOverride')(function* (inp
   return { id: company.id }
 })
 
+/** An admin event's details as `recordAdminAction` writes them: plain strings. */
+const adminDetails = storedJson(Schema.Record(Schema.String, Schema.String))
+
 /** The admin log, newest first, with who and what it concerned. */
 export const listAdminEvents = Effect.gen(function* () {
   yield* AdminUser
@@ -373,7 +377,7 @@ export const listAdminEvents = Effect.gen(function* () {
   return rows.map((r) => ({
     ...r,
     createdAt: r.createdAt.getTime(),
-    details: r.details ? (JSON.parse(r.details) as Record<string, string>) : {},
+    details: adminDetails(r.details) ?? {},
   }))
 }).pipe(Effect.withSpan('admin.listAdminEvents'))
 

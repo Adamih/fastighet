@@ -3,6 +3,7 @@ import { Effect } from 'effect'
 import { managementAssignment, managementGrant, organization, organizationRole } from '#/db/schema'
 import { cleanGrant, type Grant } from '#/lib/managed-access'
 import { appPermissions, type CustomRoles } from '#/lib/permissions'
+import { anyStoredJson } from '#/lib/schemas'
 import { inCompany } from '#/server/scoped'
 import { CompanyNotInScope } from './errors'
 import { query } from './scoped'
@@ -44,7 +45,7 @@ export const customRolesOf = (organizationId: string) =>
     (rows): CustomRoles =>
       Object.fromEntries(
         rows.flatMap((r) => {
-          const permissions = appPermissions(safeJson(r.permission))
+          const permissions = appPermissions(anyStoredJson(r.permission))
           return permissions ? [[r.role, permissions]] : []
         }),
       ),
@@ -91,19 +92,11 @@ export const managedCompanies = (userId: string, home: Home) =>
           id: r.id,
           name: r.name,
           role: r.role ?? home.role,
-          grant: cleanGrant(safeJson(r.permissions)),
+          grant: cleanGrant(anyStoredJson(r.permissions)),
           customRoles: home.customRoles,
         }),
       )
   })
-
-const safeJson = (text: string): unknown => {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return null
-  }
-}
 
 /** The company in focus: the user's own when none (or their own) is asked for. */
 export const resolveFocus = (userId: string, home: Home, requestedId: string | null) =>

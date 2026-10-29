@@ -22,6 +22,7 @@ import {
   levelsFromGrant,
   presetOf,
 } from '#/lib/managed-access'
+import { anyStoredJson } from '#/lib/schemas'
 import { requireOwnCompany, requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
 import { seesAllClients } from '#/server/focus'
@@ -46,13 +47,7 @@ const REQUEST_DAYS = 14
 const MAX_FAILED_CODES_PER_HOUR = 10
 const DAY = 24 * 60 * 60 * 1000
 
-const readGrant = (permissions: string) => {
-  try {
-    return cleanGrant(JSON.parse(permissions))
-  } catch {
-    return {}
-  }
-}
+const readGrant = (permissions: string) => cleanGrant(anyStoredJson(permissions))
 
 const ownCompany = (permission: 'client' | 'grant', action: 'read' | 'manage') =>
   Effect.gen(function* () {

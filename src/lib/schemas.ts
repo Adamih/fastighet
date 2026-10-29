@@ -1,4 +1,4 @@
-import { Schema } from 'effect'
+import { Option, Schema } from 'effect'
 import { isIsoDate } from './dates'
 
 // Field schemas shared by feature input schemas. Optional text fields arrive as strings from
@@ -25,3 +25,16 @@ export const IsoDate = Schema.String.check(
 )
 
 export const blankToNull = (value: string) => value.trim() || null
+
+/**
+ * Reads JSON the app stored in a text column, checked against `schema`. Null when the column is
+ * empty, the text isn't JSON or the value has another shape, so callers choose the fallback.
+ */
+export const storedJson = <S extends Schema.Decoder<unknown>>(schema: S) => {
+  const decode = Schema.decodeUnknownOption(Schema.fromJsonString(schema))
+  return (text: string | null | undefined): S['Type'] | null =>
+    text ? Option.getOrNull(decode(text)) : null
+}
+
+/** Any JSON value, for stored JSON that a cleaning function checks itself (`cleanGrant`, …). */
+export const anyStoredJson = storedJson(Schema.Unknown)
