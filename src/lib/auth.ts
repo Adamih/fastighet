@@ -5,8 +5,8 @@ import { db } from '#/db'
 import { adminEvent, auditEvent, user } from '#/db/schema'
 import { syncQuantity } from '#/features/billing/store'
 import { auditValues } from '#/server/audit'
-import { Mailer, sendEmail } from '#/server/mail/mailer'
-import { mailer } from '#/server/mail/provider'
+import { appRuntime } from '#/server/live'
+import { sendEmail } from '#/server/mail/mailer'
 import {
   createAuth,
   type DeliverEmail,
@@ -18,9 +18,8 @@ import { stripe, stripeWebhookSecret } from './stripe'
 // waitUntil keeps the Worker alive until the email is handed off, after the response is sent.
 const deliverEmail: DeliverEmail = (email) =>
   waitUntil(
-    Effect.runPromise(
+    appRuntime.runPromise(
       sendEmail(email).pipe(
-        Effect.provideService(Mailer, mailer),
         Effect.catchCause((cause) =>
           Effect.logError(`Could not send ${email.template} email`, cause),
         ),

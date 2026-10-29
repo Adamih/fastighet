@@ -2,7 +2,7 @@ import { Database as Sqlite } from 'bun:sqlite'
 import { afterEach } from 'bun:test'
 import { drizzle } from 'drizzle-orm/bun-sqlite'
 import { migrate } from 'drizzle-orm/bun-sqlite/migrator'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import type { Grant } from '#/lib/managed-access'
@@ -17,6 +17,7 @@ import {
   HomeOrganization,
   KpiSource,
   PermissionChecker,
+  type ProcessServices,
 } from '#/server/services'
 
 // Test helper: runs programs against an in-memory SQLite database with every migration applied
@@ -45,6 +46,19 @@ export function harness() {
   const kpiFeed: { month: string; valueHundredths: number }[] = []
   // Companies whose subscription quantity a program asked to sync, instead of calling Stripe.
   const quantitySyncs: string[] = []
+  // The test counterpart of `AppLive` (`src/server/live.ts`).
+  const services: Layer.Layer<ProcessServices> = Layer.mergeAll(
+    Layer.succeed(Database, db as unknown as Db),
+    Layer.succeed(Mailer, mailer),
+    Layer.succeed(KpiSource, { fetch: Effect.sync(() => [...kpiFeed]) }),
+    Layer.succeed(Billing, {
+      configured: false,
+      syncQuantity: (organizationId) =>
+        Effect.sync(() => {
+          quantitySyncs.push(organizationId)
+        }),
+    }),
+  )
   // `runAs` runs as someone else, e.g. a manager's staff in a company their company manages.
   const runAs =
     (as: {
@@ -63,7 +77,6 @@ export function harness() {
       const user = as.user ?? 'user'
       return Effect.runPromise(
         program.pipe(
-          Effect.provideService(Database, db as unknown as Db),
           Effect.provideService(
             CurrentOrganization,
             as.organization
@@ -77,15 +90,8 @@ export function harness() {
               ? { id: user, name: user, email: `${user}@example.test` }
               : { id: 'user', name: 'u', email: 'u@example.test' },
           ),
-          Effect.provideService(PermissionChecker, { check: async () => true }),
-          Effect.provideService(Mailer, mailer),
-          Effect.provideService(KpiSource, { fetch: async () => kpiFeed }),
-          Effect.provideService(Billing, {
-            configured: false,
-            syncQuantity: async (organizationId) => {
-              quantitySyncs.push(organizationId)
-            },
-          }),
+          Effect.provideService(PermissionChecker, { check: () => Effect.succeed(true) }),
+          Effect.provide(services),
         ) as Effect.Effect<A, E, never>,
       )
     }

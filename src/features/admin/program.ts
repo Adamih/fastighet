@@ -15,7 +15,7 @@ import { planState, usageOf } from '#/features/billing/store'
 import { isTierId, resolveTier, type TierId, tiers } from '#/features/billing/tiers'
 import { Conflict, NotFound } from '#/server/errors'
 import { query } from '#/server/scoped'
-import { AdminAuth, AdminUser } from '#/server/services'
+import { AdminAuth, type AdminAuthError, AdminUser } from '#/server/services'
 import type { AdminAction } from './actions'
 
 // The admin dashboard's programs. They run only through `runAdmin` (`src/server/admin.ts`), which
@@ -380,19 +380,14 @@ export const listAdminEvents = Effect.gen(function* () {
 })
 
 /** Runs a Better Auth admin endpoint, showing its message if it refuses. */
-const viaAuth = (run: (auth: AdminAuth['Service']) => Promise<void>) =>
+const viaAuth = (run: (auth: AdminAuth['Service']) => Effect.Effect<void, AdminAuthError>) =>
   Effect.gen(function* () {
-    const auth = yield* AdminAuth
-    yield* Effect.tryPromise({
-      try: () => run(auth),
-      catch: (cause) =>
-        new Conflict({
-          message:
-            (cause as { body?: { message?: string } }).body?.message ??
-            'Åtgärden kunde inte genomföras.',
-        }),
-    })
-  })
+    return yield* run(yield* AdminAuth)
+  }).pipe(
+    Effect.catchTag('AdminAuthError', (error) =>
+      Effect.fail(new Conflict({ message: error.reason ?? 'Åtgärden kunde inte genomföras.' })),
+    ),
+  )
 
 /** A user other than the admin themself; admins are protected from each other's bans. */
 const otherUser = (userId: string, what: string) =>

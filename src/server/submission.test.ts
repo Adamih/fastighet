@@ -45,7 +45,7 @@ function harness() {
         customRoles: {},
       }),
       Effect.provideService(CurrentUser, { id: user, name: user, email: 'test@example.test' }),
-      Effect.provideService(PermissionChecker, { check: async () => allowed }),
+      Effect.provideService(PermissionChecker, { check: () => Effect.succeed(allowed) }),
       // Test programs do not require a mailer or other runtime services.
     ) as Effect.Effect<A, E, never>
   return {

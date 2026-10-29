@@ -28,20 +28,24 @@ function setup() {
   `)
   const calls: string[] = []
   const auth: AdminAuth['Service'] = {
-    ban: async (id, reason, seconds) => {
-      calls.push(`ban ${id} ${reason} ${seconds}`)
-      h.sqlite.exec(`UPDATE user SET banned = 1 WHERE id = '${id}'`)
-    },
-    unban: async (id) => {
-      calls.push(`unban ${id}`)
-      h.sqlite.exec(`UPDATE user SET banned = 0 WHERE id = '${id}'`)
-    },
-    setAdmin: async (id, admin) => {
-      calls.push(`role ${id} ${admin}`)
-    },
-    revokeSessions: async (id) => {
-      calls.push(`revoke ${id}`)
-    },
+    ban: (id, reason, seconds) =>
+      Effect.sync(() => {
+        calls.push(`ban ${id} ${reason} ${seconds}`)
+        h.sqlite.exec(`UPDATE user SET banned = 1 WHERE id = '${id}'`)
+      }),
+    unban: (id) =>
+      Effect.sync(() => {
+        calls.push(`unban ${id}`)
+        h.sqlite.exec(`UPDATE user SET banned = 0 WHERE id = '${id}'`)
+      }),
+    setAdmin: (id, admin) =>
+      Effect.sync(() => {
+        calls.push(`role ${id} ${admin}`)
+      }),
+    revokeSessions: (id) =>
+      Effect.sync(() => {
+        calls.push(`revoke ${id}`)
+      }),
   }
   const asAdmin = <A, E, R>(program: Effect.Effect<A, E, R>) =>
     h.run(

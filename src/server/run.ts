@@ -1,33 +1,28 @@
 import { notFound, redirect } from '@tanstack/react-router'
 import { getRequest } from '@tanstack/react-start/server'
 import { and, asc, eq } from 'drizzle-orm'
-import { Cause, Effect, Exit, Option } from 'effect'
+import { Cause, Context, Effect, Exit, Option } from 'effect'
 import { db } from '#/db'
 import { member, organization, session as sessionTable, user } from '#/db/schema'
 import type { Audit } from '#/features/audit/actions'
-import { syncQuantity } from '#/features/billing/store'
-import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { appError } from '#/lib/app-errors'
 import { auth } from '#/lib/auth'
 import { COMPANY_HEADER, companyFromSearch } from '#/lib/focus'
-import { stripe, stripeConfigured } from '#/lib/stripe'
 import { m } from '#/paraglide/messages'
 import { recordAudit } from './audit'
 import { requireCustomerSession } from './customer-access'
 import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
 import { customRolesOf, resolveFocus } from './focus'
-import { Mailer } from './mail/mailer'
-import { mailer } from './mail/provider'
+import { appRuntime } from './live'
 import { query } from './scoped'
 import {
   type AppServices,
-  Billing,
   CurrentOrganization,
   CurrentUser,
-  Database,
   HomeOrganization,
-  KpiSource,
+  PermissionCheckError,
   PermissionChecker,
+  type RequestServices,
   SubmissionReplay,
 } from './services'
 
@@ -137,59 +132,60 @@ export function toThrowable(cause: Cause.Cause<unknown>): unknown {
   return appError('unexpected', m.form_error_unexpected())
 }
 
+/** Better Auth's permission API, answering for this request's session. */
+const permissionChecker = (headers: Headers): PermissionChecker['Service'] => ({
+  check: (organizationId, permissions) =>
+    Effect.tryPromise({
+      try: () => auth.api.hasPermission({ headers, body: { organizationId, permissions } }),
+      catch: (cause) => new PermissionCheckError({ cause }),
+    }).pipe(Effect.map((result) => result.success)),
+})
+
+type RequestContext = Effect.Success<typeof loadRequestContext>
+
+/** The request-scoped services, from the request's user and company in focus. */
+const requestServices = (context: RequestContext): Context.Context<RequestServices> =>
+  Context.make(CurrentUser, context.user).pipe(
+    Context.add(CurrentOrganization, context.organization),
+    Context.add(HomeOrganization, context.home),
+    Context.add(PermissionChecker, permissionChecker(getRequest().headers)),
+  )
+
 /**
  * Runs an Effect program inside a server function handler with the signed-in user, the company
- * in focus (their own, or one their company manages), the database and the mailer provided. Expected failures become redirects or
- * user-facing errors.
+ * in focus (their own, or one their company manages) and the app's services (`AppLive`) provided.
+ * Expected failures become redirects or user-facing errors.
  */
 export async function runApp<A, E>(
   program: Effect.Effect<A, E, AppServices>,
   /** For writes: what to record in the company's audit log once the program succeeds. */
   audit?: Audit,
 ): Promise<A> {
-  const exit = await Effect.gen(function* () {
-    const context = yield* loadRequestContext
-    let replayed = false
-    const result = yield* program.pipe(
-      Effect.provideService(SubmissionReplay, {
-        mark: () => {
-          replayed = true
-        },
-      }),
-      Effect.provideService(CurrentUser, context.user),
-      Effect.provideService(CurrentOrganization, context.organization),
-      Effect.provideService(HomeOrganization, context.home),
-      Effect.provideService(PermissionChecker, {
-        check: async (organizationId, permissions) => {
-          const result = await auth.api.hasPermission({
-            headers: getRequest().headers,
-            body: { organizationId, permissions },
-          })
-          return result.success
-        },
-      }),
-    )
-    if (audit && !replayed) {
-      yield* recordAudit(
-        {
-          organizationId: context.organization.id,
-          user: context.user,
-          actor: context.home,
-        },
-        audit,
-        result,
+  const exit = await appRuntime.runPromiseExit(
+    Effect.gen(function* () {
+      const context = yield* loadRequestContext
+      let replayed = false
+      const result = yield* program.pipe(
+        Effect.provideService(SubmissionReplay, {
+          mark: () => {
+            replayed = true
+          },
+        }),
+        Effect.provideContext(requestServices(context)),
       )
-    }
-    return result
-  }).pipe(
-    Effect.provideService(Database, db),
-    Effect.provideService(Mailer, mailer),
-    Effect.provideService(KpiSource, { fetch: fetchKpiFromScb }),
-    Effect.provideService(Billing, {
-      configured: stripeConfigured,
-      syncQuantity: (organizationId) => syncQuantity(db, stripe, organizationId),
+      if (audit && !replayed) {
+        yield* recordAudit(
+          {
+            organizationId: context.organization.id,
+            user: context.user,
+            actor: context.home,
+          },
+          audit,
+          result,
+        )
+      }
+      return result
     }),
-    Effect.runPromiseExit,
   )
 
   if (Exit.isSuccess(exit)) return exit.value

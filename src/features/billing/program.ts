@@ -54,11 +54,13 @@ export const requireRoomForUnit = Effect.gen(function* () {
 export const syncPlanQuantity = Effect.gen(function* () {
   const company = yield* CurrentOrganization
   const billing = yield* Billing
-  yield* Effect.tryPromise(() => billing.syncQuantity(company.id)).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logError('Could not sync the subscription quantity', cause),
-    ),
-  )
+  yield* billing
+    .syncQuantity(company.id)
+    .pipe(
+      Effect.catchCause((cause) =>
+        Effect.logError('Could not sync the subscription quantity', cause),
+      ),
+    )
 })
 
 /** The company's tier, what decides it and what it counts; for the app context and plan page. */

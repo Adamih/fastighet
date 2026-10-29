@@ -11,7 +11,7 @@ import type { Db } from '#/db'
 import * as schema from '#/db/schema'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import type { AnyEmail } from '#/server/mail/mailer'
-import { CurrentOrganization, PermissionChecker } from '#/server/services'
+import { CurrentOrganization, PermissionCheckError, PermissionChecker } from '#/server/services'
 import { type AdminEvent, type CompanyEvent, createAuth } from './auth-config'
 import type { Permissions } from './permissions'
 
@@ -104,13 +104,11 @@ async function fixture(actorRole = 'admin', targetRole = 'member') {
     )
   const target = () => db.query.member.findFirst({ where: eq(schema.member.id, 'target') }).sync()
   const checker: PermissionChecker['Service'] = {
-    check: async (organizationId, permissions) =>
-      (
-        await auth.api.hasPermission({
-          headers,
-          body: { organizationId, permissions },
-        })
-      ).success,
+    check: (organizationId, permissions) =>
+      Effect.tryPromise({
+        try: () => auth.api.hasPermission({ headers, body: { organizationId, permissions } }),
+        catch: (cause) => new PermissionCheckError({ cause }),
+      }).pipe(Effect.map((result) => result.success)),
   }
   const permissions = (requested: Permissions, organizationId = 'company', required = false) =>
     Effect.runPromise(
@@ -477,7 +475,7 @@ describe('Better Auth domain permission adapter', () => {
     expect(await f.permissions({ invoice: ['manage'] }, 'another-company')).toBe(true)
     f.db.delete(schema.member).where(eq(schema.member.id, 'second-membership')).run()
     await expect(f.permissions({ invoice: ['read'] }, 'another-company')).rejects.toMatchObject({
-      _tag: 'DatabaseError',
+      _tag: 'PermissionCheckError',
     })
   })
 })

@@ -168,8 +168,8 @@ const kpiValues = (months: readonly string[]) =>
  */
 export const syncKpi = Effect.gen(function* () {
   const source = yield* KpiSource
-  const fetched = yield* Effect.tryPromise(() => source.fetch()).pipe(
-    Effect.catch(() => Effect.succeed([] as const)),
+  const fetched = yield* source.fetch.pipe(
+    Effect.catchTag('KpiFetchError', () => Effect.succeed([] as const)),
   )
   const [latest] = yield* query((db) =>
     db.select({ month: kpi.month }).from(kpi).orderBy(desc(kpi.month)).limit(1),

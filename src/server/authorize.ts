@@ -1,7 +1,7 @@
 import { Effect } from 'effect'
 import { managedAllows } from '#/lib/managed-access'
 import type { Permissions } from '#/lib/permissions'
-import { DatabaseError, Forbidden } from './errors'
+import { Forbidden } from './errors'
 import { CurrentOrganization, PermissionChecker } from './services'
 
 /**
@@ -21,10 +21,7 @@ export const hasPermission = (permissions: Permissions) =>
       )
     }
     const checker = yield* PermissionChecker
-    return yield* Effect.tryPromise({
-      try: () => checker.check(organization.id, permissions),
-      catch: (cause) => new DatabaseError({ cause }),
-    })
+    return yield* checker.check(organization.id, permissions)
   })
 
 /** Domain programs use this Effect adapter; see `hasPermission`. */

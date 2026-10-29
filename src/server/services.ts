@@ -1,4 +1,4 @@
-import { Context } from 'effect'
+import { Context, Data, type Effect } from 'effect'
 import type { Db } from '#/db'
 import type { Grant } from '#/lib/managed-access'
 import type { CustomRoles, Permissions } from '#/lib/permissions'
@@ -46,16 +46,34 @@ export class HomeOrganization extends Context.Service<
   }
 >()('app/HomeOrganization') {}
 
+/** Better Auth could not answer a permission check. */
+export class PermissionCheckError extends Data.TaggedError('PermissionCheckError')<{
+  readonly cause: unknown
+}> {}
+
 /** Better Auth's server permission API, bound to the authenticated request by runApp. */
 export class PermissionChecker extends Context.Service<
   PermissionChecker,
-  { readonly check: (organizationId: string, permissions: Permissions) => Promise<boolean> }
+  {
+    readonly check: (
+      organizationId: string,
+      permissions: Permissions,
+    ) => Effect.Effect<boolean, PermissionCheckError>
+  }
 >()('app/PermissionChecker') {}
+
+/** SCB could not be reached, or answered with something unexpected. */
+export class KpiFetchError extends Data.TaggedError('KpiFetchError')<{ readonly cause: unknown }> {}
 
 /** Where new KPI months come from: SCB in production (`features/indexation/scb.ts`), a stub in tests. */
 export class KpiSource extends Context.Service<
   KpiSource,
-  { readonly fetch: () => Promise<readonly { month: string; valueHundredths: number }[]> }
+  {
+    readonly fetch: Effect.Effect<
+      readonly { month: string; valueHundredths: number }[],
+      KpiFetchError
+    >
+  }
 >()('app/KpiSource') {}
 
 /**
@@ -67,6 +85,12 @@ export class AdminUser extends Context.Service<
   { readonly id: string; readonly name: string; readonly email: string }
 >()('app/AdminUser') {}
 
+/** A Better Auth admin endpoint refused or failed; `reason` is its own message, when it gave one. */
+export class AdminAuthError extends Data.TaggedError('AdminAuthError')<{
+  readonly reason: string | null
+  readonly cause: unknown
+}> {}
+
 /**
  * Better Auth's admin endpoints, bound to the admin's request by `runAdmin` (they check the admin
  * role themselves too). A stub in tests.
@@ -74,12 +98,19 @@ export class AdminUser extends Context.Service<
 export class AdminAuth extends Context.Service<
   AdminAuth,
   {
-    readonly ban: (userId: string, reason: string, expiresInSeconds: number | null) => Promise<void>
-    readonly unban: (userId: string) => Promise<void>
-    readonly setAdmin: (userId: string, admin: boolean) => Promise<void>
-    readonly revokeSessions: (userId: string) => Promise<void>
+    readonly ban: (
+      userId: string,
+      reason: string,
+      expiresInSeconds: number | null,
+    ) => Effect.Effect<void, AdminAuthError>
+    readonly unban: (userId: string) => Effect.Effect<void, AdminAuthError>
+    readonly setAdmin: (userId: string, admin: boolean) => Effect.Effect<void, AdminAuthError>
+    readonly revokeSessions: (userId: string) => Effect.Effect<void, AdminAuthError>
   }
 >()('app/AdminAuth') {}
+
+/** Stripe (or the database next to it) failed while syncing a subscription. */
+export class BillingError extends Data.TaggedError('BillingError')<{ readonly cause: unknown }> {}
 
 /**
  * Stripe for subscriptions, as far as programs need it: whether payment is set up, and keeping a
@@ -89,7 +120,7 @@ export class Billing extends Context.Service<
   Billing,
   {
     readonly configured: boolean
-    readonly syncQuantity: (organizationId: string) => Promise<void>
+    readonly syncQuantity: (organizationId: string) => Effect.Effect<void, BillingError>
   }
 >()('app/Billing') {}
 
@@ -102,12 +133,14 @@ export const SubmissionReplay = Context.Reference<{ readonly mark: () => void }>
   { defaultValue: () => ({ mark: () => {} }) },
 )
 
-export type AppServices =
-  | Database
+/** Built once per Worker isolate from `AppLive` (`live.ts`); the same for every request. */
+export type ProcessServices = Database | Mailer | KpiSource | Billing
+
+/** Who is asking and about which company: `runApp` provides them per request. */
+export type RequestServices =
   | CurrentUser
   | CurrentOrganization
   | HomeOrganization
-  | Mailer
   | PermissionChecker
-  | KpiSource
-  | Billing
+
+export type AppServices = ProcessServices | RequestServices
