@@ -59,10 +59,12 @@ export function harness() {
         }),
     }),
   )
-  // `runAs` runs as someone else, e.g. a manager's staff in a company their company manages.
+  // `runAs` runs as someone else, e.g. a manager's staff in a company their company manages, or
+  // as a user an admin is acting as (`impersonatedBy`).
   const runAs =
     (as: {
       user?: string
+      impersonatedBy?: { id: string; name: string }
       home?: { id: string; name: string; role: string; customRoles?: CustomRoles }
       organization?: {
         id: string
@@ -84,12 +86,12 @@ export function harness() {
               : { ...home, grant: null },
           ),
           Effect.provideService(HomeOrganization, home),
-          Effect.provideService(
-            CurrentUser,
-            as.user
+          Effect.provideService(CurrentUser, {
+            ...(as.user
               ? { id: user, name: user, email: `${user}@example.test` }
-              : { id: 'user', name: 'u', email: 'u@example.test' },
-          ),
+              : { id: 'user', name: 'u', email: 'u@example.test' }),
+            impersonatedBy: as.impersonatedBy ?? null,
+          }),
           Effect.provideService(PermissionChecker, { check: () => Effect.succeed(true) }),
           Effect.provide(services),
         ) as Effect.Effect<A, E, never>,

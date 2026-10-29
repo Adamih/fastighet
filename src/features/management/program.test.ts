@@ -328,6 +328,34 @@ test('the manager can end its own access; the client sees it in its log', async 
   })
 })
 
+test('ending a client while an admin acts as the user names the admin in the client log', async () => {
+  const h = setup()
+  const { grantId } = await grantAccess(h)
+  h.sqlite.exec(`INSERT INTO user (id, name, email, email_verified, created_at, updated_at, role)
+    VALUES ('staff', 'Supporten', 'staff@example.test', 1, 0, 0, 'admin')`)
+  const asBossImpersonated = h.runAs({
+    user: 'boss',
+    home: h.mgrHome,
+    impersonatedBy: { id: 'staff', name: 'Supporten' },
+  })
+  await asBossImpersonated(endClient(grantId))
+  expect(
+    h.sqlite
+      .query(
+        `SELECT user_id, actor_organization_id, impersonated_by_id, impersonated_by_name
+         FROM audit_event WHERE organization_id = 'org' AND action = 'management.end_client'`,
+      )
+      .all(),
+  ).toEqual([
+    {
+      user_id: 'boss',
+      actor_organization_id: 'mgr',
+      impersonated_by_id: 'staff',
+      impersonated_by_name: 'Supporten',
+    },
+  ])
+})
+
 test("the log lists what other companies' staff did, not the company's own changes", async () => {
   const h = setup()
   await grantAccess(h)

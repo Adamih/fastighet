@@ -23,6 +23,7 @@ import {
   presetOf,
 } from '#/lib/managed-access'
 import { anyStoredJson } from '#/lib/schemas'
+import { auditValues } from '#/server/audit'
 import { requireOwnCompany, requirePermission } from '#/server/authorize'
 import { bestEffort } from '#/server/best-effort'
 import { Conflict, NotFound } from '#/server/errors'
@@ -336,15 +337,16 @@ export const endClient = Effect.fn('management.endClient')(function* (grantId: s
         .update(managementGrant)
         .set({ revokedAt: now, revokedBy: me.id })
         .where(eq(managementGrant.id, grantId)),
-      db.insert(auditEvent).values({
-        organizationId: found.managedOrganizationId,
-        userId: me.id,
-        userName: me.name,
-        actorOrganizationId: org.id,
-        actorOrganizationName: org.name,
-        action: 'management.end_client',
-        entityId: null,
-      }),
+      // The client's own log, so in this batch rather than through runApp (which also records
+      // it in the manager's log). auditValues names an admin acting as the user, like any entry.
+      db
+        .insert(auditEvent)
+        .values(
+          auditValues(
+            { organizationId: found.managedOrganizationId, user: me, actor: org },
+            { action: 'management.end_client', entityId: null },
+          ),
+        ),
     ]),
   )
 })
