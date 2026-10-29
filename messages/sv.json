@@ -1392,7 +1392,7 @@
   "plan_row_brf_fees": "Överlåtelse- och pantsättningsavgift",
   "plan_row_brf_lettings": "Uthyrning av parkering och förråd",
   "plan_row_cases": "Ärenden: felanmälan och reparationer",
-  "plan_row_client_features": "Kundernas tillval (portal, ärenden, koppling)",
+  "plan_row_client_features": "Kundernas tillval (ärenden, koppling)",
   "plan_row_clients": "Kundförfrågningar, behörigheter och arbete i kundbolag",
   "plan_row_custom_roles": "Egna roller: välj vad varje användare får göra",
   "plan_row_integration": "Koppling till bokföringsprogram (Fortnox, Visma)",

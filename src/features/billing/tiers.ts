@@ -179,6 +179,8 @@ export const plans: Record<
       { label: m.plan_row_register, cells: [true, true, true] },
       { label: m.plan_row_brf_billing, cells: [true, true, true] },
       { label: m.plan_row_brf_fees, cells: [true, true, true] },
+      // Mina sidor is in every tier (#16); views tied to gated features follow the tier there.
+      { label: m.plan_row_member_portal, cells: [true, true, true] },
       { label: m.plan_row_manager_access, cells: [true, true, true] },
       {
         label: m.plan_row_brf_lettings,
@@ -194,7 +196,6 @@ export const plans: Record<
       { label: m.plan_row_custom_roles, feature: 'roles', cells: [false, true, true] },
       { label: m.plan_row_audit, soon: true, cells: [false, true, true] },
       { label: m.plan_row_integration, soon: true, cells: [false, false, true] },
-      { label: m.plan_row_member_portal, soon: true, cells: [false, false, true] },
       { label: m.plan_row_cases, soon: true, cells: [false, false, true] },
       { label: m.plan_row_branding, soon: true, cells: [false, false, true] },
     ],
@@ -209,6 +210,7 @@ export const plans: Record<
       },
       { label: m.plan_row_landlord_billing, cells: [true, true, true] },
       { label: m.plan_row_parking, cells: [true, true, true] },
+      { label: m.plan_row_tenant_portal, cells: [true, true, true] },
       {
         label: m.plan_row_landlord_commercial,
         feature: 'commercial',
@@ -218,11 +220,6 @@ export const plans: Record<
       { label: m.plan_row_custom_roles, feature: 'roles', cells: [false, true, true] },
       { label: m.plan_row_audit, soon: true, cells: [false, true, true] },
       { label: m.plan_row_integration, soon: true, cells: [false, false, true] },
-      {
-        label: m.plan_row_tenant_portal,
-        soon: true,
-        cells: [false, perUse(m.plan_cell_per_unit), true],
-      },
       { label: m.plan_row_cases, soon: true, cells: [false, perUse(m.plan_cell_per_unit), true] },
       { label: m.plan_row_branding, soon: true, cells: [false, false, true] },
     ],

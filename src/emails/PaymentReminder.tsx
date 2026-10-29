@@ -1,5 +1,5 @@
 import { Column, Row, Section, Text } from '@react-email/components'
-import { EmailHeading, EmailLayout, Paragraph } from './_components/EmailLayout'
+import { EmailHeading, EmailLayout, Paragraph, PortalLink } from './_components/EmailLayout'
 
 // Amounts and dates arrive formatted, so the template has no money or date logic.
 export type Props = {
@@ -21,6 +21,8 @@ export type Props = {
   bankgiro: string
   ocr: string
   sellerDetails: string[]
+  /** The avi in Mina sidor, when the recipient has access there. */
+  portalUrl?: string | null
 }
 
 export const subject = (props: Props) =>
@@ -79,6 +81,7 @@ export default function PaymentReminder(props: Props) {
       <Text style={muted}>
         {props.documentName} {props.invoiceNumber}
       </Text>
+      {props.portalUrl && <PortalLink href={props.portalUrl} />}
       {props.sellerDetails.map((line) => (
         <Text key={line} style={muted}>
           {line}

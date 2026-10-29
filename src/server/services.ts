@@ -167,8 +167,16 @@ export class PortalCompany extends Context.Service<
   }
 >()('app/PortalCompany') {}
 
+/**
+ * The app's public address, for links in emails (e.g. to an avi in Mina sidor). Null when it
+ * isn't configured; emails then leave such links out.
+ */
+export class AppUrl extends Context.Service<AppUrl, { readonly origin: string | null }>()(
+  'app/AppUrl',
+) {}
+
 /** Built once per Worker isolate from `AppLive` (`live.ts`); the same for every request. */
-export type ProcessServices = Database | Mailer | KpiSource | Billing
+export type ProcessServices = Database | Mailer | KpiSource | Billing | AppUrl
 
 /** Who is asking and about which company: `runApp` provides them per request. */
 export type RequestServices =

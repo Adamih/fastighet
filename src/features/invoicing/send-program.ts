@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { Clock, Effect } from 'effect'
 import { creditNote, invoice } from '#/db/schema'
+import { portalLink } from '#/features/portal/links'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -60,6 +61,7 @@ export const emailInvoice = Effect.fn('invoicing.emailInvoice')(function* (
       bankgiro: inv.seller.bankgiro,
       ocr: inv.ocr,
       sellerDetails: sellerDetails(inv.seller, inv.vatOre > 0),
+      portalUrl: yield* portalLink(inv.partyId, `/portal/avier/${inv.id}`),
     },
   })
 
@@ -101,6 +103,7 @@ export const emailCreditNote = Effect.fn('invoicing.emailCreditNote')(function* 
       total: negative(note.totalOre),
       toCredit: note.toCredit,
       sellerDetails: sellerDetails(note.seller, note.vatOre > 0),
+      portalUrl: yield* portalLink(note.invoice.partyId, `/portal/avier/${note.invoice.id}`),
     },
   })
   const sentAt = new Date(yield* Clock.currentTimeMillis)

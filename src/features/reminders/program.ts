@@ -6,6 +6,7 @@ import { getInvoice } from '#/features/invoicing/program'
 import { periodLabel } from '#/features/invoicing/rules'
 import { statusFromMoney } from '#/features/ledger/postings'
 import { allInvoiceMoney } from '#/features/ledger/program'
+import { portalLink } from '#/features/portal/links'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -125,6 +126,7 @@ export const sendReminder = Effect.fn('reminders.sendReminder')(function* (invoi
       bankgiro: inv.seller.bankgiro,
       ocr: inv.ocr,
       sellerDetails: sellerDetails(inv.seller, inv.vatOre > 0),
+      portalUrl: yield* portalLink(inv.partyId, `/portal/avier/${inv.id}`),
     },
   })
 

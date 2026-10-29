@@ -132,6 +132,7 @@ export const getCreditNote = Effect.fn('invoicing.getCreditNote')(function* (cre
             issueDate: true,
             periodStart: true,
             periodEnd: true,
+            partyId: true,
           },
           with: { agreement: { columns: { kind: true } } },
         },

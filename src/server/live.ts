@@ -1,3 +1,4 @@
+import { env } from 'cloudflare:workers'
 import { Effect, Layer, ManagedRuntime } from 'effect'
 import { db } from '#/db'
 import { syncQuantity } from '#/features/billing/store'
@@ -5,7 +6,7 @@ import { fetchKpiFromScb } from '#/features/indexation/scb'
 import { stripe, stripeConfigured } from '#/lib/stripe'
 import { Mailer } from './mail/mailer'
 import { mailer } from './mail/provider'
-import { Billing, BillingError, Database, KpiFetchError, KpiSource } from './services'
+import { AppUrl, Billing, BillingError, Database, KpiFetchError, KpiSource } from './services'
 
 // The composition root: the production implementation of every service that is the same for
 // all requests. Request-scoped services (the user, the company in focus) are added by `runApp`.
@@ -37,7 +38,18 @@ export const BillingLive = Layer.effect(
   }),
 ).pipe(Layer.provide(DatabaseLive))
 
-export const AppLive = Layer.mergeAll(DatabaseLive, MailerLive, KpiSourceLive, BillingLive)
+/** Better Auth's base URL is the app's public address. */
+export const AppUrlLive = Layer.succeed(AppUrl, {
+  origin: env.BETTER_AUTH_URL ? env.BETTER_AUTH_URL.replace(/\/$/, '') : null,
+})
+
+export const AppLive = Layer.mergeAll(
+  DatabaseLive,
+  MailerLive,
+  KpiSourceLive,
+  BillingLive,
+  AppUrlLive,
+)
 
 /** Runs programs with `AppLive`, built once per isolate on first use. */
 export const appRuntime = ManagedRuntime.make(AppLive)

@@ -10,6 +10,7 @@ import type { CustomRoles } from '#/lib/permissions'
 import { Mailer } from '#/server/mail/mailer'
 import { makeMockMailer } from '#/server/mail/mock'
 import {
+  AppUrl,
   Billing,
   CurrentOrganization,
   CurrentUser,
@@ -51,6 +52,7 @@ export function harness() {
     Layer.succeed(Database, db as unknown as Db),
     Layer.succeed(Mailer, mailer),
     Layer.succeed(KpiSource, { fetch: Effect.sync(() => [...kpiFeed]) }),
+    Layer.succeed(AppUrl, { origin: 'https://app.example.test' }),
     Layer.succeed(Billing, {
       configured: false,
       syncQuantity: (organizationId) =>

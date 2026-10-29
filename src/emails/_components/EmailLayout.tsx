@@ -6,6 +6,7 @@ import {
   Heading,
   Hr,
   Html,
+  Link,
   Preview,
   Section,
   Text,
@@ -124,5 +125,22 @@ export function LinkFallback({ href, note }: { href: string; note?: ReactNode })
         </Text>
       )}
     </>
+  )
+}
+
+/** "Se avin på Mina sidor": for recipients with access to the tenant portal. */
+export function PortalLink({
+  href,
+  label = 'Se avin på Mina sidor',
+}: {
+  href: string
+  label?: string
+}) {
+  return (
+    <Text style={{ fontSize: '14px', lineHeight: '22px', margin: '0 0 16px' }}>
+      <Link href={href} style={{ color: colors.text, textDecoration: 'underline' }}>
+        {label}
+      </Link>
+    </Text>
   )
 }

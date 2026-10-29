@@ -20,6 +20,7 @@ mise run dev                     # http://localhost:3000
 The seed creates Exempel Fastigheter AB with dates relative to today:
 
 - **Logins:** `agare@fastighet.test` (owner) and `medlem@fastighet.test` (member), already verified. The password is `SEED_PASSWORD` in `scripts/db-seed-constants.ts`.
+- **Mina sidor:** `anna.svensson@hyresgast.test` signs in at `/portal/login` with a code (printed by the mock mailer in the `mise run dev` console); she reaches Exempel Fastigheter and Brf Linden. The Brf Linden board login also has Mina sidor for its own bostadsrätt (code at `/portal/login`, password at `/login`).
 - **Settings:** a made-up bankgiro and organisation number that pass their checksums, plus an address.
 - **Properties:** Kv. Lärkan and Kv. Falken, with 8 units. Some are vacant.
 - **Tenants and leases:**
@@ -71,7 +72,8 @@ src/
   emails/             react-email templates (Swedish); _components/ holds the shared layout
   features/<name>/    schemas.ts (Effect Schema, shared client/server), program.ts (Effect),
                       functions.ts (server functions + query options)
-  routes/             File routes. _app.tsx is the signed-in layout; login/onboarding are public
+  routes/             File routes. _app.tsx is the signed-in layout; login/onboarding are public;
+                      portal/ is Mina sidor (its own login and layout, for tenants and members)
 ```
 
 A request flows: route loader → TanStack Query → server function (validates input with an Effect Schema) → `runApp(program)` → Effect program using `orgQuery` → D1.

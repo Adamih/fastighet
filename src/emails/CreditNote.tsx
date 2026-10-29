@@ -1,5 +1,5 @@
 import { Column, Row, Section, Text } from '@react-email/components'
-import { EmailHeading, EmailLayout, Paragraph } from './_components/EmailLayout'
+import { EmailHeading, EmailLayout, Paragraph, PortalLink } from './_components/EmailLayout'
 
 // Amounts and dates arrive formatted (credited amounts as negative), so the template has no money
 // or date logic.
@@ -22,6 +22,8 @@ export type Props = {
   toCredit: boolean
   /** Seller details for the footer: address, organisationsnummer, VAT number, F-skatt. */
   sellerDetails: string[]
+  /** The avi in Mina sidor, when the recipient has access there. */
+  portalUrl?: string | null
 }
 
 export const subject = (props: Props) =>
@@ -86,6 +88,7 @@ export default function CreditNote(props: Props) {
         <AmountRow label="Totalt" value={props.total} strong />
       </Section>
 
+      {props.portalUrl && <PortalLink href={props.portalUrl} />}
       <Text style={muted}>Kreditfaktura {props.creditNoteNumber}</Text>
       {props.sellerDetails.map((line) => (
         <Text key={line} style={muted}>
