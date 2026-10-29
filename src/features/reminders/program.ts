@@ -1,5 +1,5 @@
 import { isNull } from 'drizzle-orm'
-import { Effect, Exit } from 'effect'
+import { Effect } from 'effect'
 import { charge, invoice, paymentReminder } from '#/db/schema'
 import { billingAvier } from '#/features/agreements/program'
 import { getInvoice } from '#/features/invoicing/program'
@@ -11,6 +11,7 @@ import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
+import { forEachBestEffort } from '#/server/best-effort'
 import { Conflict } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { inCompany, orgQuery } from '#/server/scoped'
@@ -170,23 +171,11 @@ export const sendReminders = Effect.fn('reminders.sendReminders')(function* (
   invoiceIds: readonly string[],
 ) {
   yield* requirePermission(manage)
-  const results = yield* Effect.forEach(
-    [...new Set(invoiceIds)],
-    (id) => Effect.exit(sendReminder(id)),
-    { concurrency: 4 },
-  )
-  const failedInvoiceIds: string[] = []
-  for (const [index, result] of results.entries()) {
-    if (Exit.isFailure(result)) {
-      failedInvoiceIds.push(invoiceIds[index])
-      yield* Effect.logError(result.cause)
-    }
-  }
-  return {
-    sent: results.length - failedInvoiceIds.length,
-    failed: failedInvoiceIds.length,
-    failedInvoiceIds,
-  }
+  const { succeeded, failed } = yield* forEachBestEffort(new Set(invoiceIds), sendReminder, {
+    label: 'Could not send reminder',
+    concurrency: 4,
+  })
+  return { sent: succeeded.length, failed: failed.length, failedInvoiceIds: failed }
 })
 
 /**

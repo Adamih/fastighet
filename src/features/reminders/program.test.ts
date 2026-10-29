@@ -82,6 +82,13 @@ test('sending in bulk reports what failed without stopping the rest', async () =
   expect(result).toMatchObject({ sent: 1, failed: 1, failedInvoiceIds: ['missing'] })
 })
 
+test('a repeated avi is sent once, and the failure names the avi that failed', async () => {
+  const h = harness()
+  const id = await overdueAvi(h)
+  const result = await h.run(sendReminders([id, id, 'missing']))
+  expect(result).toMatchObject({ sent: 1, failed: 1, failedInvoiceIds: ['missing'] })
+})
+
 let file = 0
 /** Imports a bank file with one payment to `ocr`, booked on `bookingDate`. */
 const pay = (h: ReturnType<typeof harness>, ocr: string, amountOre: number, bookingDate: string) =>

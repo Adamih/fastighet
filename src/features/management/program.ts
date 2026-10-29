@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm'
-import { Clock, Effect, Exit } from 'effect'
+import { Clock, Effect, Option } from 'effect'
 import {
   agreement,
   auditEvent,
@@ -24,6 +24,7 @@ import {
 } from '#/lib/managed-access'
 import { anyStoredJson } from '#/lib/schemas'
 import { requireOwnCompany, requirePermission } from '#/server/authorize'
+import { bestEffort } from '#/server/best-effort'
 import { Conflict, NotFound } from '#/server/errors'
 import { seesAllClients } from '#/server/focus'
 import { sendEmail } from '#/server/mail/mailer'
@@ -200,21 +201,18 @@ export const requestAccess = Effect.fn('management.requestAccess')(function* (
   const link = `${origin}/management?code=${encodeURIComponent(code)}`
   let emailed = false
   if (email) {
-    const sent = yield* Effect.exit(
-      sendEmail({
-        to: email,
-        template: 'managementRequest',
-        props: {
-          senderName: me.name,
-          managingName: org.name,
-          code,
-          acceptUrl: link,
-          expiresOn: stockholmDate(expiresAt.getTime()),
-        },
-      }),
-    )
-    if (Exit.isFailure(sent)) yield* Effect.logError(sent.cause)
-    emailed = Exit.isSuccess(sent)
+    const sent = yield* sendEmail({
+      to: email,
+      template: 'managementRequest',
+      props: {
+        senderName: me.name,
+        managingName: org.name,
+        code,
+        acceptUrl: link,
+        expiresOn: stockholmDate(expiresAt.getTime()),
+      },
+    }).pipe(bestEffort('Could not email management request'))
+    emailed = Option.isSome(sent)
   }
   return {
     requestId: created.id,

@@ -1,5 +1,5 @@
 import { desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm'
-import { Effect, Exit } from 'effect'
+import { Effect, Option } from 'effect'
 import {
   agreement,
   agreementParty,
@@ -24,6 +24,7 @@ import { sellerDetails } from '#/features/settings/seller'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
+import { bestEffort } from '#/server/best-effort'
 import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { inCompany, orgQuery, query } from '#/server/scoped'
@@ -434,31 +435,28 @@ export const runIndexation = Effect.fn('indexation.runIndexation')(function* (
       notices.noEmail += 1
       continue
     }
-    const sent = yield* Effect.exit(
-      sendEmail({
-        to: r.recipientEmail,
-        template: 'rentAdjustment',
-        props: {
-          recipientName: r.tenantName,
-          organizationName: seller.organizationName,
-          leaseLabel: `avtal ${r.number}`,
-          effectiveDate: r.effectiveDate,
-          baseRent: formatSek(r.baseRentPerYearOre),
-          previousSupplement: formatSek(r.currentSupplementOre),
-          newSupplement: formatSek(supplement),
-          newRent: formatSek(r.baseRentPerYearOre + supplement),
-          vatNote: r.vat ? 'exkl. moms' : null,
-          share: `${r.sharePercent} %`,
-          kpi: `${formatKpi(r.kpi as number)} (${monthLabel(r.kpiMonth)})`,
-          baseKpi: `${formatKpi(r.baseKpi as number)} (${monthLabel(r.baseMonth)})`,
-          retroactive: difference !== 0 && invoiced[0] ? formatSek(difference) : null,
-          sellerDetails: sellerDetails(seller, r.vat),
-        },
-      }),
-    )
-    if (Exit.isFailure(sent)) {
+    const sent = yield* sendEmail({
+      to: r.recipientEmail,
+      template: 'rentAdjustment',
+      props: {
+        recipientName: r.tenantName,
+        organizationName: seller.organizationName,
+        leaseLabel: `avtal ${r.number}`,
+        effectiveDate: r.effectiveDate,
+        baseRent: formatSek(r.baseRentPerYearOre),
+        previousSupplement: formatSek(r.currentSupplementOre),
+        newSupplement: formatSek(supplement),
+        newRent: formatSek(r.baseRentPerYearOre + supplement),
+        vatNote: r.vat ? 'exkl. moms' : null,
+        share: `${r.sharePercent} %`,
+        kpi: `${formatKpi(r.kpi as number)} (${monthLabel(r.kpiMonth)})`,
+        baseKpi: `${formatKpi(r.baseKpi as number)} (${monthLabel(r.baseMonth)})`,
+        retroactive: difference !== 0 && invoiced[0] ? formatSek(difference) : null,
+        sellerDetails: sellerDetails(seller, r.vat),
+      },
+    }).pipe(bestEffort(`Could not send rent adjustment notice (${adjustmentId})`))
+    if (Option.isNone(sent)) {
       notices.failed += 1
-      yield* Effect.logError(sent.cause)
       continue
     }
     notices.sent += 1

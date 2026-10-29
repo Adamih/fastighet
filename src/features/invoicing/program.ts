@@ -1,5 +1,5 @@
 import { desc, eq, inArray, ne, sql } from 'drizzle-orm'
-import { Clock, Effect, Exit } from 'effect'
+import { Clock, Effect } from 'effect'
 import {
   agreement,
   type agreementParty,
@@ -41,6 +41,7 @@ import { stockholmDate } from '#/lib/dates'
 import { formatSek } from '#/lib/money'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
+import { forEachBestEffort } from '#/server/best-effort'
 import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
@@ -273,22 +274,16 @@ export const createInvoiceRun = Effect.fn('invoicing.createInvoiceRun')(function
   }
 
   const withEmail = pending.filter((r) => r.recipient.recipientEmail).length
-  let sent = 0
-  const failedInvoiceIds: string[] = []
-  if (input.send && createdIds.length > 0) {
-    // A handful at a time; one failure does not stop the others.
-    const results = yield* Effect.forEach(
-      createdIds,
-      (id) => Effect.exit(emailInvoice(id, { skipWithoutEmail: true })),
-      { concurrency: 4 },
-    )
-    for (const [index, result] of results.entries()) {
-      if (Exit.isFailure(result)) {
-        failedInvoiceIds.push(createdIds[index])
-        yield* Effect.logError(result.cause)
-      } else if (result.value) sent++
-    }
-  }
+  const emails =
+    input.send && createdIds.length > 0
+      ? yield* forEachBestEffort(createdIds, (id) => emailInvoice(id, { skipWithoutEmail: true }), {
+          label: 'Could not email avi',
+          concurrency: 4,
+        })
+      : { succeeded: [], failed: [] }
+  // emailInvoice gives false for an avi without an email address.
+  const sent = emails.succeeded.filter((e) => e.value).length
+  const failedInvoiceIds = emails.failed
 
   return {
     created: createdIds.length,

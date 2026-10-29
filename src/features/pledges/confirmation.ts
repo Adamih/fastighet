@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { Clock, Effect } from 'effect'
+import { Clock, Effect, Option } from 'effect'
 import { pledge } from '#/db/schema'
 import { registerEntry } from '#/features/ownerships/program'
 import { loadCompanyDetails } from '#/features/settings/program'
@@ -7,6 +7,7 @@ import { maxDate, minDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
+import { bestEffort } from '#/server/best-effort'
 import { Conflict, NotFound } from '#/server/errors'
 import { sendEmail } from '#/server/mail/mailer'
 import { inCompany, orgQuery } from '#/server/scoped'
@@ -146,11 +147,6 @@ export const registerAndConfirm = Effect.fn('pledges.registerAndConfirm')(functi
     pledgeId: created.id,
     kind: 'registered',
     email,
-  }).pipe(
-    Effect.as(true),
-    Effect.catchCause((cause) =>
-      Effect.logError('Pledge confirmation failed', cause).pipe(Effect.as(false)),
-    ),
-  )
-  return { ...created, confirmed }
+  }).pipe(bestEffort('Pledge confirmation failed'))
+  return { ...created, confirmed: Option.isSome(confirmed) }
 })
