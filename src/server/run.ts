@@ -12,7 +12,7 @@ import { m } from '#/paraglide/messages'
 import { inCompany } from '#/server/scoped'
 import { recordAudit } from './audit'
 import { requireCustomerSession } from './customer-access'
-import { DatabaseError, NoActiveOrganization, Unauthenticated } from './errors'
+import { DatabaseError, isAppError, NoActiveOrganization, Unauthenticated } from './errors'
 import { customRolesOf, resolveFocus } from './focus'
 import { appRuntime } from './live'
 import { query } from './scoped'
@@ -107,8 +107,8 @@ function requestedCompany(): string | null {
 /** Turns a failed program into what TanStack Start expects a server function to throw. */
 export function toThrowable(cause: Cause.Cause<unknown>): unknown {
   const error = Cause.findErrorOption(cause)
-  if (Option.isSome(error)) {
-    const e = error.value as { _tag?: string; message?: string }
+  if (Option.isSome(error) && isAppError(error.value)) {
+    const e = error.value
     switch (e._tag) {
       case 'Unauthenticated':
         return redirect({ to: '/login' })
@@ -126,7 +126,12 @@ export function toThrowable(cause: Cause.Cause<unknown>): unknown {
       case 'Forbidden':
         return appError('forbidden', m.form_error_forbidden())
       case 'Conflict':
-        return appError('conflict', e.message ?? 'Åtgärden kunde inte genomföras.')
+        return appError('conflict', e.message)
+      case 'DatabaseError':
+        break
+      default:
+        // A new error in `appErrors` must be mapped above.
+        e satisfies never
     }
   }
   console.error(Cause.pretty(cause))

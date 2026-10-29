@@ -5,7 +5,7 @@ import type { Permissions } from '#/lib/permissions'
 import { decodeSubmissionResult, encodeSubmissionResult } from '#/lib/submission-result'
 import { inCompany } from '#/server/scoped'
 import { requirePermission } from './authorize'
-import { Conflict, UncertainSubmission } from './errors'
+import { Conflict, failsBeforeWrite, UncertainSubmission } from './errors'
 import { orgQuery } from './scoped'
 import { type AppServices, CurrentUser, SubmissionReplay } from './services'
 
@@ -64,11 +64,7 @@ export function once<A, E, Input extends { requestId?: string }>(
       Effect.catchIf(
         // These failures happen before the command writes. Unexpected/database failures retain
         // the claim, because the operation or one of its batches may already have committed.
-        (error) =>
-          typeof error === 'object' &&
-          error !== null &&
-          '_tag' in error &&
-          ['Conflict', 'Forbidden', 'NotFound'].includes(String(error._tag)),
+        failsBeforeWrite,
         (error) =>
           Effect.gen(function* () {
             yield* orgQuery((db, organizationId) =>
