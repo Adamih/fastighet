@@ -83,7 +83,8 @@ function toPortalThrowable(cause: Cause.Cause<unknown>): unknown {
  */
 export async function runPortal<A, E>(
   program: Effect.Effect<A, E, PortalServices>,
-  audit?: PortalAudit,
+  /** What to record; from the result when it names the party (e.g. an extract). */
+  audit?: PortalAudit | ((result: A) => PortalAudit),
 ): Promise<A> {
   const exit = await appRuntime.runPromiseExit(
     Effect.gen(function* () {
@@ -94,11 +95,12 @@ export async function runPortal<A, E>(
         Effect.provideService(PortalCompany, company),
       )
       if (audit) {
-        const party = company.parties.find((p) => p.id === audit.partyId)
+        const entry = typeof audit === 'function' ? audit(result) : audit
+        const party = company.parties.find((p) => p.id === entry.partyId)
         if (party) {
           yield* recordPortalAudit(
             { organizationId: company.id, user: context.user, party },
-            audit,
+            entry,
             result,
           )
         }

@@ -9,8 +9,8 @@ import type { Permissions } from '#/lib/permissions'
 import { blankToNull } from '#/lib/schemas'
 import { requirePermission } from '#/server/authorize'
 import { Conflict, NotFound } from '#/server/errors'
-import { inCompany, orgQuery } from '#/server/scoped'
-import { CurrentUser } from '#/server/services'
+import { inCompany, orgQuery, query } from '#/server/scoped'
+import { CurrentOrganization, CurrentUser } from '#/server/services'
 import { today } from '#/server/today'
 import {
   activeOn,
@@ -48,12 +48,13 @@ const columns = {
  * stood on `asOf` (today by default): later notices are left out and releases after it don't
  * count yet. Callers check read access (the bostadsrätt's own).
  */
-export const pledgesFor = Effect.fn('pledges.pledgesFor')(function* (
+export const pledgesIn = Effect.fn('pledges.pledgesIn')(function* (
+  organizationId: string,
   agreementIds: readonly string[],
   asOf?: string,
 ) {
   if (agreementIds.length === 0) return new Map<string, PledgeView[]>()
-  const rows = yield* orgQuery((db, organizationId) =>
+  const rows = yield* query((db) =>
     db
       .select(columns)
       .from(pledge)
@@ -76,6 +77,12 @@ export const pledgesFor = Effect.fn('pledges.pledgesFor')(function* (
   }
   return byAgreement
 })
+
+/** Pledges in the company in focus (see `pledgesIn`). */
+export const pledgesFor = (agreementIds: readonly string[], asOf?: string) =>
+  Effect.gen(function* () {
+    return yield* pledgesIn((yield* CurrentOrganization).id, agreementIds, asOf)
+  })
 
 type PledgeRow = Omit<
   typeof pledge.$inferSelect,

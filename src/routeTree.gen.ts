@@ -56,6 +56,7 @@ import { Route as AdminUsersIndexRouteImport } from './routes/admin/users/index'
 import { Route as AdminUsersUserIdRouteImport } from './routes/admin/users/$userId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as PortalPortalIndexRouteImport } from './routes/portal/_portal/index'
+import { Route as PortalPortalLagenhetRouteImport } from './routes/portal/_portal/lagenhet'
 import { Route as AppOwnershipsOwnershipIdExtractRouteImport } from './routes/_app/ownerships/$ownershipId_.extract'
 import { Route as PortalPortalAvierIndexRouteImport } from './routes/portal/_portal/avier/index'
 import { Route as PortalPortalAvierInvoiceIdRouteImport } from './routes/portal/_portal/avier/$invoiceId'
@@ -300,6 +301,11 @@ const PortalPortalIndexRoute = PortalPortalIndexRouteImport.update({
   path: '/',
   getParentRoute: () => PortalPortalRoute,
 } as any)
+const PortalPortalLagenhetRoute = PortalPortalLagenhetRouteImport.update({
+  id: '/lagenhet',
+  path: '/lagenhet',
+  getParentRoute: () => PortalPortalRoute,
+} as any)
 const AppOwnershipsOwnershipIdExtractRoute =
   AppOwnershipsOwnershipIdExtractRouteImport.update({
     id: '/ownerships/$ownershipId_/extract',
@@ -375,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/portal/lagenhet': typeof PortalPortalLagenhetRoute
   '/invoices/': typeof AppInvoicesIndexRoute
   '/leases/': typeof AppLeasesIndexRoute
   '/ownerships/': typeof AppOwnershipsIndexRoute
@@ -427,6 +434,7 @@ export interface FileRoutesByTo {
   '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/portal/lagenhet': typeof PortalPortalLagenhetRoute
   '/invoices': typeof AppInvoicesIndexRoute
   '/leases': typeof AppLeasesIndexRoute
   '/ownerships': typeof AppOwnershipsIndexRoute
@@ -483,6 +491,7 @@ export interface FileRoutesById {
   '/admin/companies/$organizationId': typeof AdminCompaniesOrganizationIdRoute
   '/admin/users/$userId': typeof AdminUsersUserIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/portal/_portal/lagenhet': typeof PortalPortalLagenhetRoute
   '/_app/invoices/': typeof AppInvoicesIndexRoute
   '/_app/leases/': typeof AppLeasesIndexRoute
   '/_app/ownerships/': typeof AppOwnershipsIndexRoute
@@ -539,6 +548,7 @@ export interface FileRouteTypes {
     | '/admin/companies/$organizationId'
     | '/admin/users/$userId'
     | '/api/auth/$'
+    | '/portal/lagenhet'
     | '/invoices/'
     | '/leases/'
     | '/ownerships/'
@@ -591,6 +601,7 @@ export interface FileRouteTypes {
     | '/admin/companies/$organizationId'
     | '/admin/users/$userId'
     | '/api/auth/$'
+    | '/portal/lagenhet'
     | '/invoices'
     | '/leases'
     | '/ownerships'
@@ -646,6 +657,7 @@ export interface FileRouteTypes {
     | '/admin/companies/$organizationId'
     | '/admin/users/$userId'
     | '/api/auth/$'
+    | '/portal/_portal/lagenhet'
     | '/_app/invoices/'
     | '/_app/leases/'
     | '/_app/ownerships/'
@@ -1014,6 +1026,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalPortalIndexRouteImport
       parentRoute: typeof PortalPortalRoute
     }
+    '/portal/_portal/lagenhet': {
+      id: '/portal/_portal/lagenhet'
+      path: '/lagenhet'
+      fullPath: '/portal/lagenhet'
+      preLoaderRoute: typeof PortalPortalLagenhetRouteImport
+      parentRoute: typeof PortalPortalRoute
+    }
     '/_app/ownerships/$ownershipId_/extract': {
       id: '/_app/ownerships/$ownershipId_/extract'
       path: '/ownerships/$ownershipId/extract'
@@ -1135,6 +1154,7 @@ const AdminRouteChildren: AdminRouteChildren = {
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
 interface PortalPortalRouteChildren {
+  PortalPortalLagenhetRoute: typeof PortalPortalLagenhetRoute
   PortalPortalIndexRoute: typeof PortalPortalIndexRoute
   PortalPortalAvierInvoiceIdRoute: typeof PortalPortalAvierInvoiceIdRoute
   PortalPortalAvtalAgreementIdRoute: typeof PortalPortalAvtalAgreementIdRoute
@@ -1143,6 +1163,7 @@ interface PortalPortalRouteChildren {
 }
 
 const PortalPortalRouteChildren: PortalPortalRouteChildren = {
+  PortalPortalLagenhetRoute: PortalPortalLagenhetRoute,
   PortalPortalIndexRoute: PortalPortalIndexRoute,
   PortalPortalAvierInvoiceIdRoute: PortalPortalAvierInvoiceIdRoute,
   PortalPortalAvtalAgreementIdRoute: PortalPortalAvtalAgreementIdRoute,

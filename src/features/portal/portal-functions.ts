@@ -4,6 +4,7 @@ import { Schema } from 'effect'
 import { portalContext, runPortal } from '#/server/portal'
 import { validate } from '#/server/validate'
 import { portalAgreement, portalAgreements } from './agreements-program'
+import { portalApartments, portalExtract } from './apartment-program'
 import { portalBalance, portalInvoice, portalInvoices } from './invoices-program'
 
 // Server functions for the signed-in person in Mina sidor. Everything runs through `runPortal`
@@ -52,3 +53,25 @@ export const portalAgreementQuery = (agreementId: string) =>
     queryKey: ['portal', 'agreements', agreementId],
     queryFn: () => portalAgreementFn({ data: { agreementId } }),
   })
+
+export const portalApartmentsFn = createServerFn({ method: 'GET' }).handler(() =>
+  runPortal(portalApartments),
+)
+
+/**
+ * An extract from the apartment register. Recorded in the audit log although it only reads, so
+ * the page fetches it from the component when asked for, never from a route loader (hover
+ * preloading would record one).
+ */
+export const portalExtractFn = createServerFn({ method: 'GET' })
+  .validator(validate(Schema.Struct({ ownershipId: Schema.String })))
+  .handler(({ data }) =>
+    runPortal(portalExtract(data.ownershipId), (extract) => ({
+      action: 'ownership.extract',
+      entityId: data.ownershipId,
+      partyId: extract.partyId,
+    })),
+  )
+
+export const portalApartmentsQuery = () =>
+  queryOptions({ queryKey: ['portal', 'apartments'], queryFn: () => portalApartmentsFn() })

@@ -60,6 +60,14 @@ function PortalAgreementPage() {
         <LeaseStatusBadge status={a.status} />
       </header>
 
+      {a.kind === 'tenant_ownership' && (
+        <Link
+          to="/portal/lagenhet"
+          className="rounded-xl border bg-card p-4 font-medium text-sm underline-offset-4 hover:underline"
+        >
+          {m.portal_apartment_link()}
+        </Link>
+      )}
       <Section title={m.portal_agreement_units()}>
         {a.units.map((u) => (
           <Row

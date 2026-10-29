@@ -41,7 +41,7 @@ import { stockholmDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { Conflict } from '#/server/errors'
-import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
+import { inCompany, orgQuery, orNotFound, query } from '#/server/scoped'
 import { CurrentOrganization, CurrentUser, HomeOrganization } from '#/server/services'
 import { today } from '#/server/today'
 import { feeCharge } from './fee-program'
@@ -561,11 +561,12 @@ export const deleteOwnership = Effect.fn('ownerships.deleteOwnership')(function*
  * A bostadsrätt as the apartment register describes it on `on`: the apartment, what goes with it
  * and the holders then. No permission check; the register's documents check their own.
  */
-export const registerEntry = Effect.fn('ownerships.registerEntry')(function* (
+export const registerEntryIn = Effect.fn('ownerships.registerEntryIn')(function* (
+  organizationId: string,
   ownershipId: string,
   on: (row: { startDate: string; endDate: string | null }) => string,
 ) {
-  const row = yield* orgQuery((db, organizationId) =>
+  const row = yield* query((db) =>
     db.query.agreement.findFirst({
       where: and(eq(agreement.id, ownershipId), isOwnership(organizationId)),
       with: withOwnershipDetails,
@@ -599,6 +600,15 @@ export const registerEntry = Effect.fn('ownerships.registerEntry')(function* (
     holders: view.owners.map((o) => ({ name: o.name, sharePercent: o.sharePercent })),
   }
 })
+
+/** The register entry in the company in focus (see `registerEntryIn`). */
+export const registerEntry = (
+  ownershipId: string,
+  on: (row: { startDate: string; endDate: string | null }) => string,
+) =>
+  Effect.gen(function* () {
+    return yield* registerEntryIn((yield* CurrentOrganization).id, ownershipId, on)
+  })
 
 /**
  * An extract from the apartment register (lägenhetsförteckningen) for one bostadsrätt as it stood
