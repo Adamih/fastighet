@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { Email } from '#/lib/schemas'
+import { Email, OptionalText, PostalCode } from '#/lib/schemas'
 
 export const PartyIdInput = Schema.Struct({ partyId: Schema.String })
 
@@ -14,3 +14,13 @@ export type InvitePortalUserInput = typeof InvitePortalUserInput.Type
 export const InvitationIdInput = Schema.Struct({ invitationId: Schema.String })
 
 export const AccessIdInput = Schema.Struct({ accessId: Schema.String })
+
+export const UpdatePortalContactInput = Schema.Struct({
+  partyId: Schema.String,
+  email: Email,
+  phone: OptionalText,
+  streetAddress: OptionalText,
+  postalCode: PostalCode,
+  city: OptionalText,
+})
+export type UpdatePortalContactInput = typeof UpdatePortalContactInput.Type

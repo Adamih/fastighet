@@ -45,6 +45,9 @@ export const loadCompanyDetails = Effect.gen(function* () {
     lateInterestMinimumOre: row?.lateInterestMinimumOre ?? null,
     pledgeFeeBasisPoints: row?.pledgeFeeBasisPoints ?? null,
     transferFeeBasisPoints: row?.transferFeeBasisPoints ?? null,
+    portalContactEdits: row?.portalContactEdits ?? true,
+    portalContactEmail: row?.portalContactEmail ?? null,
+    portalContactPhone: row?.portalContactPhone ?? null,
   }
 }).pipe(Effect.withSpan('settings.loadCompanyDetails'))
 
@@ -99,6 +102,9 @@ export const updateCompanyDetails = Effect.fn('settings.updateCompanyDetails')(f
       : null,
     pledgeFeeBasisPoints: parseFeePercent(input.pledgeFee),
     transferFeeBasisPoints: parseFeePercent(input.transferFee),
+    portalContactEdits: input.portalContactEdits,
+    portalContactEmail: blankToNull(input.portalContactEmail),
+    portalContactPhone: blankToNull(input.portalContactPhone),
   }
   yield* orgQuery((db, organizationId) =>
     db

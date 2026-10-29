@@ -172,6 +172,14 @@ export function PortalAccessPanel({
           ))}
         </div>
       )}
+      {access.data.lastContactChange && (
+        <p className="text-[13px] text-muted-foreground">
+          {m.portal_contact_changed({
+            name: access.data.lastContactChange.userName,
+            date: formatShortDate(access.data.lastContactChange.on),
+          })}
+        </p>
+      )}
       {notice && <p className="text-[13px] text-muted-foreground">{notice}</p>}
       {error && <p className="text-[13px] text-destructive">{error.message}</p>}
     </Panel>

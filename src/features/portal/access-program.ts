@@ -1,6 +1,6 @@
 import { asc, desc, eq, isNull } from 'drizzle-orm'
 import { Clock, Effect, Option } from 'effect'
-import { party, partyAccess, portalInvitation, user } from '#/db/schema'
+import { auditEvent, party, partyAccess, portalInvitation, user } from '#/db/schema'
 import { loadCompanyDetails } from '#/features/settings/program'
 import { stockholmDate } from '#/lib/dates'
 import type { Permissions } from '#/lib/permissions'
@@ -76,8 +76,27 @@ export const portalAccessFor = Effect.fn('portal.portalAccessFor')(function* (pa
       )
       .orderBy(desc(portalInvitation.createdAt)),
   )
+  // The latest change the party's people made to its contact details in Mina sidor.
+  const [contactChange] = yield* orgQuery((db, organizationId) =>
+    db
+      .select({ at: auditEvent.createdAt, userName: auditEvent.userName })
+      .from(auditEvent)
+      .where(
+        inCompany(
+          auditEvent,
+          organizationId,
+          eq(auditEvent.action, 'portal.update_contact'),
+          eq(auditEvent.entityId, found.id),
+        ),
+      )
+      .orderBy(desc(auditEvent.createdAt))
+      .limit(1),
+  )
   const now = yield* Clock.currentTimeMillis
   return {
+    lastContactChange: contactChange
+      ? { on: stockholmDate(contactChange.at.getTime()), userName: contactChange.userName }
+      : null,
     users: users.map((u) => ({ ...u, createdAt: u.createdAt.getTime() })),
     invitations: invitations.map((i) => ({
       id: i.id,

@@ -5,7 +5,9 @@ import { portalContext, runPortal } from '#/server/portal'
 import { validate } from '#/server/validate'
 import { portalAgreement, portalAgreements } from './agreements-program'
 import { portalApartments, portalExtract } from './apartment-program'
+import { portalContact, updatePortalContact } from './contact-program'
 import { portalBalance, portalInvoice, portalInvoices } from './invoices-program'
+import { UpdatePortalContactInput } from './schemas'
 
 // Server functions for the signed-in person in Mina sidor. Everything runs through `runPortal`
 // (or `portalContext`), never `runApp`. Query keys start with 'portal' and don't name the
@@ -75,3 +77,20 @@ export const portalExtractFn = createServerFn({ method: 'GET' })
 
 export const portalApartmentsQuery = () =>
   queryOptions({ queryKey: ['portal', 'apartments'], queryFn: () => portalApartmentsFn() })
+
+export const portalContactFn = createServerFn({ method: 'GET' }).handler(() =>
+  runPortal(portalContact),
+)
+
+export const updatePortalContactFn = createServerFn({ method: 'POST' })
+  .validator(validate(UpdatePortalContactInput))
+  .handler(({ data }) =>
+    runPortal(updatePortalContact(data), {
+      action: 'portal.update_contact',
+      entityId: data.partyId,
+      partyId: data.partyId,
+    }),
+  )
+
+export const portalContactQuery = () =>
+  queryOptions({ queryKey: ['portal', 'contact'], queryFn: () => portalContactFn() })

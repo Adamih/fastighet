@@ -1,9 +1,557 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query'
+import { createFileRoute, useRouter } from '@tanstack/react-router'
+import { Schema } from 'effect'
+import { AlertTriangle, Check, CircleCheck, FileText, Lock } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
+import { Optional, useAppForm } from '#/components/form'
+import { PageHeader } from '#/components/responsive'
+import { SubmissionForm } from '#/components/submission-form'
+import { Button } from '#/components/ui/button'
+import { useCan } from '#/features/auth/use-can'
+import { vatNumberFor } from '#/features/invoicing/rules'
+import { formatFeePercent } from '#/features/ownerships/fees'
+import {
+  type CompanyKind,
+  companyKindLabels,
+  companyKinds,
+} from '#/features/settings/company-kinds'
+import { companyDetailsQuery, updateCompanyDetailsFn } from '#/features/settings/functions'
+import { UpdateCompanyDetailsInput } from '#/features/settings/schemas'
+import { sellerDetails, settingsReadiness } from '#/features/settings/seller'
+import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
+import { useFormMutation } from '#/lib/form-mutation'
+import { oreToInput } from '#/lib/money'
+import { cn } from '#/lib/utils'
+import { m } from '#/paraglide/messages'
 
 export const Route = createFileRoute('/_app/company-details')({
-  component: RouteComponent,
+  loader: ({ context }) => context.queryClient.ensureQueryData(companyDetailsQuery()),
+  component: CompanyDetailsPage,
 })
 
-function RouteComponent() {
-  return <div>Hello "/_app/company-details"!</div>
+const validator = Schema.toStandardSchemaV1(UpdateCompanyDetailsInput)
+
+type CompanyDetails = typeof Route.types.loaderData
+
+const toValues = (s: CompanyDetails) => ({
+  organizationNumber: s.organizationNumber ?? '',
+  bankgiro: s.bankgiro ?? '',
+  streetAddress: s.streetAddress ?? '',
+  postalCode: s.postalCode ?? '',
+  city: s.city ?? '',
+  email: s.email ?? '',
+  phone: s.phone ?? '',
+  fSkatt: s.fSkatt,
+  kind: s.kind as CompanyKind,
+  reminderFee: s.reminderFeeOre === null ? '' : oreToInput(s.reminderFeeOre),
+  reminderIntervalDays: String(s.reminderIntervalDays),
+  reminderDueDays: String(s.reminderDueDays),
+  waiveReminderFeeByDueDate: s.waiveReminderFeeByDueDate,
+  lateInterest: s.lateInterest,
+  lateInterestMinimum:
+    s.lateInterestMinimumOre === null ? '' : oreToInput(s.lateInterestMinimumOre),
+  portalContactEdits: s.portalContactEdits,
+  portalContactEmail: s.portalContactEmail ?? '',
+  portalContactPhone: s.portalContactPhone ?? '',
+  pledgeFee: s.pledgeFeeBasisPoints === null ? '' : formatFeePercent(s.pledgeFeeBasisPoints),
+  transferFee: s.transferFeeBasisPoints === null ? '' : formatFeePercent(s.transferFeeBasisPoints),
+})
+type Values = ReturnType<typeof toValues>
+
+const sameValues = (a: Values, b: Values) =>
+  (Object.keys(a) as (keyof Values)[]).every((k) => a[k] === b[k])
+
+function CompanyDetailsPage() {
+  const canEdit = useCan()({ settings: ['manage'] })
+  const { data: settings } = useSuspenseQuery(companyDetailsQuery())
+  const queryClient = useQueryClient()
+  const router = useRouter()
+  const [baseline, setBaseline] = useState(() => toValues(settings))
+  const [saved, setSaved] = useState(false)
+
+  const save = useFormMutation({
+    mutationFn: updateCompanyDetailsFn,
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(companyDetailsQuery().queryKey, updated)
+      await queryClient.invalidateQueries({ queryKey: ['invoices'] }, { throwOnError: true })
+      await queryClient.invalidateQueries({ queryKey: ['company-details', 'fee-terms'] })
+      // The company type sets the navigation's wording, which comes from the route context.
+      await router.invalidate()
+    },
+  })
+
+  const form = useAppForm({
+    defaultValues: baseline,
+    validators: { onSubmit: validator },
+    // Any edit hides the "Sparat" note from the previous save.
+    listeners: { onChange: () => setSaved(false) },
+    onSubmit: async ({ value, formApi }) => {
+      const updated = await save.mutateAsync({ data: value })
+      // The server normalises (e.g. "5050 1055" → "5050-1055"); start over from what it stored.
+      const next = toValues(updated)
+      setBaseline(next)
+      formApi.reset(next)
+      setSaved(true)
+    },
+  })
+
+  return (
+    <div className="grid max-w-4xl gap-6">
+      <PageHeader
+        title={m.nav_company_details()}
+        subtitle={m.company_details_subtitle({ organization: settings.organizationName })}
+      />
+
+      {!canEdit && (
+        <p className="flex items-start gap-2.5 rounded-xl border bg-muted/40 px-4 py-3 text-[13px] text-muted-foreground">
+          <Lock aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          {m.company_details_read_only()}
+        </p>
+      )}
+
+      <form.Subscribe selector={(s) => s.values}>
+        {(values) => <Readiness values={values} />}
+      </form.Subscribe>
+
+      <SubmissionForm form={form} disabled={!canEdit} method="post">
+        <fieldset disabled={!canEdit} className="grid">
+          <Section
+            title={m.tenant_kind_company()}
+            description={m.company_details_company_description()}
+          >
+            <div className="grid gap-1.5">
+              <span className="font-medium text-sm">{m.tenant_form_company_name()}</span>
+              <span className="text-sm">{settings.organizationName}</span>
+            </div>
+            <div className="grid gap-1.5">
+              <form.AppField name="kind">
+                {(field) => (
+                  <field.SegmentedField
+                    label={m.company_details_company_kind()}
+                    showLabel
+                    disabled={!canEdit}
+                    options={companyKinds.map((kind) => ({
+                      value: kind,
+                      label: companyKindLabels[kind],
+                    }))}
+                  />
+                )}
+              </form.AppField>
+              <p className="text-muted-foreground text-xs">
+                {m.company_details_company_kind_hint()}
+              </p>
+            </div>
+            <form.AppField name="organizationNumber">
+              {(field) => (
+                <field.TextField
+                  label={m.common_organization_number()}
+                  placeholder={m.company_details_org_number_placeholder()}
+                  inputMode="numeric"
+                  hint={
+                    isValidOrganizationNumber(field.state.value) && (
+                      <Note tone="ok">
+                        {m.company_details_vat_number({ number: vatNumberFor(field.state.value) })}
+                      </Note>
+                    )
+                  }
+                />
+              )}
+            </form.AppField>
+            <div className="border-t pt-4">
+              <form.AppField name="fSkatt">
+                {(field) => (
+                  <field.SwitchField
+                    disabled={!canEdit}
+                    label={m.company_details_f_skatt()}
+                    description={m.company_details_f_skatt_description()}
+                  />
+                )}
+              </form.AppField>
+            </div>
+          </Section>
+
+          <Section
+            title={m.company_details_payment()}
+            description={m.company_details_payment_description()}
+          >
+            <form.AppField name="bankgiro">
+              {(field) => (
+                <field.TextField
+                  label={m.company_details_bankgiro()}
+                  placeholder={m.company_details_bankgiro_placeholder()}
+                  inputMode="numeric"
+                  hint={
+                    !field.state.value.trim() && (
+                      <Note tone="warn">{m.company_details_bankgiro_required()}</Note>
+                    )
+                  }
+                />
+              )}
+            </form.AppField>
+          </Section>
+
+          <Section
+            title={m.company_details_reminders()}
+            description={m.company_details_reminders_description()}
+          >
+            <form.AppField name="reminderFee">
+              {(field) => (
+                <field.TextField
+                  label={<Optional>{m.company_details_reminder_fee()}</Optional>}
+                  placeholder="60"
+                  inputMode="decimal"
+                  hint={m.company_details_reminder_fee_hint()}
+                />
+              )}
+            </form.AppField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <form.AppField name="reminderIntervalDays">
+                {(field) => (
+                  <field.TextField
+                    label={m.company_details_reminder_interval()}
+                    inputMode="numeric"
+                    hint={m.company_details_reminder_interval_hint()}
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="reminderDueDays">
+                {(field) => (
+                  <field.TextField label={m.company_details_reminder_due()} inputMode="numeric" />
+                )}
+              </form.AppField>
+            </div>
+            <form.AppField name="waiveReminderFeeByDueDate">
+              {(field) => (
+                <field.SwitchField
+                  disabled={!canEdit}
+                  label={m.company_details_waive_reminder_fee()}
+                  description={m.company_details_waive_reminder_fee_description()}
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="lateInterest">
+              {(field) => (
+                <field.SwitchField
+                  disabled={!canEdit}
+                  label={m.company_details_late_interest()}
+                  description={m.company_details_late_interest_description()}
+                />
+              )}
+            </form.AppField>
+            <form.Subscribe selector={(s) => s.values.lateInterest}>
+              {(lateInterest) =>
+                lateInterest && (
+                  <form.AppField name="lateInterestMinimum">
+                    {(field) => (
+                      <field.TextField
+                        label={<Optional>{m.company_details_late_interest_minimum()}</Optional>}
+                        inputMode="decimal"
+                        hint={m.company_details_late_interest_minimum_hint()}
+                      />
+                    )}
+                  </form.AppField>
+                )
+              }
+            </form.Subscribe>
+          </Section>
+
+          <Section
+            title={m.company_details_portal()}
+            description={m.company_details_portal_description()}
+          >
+            <form.AppField name="portalContactEdits">
+              {(field) => (
+                <field.SwitchField
+                  disabled={!canEdit}
+                  label={m.company_details_portal_contact_edits()}
+                  description={m.company_details_portal_contact_edits_description()}
+                />
+              )}
+            </form.AppField>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <form.AppField name="portalContactEmail">
+                {(field) => (
+                  <field.TextField
+                    label={<Optional>{m.company_details_portal_email()}</Optional>}
+                    type="email"
+                    hint={m.company_details_portal_contact_hint()}
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="portalContactPhone">
+                {(field) => (
+                  <field.TextField
+                    label={<Optional>{m.company_details_portal_phone()}</Optional>}
+                    type="tel"
+                  />
+                )}
+              </form.AppField>
+            </div>
+          </Section>
+
+          <form.Subscribe selector={(s) => s.values.kind}>
+            {(kind) =>
+              kind === 'brf' && (
+                <Section
+                  title={m.company_details_brf_fees()}
+                  description={m.company_details_brf_fees_description()}
+                >
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <form.AppField name="transferFee">
+                      {(field) => (
+                        <field.TextField
+                          label={<Optional>{m.company_details_transfer_fee()}</Optional>}
+                          placeholder="2,5"
+                          inputMode="decimal"
+                          hint={m.company_details_transfer_fee_hint()}
+                        />
+                      )}
+                    </form.AppField>
+                    <form.AppField name="pledgeFee">
+                      {(field) => (
+                        <field.TextField
+                          label={<Optional>{m.company_details_pledge_fee()}</Optional>}
+                          placeholder="1"
+                          inputMode="decimal"
+                          hint={m.company_details_pledge_fee_hint()}
+                        />
+                      )}
+                    </form.AppField>
+                  </div>
+                </Section>
+              )
+            }
+          </form.Subscribe>
+
+          <Section
+            title={m.company_details_contact()}
+            description={m.company_details_contact_description()}
+          >
+            <form.AppField name="streetAddress">
+              {(field) => (
+                <field.TextField label={m.common_street_address()} autoComplete="street-address" />
+              )}
+            </form.AppField>
+            <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4">
+              <form.AppField name="postalCode">
+                {(field) => (
+                  <field.TextField
+                    label={m.common_postal_code()}
+                    inputMode="numeric"
+                    autoComplete="postal-code"
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="city">
+                {(field) => (
+                  <field.TextField label={m.common_city()} autoComplete="address-level2" />
+                )}
+              </form.AppField>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <form.AppField name="email">
+                {(field) => (
+                  <field.TextField
+                    label={m.company_details_email()}
+                    type="email"
+                    placeholder={m.company_details_email_placeholder()}
+                  />
+                )}
+              </form.AppField>
+              <form.AppField name="phone">
+                {(field) => (
+                  <field.TextField label={<Optional>{m.common_phone()}</Optional>} type="tel" />
+                )}
+              </form.AppField>
+            </div>
+          </Section>
+
+          <Section
+            title={m.company_details_preview()}
+            description={m.company_details_preview_description()}
+          >
+            <form.Subscribe selector={(s) => s.values}>
+              {(values) => <FooterPreview name={settings.organizationName} values={values} />}
+            </form.Subscribe>
+          </Section>
+        </fieldset>
+
+        {canEdit && (
+          <form.Subscribe
+            selector={(s) => ({
+              dirty: !sameValues(s.values, baseline),
+              submitting: s.isSubmitting,
+            })}
+          >
+            {({ dirty, submitting }) =>
+              dirty ? (
+                <>
+                  {/* Keeps the fixed bar from covering the last fields. */}
+                  <div aria-hidden="true" className="h-28 sm:h-20" />
+                  <section
+                    aria-label={m.form_unsaved_label()}
+                    className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex flex-wrap items-center gap-3 rounded-xl border bg-background px-4 py-3 shadow-lg sm:inset-x-auto sm:right-6 sm:bottom-6 sm:w-auto sm:min-w-96"
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px] text-muted-foreground">
+                      <span aria-hidden="true" className="size-2 rounded-full bg-amber-500" />
+                      {m.form_unsaved_label()}
+                    </span>
+                    <div className="flex w-full gap-2 sm:w-auto">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 flex-1 sm:h-9 sm:flex-none"
+                        disabled={submitting}
+                        onClick={() => {
+                          form.reset(baseline)
+                          save.reset()
+                        }}
+                      >
+                        {m.common_undo()}
+                      </Button>
+                      <Button
+                        type="submit"
+                        className="h-11 flex-1 sm:h-9 sm:flex-none"
+                        disabled={submitting}
+                      >
+                        {m.common_save_changes()}
+                      </Button>
+                    </div>
+                  </section>
+                </>
+              ) : (
+                saved && (
+                  <output className="mt-2 flex items-center gap-2 text-[13px] text-emerald-700 dark:text-emerald-300">
+                    <Check aria-hidden="true" className="size-4" />
+                    {m.company_details_saved()}
+                  </output>
+                )
+              )
+            }
+          </form.Subscribe>
+        )}
+      </SubmissionForm>
+    </div>
+  )
+}
+
+/** A titled group: explanation on the left from `md` up, fields in a card on the right. */
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: ReactNode
+}) {
+  return (
+    <section className="grid gap-3 border-t py-6 first:border-t-0 first:pt-0 md:grid-cols-[13rem_minmax(0,1fr)] md:gap-8">
+      <div className="grid content-start gap-1">
+        <h2 className="font-semibold text-[15px]">{title}</h2>
+        <p className="text-[13px] text-muted-foreground leading-relaxed">{description}</p>
+      </div>
+      <div className="grid gap-4 rounded-xl border bg-card p-4 md:p-5">{children}</div>
+    </section>
+  )
+}
+
+function Note({ tone, children }: { tone: 'ok' | 'warn'; children: ReactNode }) {
+  const Icon = tone === 'ok' ? Check : AlertTriangle
+  return (
+    <span
+      className={cn(
+        'flex items-center gap-1.5 text-xs',
+        tone === 'ok'
+          ? 'text-emerald-700 dark:text-emerald-300'
+          : 'text-amber-700 dark:text-amber-300',
+      )}
+    >
+      <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+      {children}
+    </span>
+  )
+}
+
+/** How many of the details invoices need are filled in, and the most important one missing. */
+function Readiness({ values }: { values: Values }) {
+  const items = settingsReadiness(values)
+  const done = items.filter((i) => i.done).length
+  const firstMissing = items.find((i) => !i.done)
+  const ready = !firstMissing
+  return (
+    <section
+      aria-label={m.company_details_readiness_label()}
+      className={cn(
+        'flex items-center gap-3.5 rounded-xl border px-4 py-3',
+        ready
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-100'
+          : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100',
+      )}
+    >
+      {ready ? (
+        <CircleCheck aria-hidden="true" className="size-5 shrink-0" />
+      ) : (
+        <FileText aria-hidden="true" className="size-5 shrink-0" />
+      )}
+      <div className="grid min-w-0 flex-1 gap-0.5 text-[13px]">
+        <span className="font-semibold">
+          {ready
+            ? m.company_details_ready()
+            : m.company_details_readiness_progress({ done, total: items.length })}
+        </span>
+        {firstMissing && <span>{firstMissing.missing}</span>}
+      </div>
+      <div aria-hidden="true" className="hidden gap-1 sm:flex">
+        {items.map((i) => (
+          <span
+            key={i.key}
+            className={cn('h-1.5 w-5 rounded-full', i.done ? 'bg-current' : 'bg-current/20')}
+          />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+/** The seller lines exactly as invoices print them, plus the bankgiro from the payment box. */
+function FooterPreview({ name, values }: { name: string; values: Values }) {
+  const trimmed = (v: string) => v.trim() || null
+  const lines = sellerDetails(
+    {
+      organizationName: name,
+      organizationNumber: isValidOrganizationNumber(values.organizationNumber)
+        ? values.organizationNumber.trim()
+        : null,
+      streetAddress: trimmed(values.streetAddress),
+      postalCode: trimmed(values.postalCode),
+      city: trimmed(values.city),
+      email: trimmed(values.email),
+      phone: trimmed(values.phone),
+      fSkatt: values.fSkatt,
+    },
+    true,
+  )
+  return (
+    <div className="grid gap-3 rounded-lg border border-dashed bg-muted/30 p-4 text-[13px]">
+      <div className="grid gap-0.5 text-muted-foreground leading-relaxed">
+        {lines.map((line, i) => (
+          <span key={line} className={cn(i === 0 && 'font-medium text-foreground')}>
+            {line}
+          </span>
+        ))}
+      </div>
+      <div className="flex items-baseline justify-between gap-3 border-t border-dashed pt-3">
+        <span className="text-muted-foreground">{m.company_details_bankgiro()}</span>
+        {values.bankgiro.trim() ? (
+          <span className="font-medium tabular-nums">{values.bankgiro.trim()}</span>
+        ) : (
+          <span className="font-medium text-amber-700 dark:text-amber-300">
+            {m.company_details_missing()}
+          </span>
+        )}
+      </div>
+      <span className="text-muted-foreground text-xs">{m.company_details_vat_footer_hint()}</span>
+    </div>
+  )
 }

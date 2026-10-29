@@ -120,6 +120,13 @@
       "when": 1793303041682,
       "tag": "0016_portal_audit",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793304691839,
+      "tag": "0017_portal_settings",
+      "breakpoints": true
     }
   ]
 }

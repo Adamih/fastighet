@@ -508,6 +508,12 @@ export const organizationSettings = sqliteTable('organization_settings', {
   // a pilot. It wins over the Stripe subscription; null means the subscription decides.
   planOverride: text('plan_override'),
   transferFeeBasisPoints: integer('transfer_fee_basis_points'),
+  // Mina sidor (`features/portal`): whether tenants and members may change their own contact
+  // details there, and the email and phone the portal shows them for questions (null: the
+  // company's own).
+  portalContactEdits: integer('portal_contact_edits', { mode: 'boolean' }).notNull().default(true),
+  portalContactEmail: text('portal_contact_email'),
+  portalContactPhone: text('portal_contact_phone'),
 })
 
 // Issued invoices are accounting records: they are never deleted, only voided, and their

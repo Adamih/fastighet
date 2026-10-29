@@ -53,6 +53,9 @@ export const UpdateCompanyDetailsInput = Schema.Struct({
     }),
   ),
   waiveReminderFeeByDueDate: Schema.Boolean,
+  portalContactEdits: Schema.Boolean,
+  portalContactEmail: Email,
+  portalContactPhone: OptionalText,
   lateInterest: Schema.Boolean,
   /** Kronor as typed; blank charges any interest of at least 1 kr. */
   lateInterestMinimum: Schema.String.check(
