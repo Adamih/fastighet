@@ -21,6 +21,7 @@ const kindLabels: Record<ChargeKind, () => string> = {
   reminder_fee: m.charges_kind_reminder_fee,
   pledge_fee: m.charges_kind_pledge_fee,
   transfer_fee: m.charges_kind_transfer_fee,
+  late_interest: m.charges_kind_late_interest,
 }
 
 interface PanelCharge {

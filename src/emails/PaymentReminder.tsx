@@ -13,9 +13,9 @@ export type Props = {
   originalDueDate: string
   /** 1 for the first reminder, 2 for the second, … */
   sequence: number
-  /** What is still owed, fee included. */
+  /** What is still owed on the avi. */
   total: string
-  /** Null when no fee is charged. */
+  /** The reminder fee, billed on the next avi; null when none is charged. */
   fee: string | null
   dueDate: string
   bankgiro: string
@@ -65,11 +65,16 @@ export default function PaymentReminder(props: Props) {
         }}
       >
         <AmountRow label="Att betala" value={props.total} strong />
-        {props.fee && <AmountRow label="varav påminnelseavgift" value={props.fee} />}
         <AmountRow label="Betala senast" value={props.dueDate} />
         <AmountRow label="Bankgiro" value={props.bankgiro} />
         <AmountRow label="OCR-nummer" value={props.ocr} />
       </Section>
+
+      {props.fee && (
+        <Paragraph>
+          En påminnelseavgift på {props.fee} läggs på din nästa {props.documentName.toLowerCase()}.
+        </Paragraph>
+      )}
 
       <Text style={muted}>
         {props.documentName} {props.invoiceNumber}

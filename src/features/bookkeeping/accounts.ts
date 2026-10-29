@@ -15,6 +15,7 @@ export const accountKeys = [
   'reminderFee',
   'transferFee',
   'pledgeFee',
+  'lateInterest',
 ] as const
 export type AccountKey = (typeof accountKeys)[number]
 
@@ -38,6 +39,8 @@ export const defaultAccounts: AccountPlan = {
   // A BRF's överlåtelse- and pantsättningsavgifter; many keep them on accounts of their own.
   transferFee: { number: '3990', name: 'Övriga ersättningar och intäkter' },
   pledgeFee: { number: '3990', name: 'Övriga ersättningar och intäkter' },
+  // Dröjsmålsränta from payers is interest income, not rent (FAR).
+  lateInterest: { number: '8313', name: 'Ränteintäkter från kortfristiga fordringar' },
 }
 
 /** A BAS account number: four digits. */
@@ -87,6 +90,7 @@ export function accountFor(
       if (entry.chargeKind === 'reminder_fee') return plan.reminderFee
       if (entry.chargeKind === 'transfer_fee') return plan.transferFee
       if (entry.chargeKind === 'pledge_fee') return plan.pledgeFee
+      if (entry.chargeKind === 'late_interest') return plan.lateInterest
       return (entry.vatRatePercent ?? 0) > 0 ? plan.rentVat : plan.rent
   }
 }

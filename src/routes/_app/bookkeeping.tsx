@@ -286,6 +286,7 @@ const accountLabels: Record<AccountKey, () => string> = {
   reminderFee: m.bookkeeping_account_reminder_fee,
   transferFee: m.bookkeeping_account_transfer_fee,
   pledgeFee: m.bookkeeping_account_pledge_fee,
+  lateInterest: m.bookkeeping_account_late_interest,
 }
 
 const months = Array.from({ length: 12 }, (_, i) => ({

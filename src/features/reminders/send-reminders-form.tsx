@@ -113,7 +113,7 @@ function CandidateList({
                 r.reminders > 0 && m.invoice_reminder_title({ sequence: r.reminders }),
                 r.problem === 'too_soon' && m.reminders_next_on({ date: r.nextOn }),
                 r.problem === 'no_email' && m.reminders_no_email(),
-                r.feeOre > 0 && m.invoice_reminder_fee({ fee: formatSek(r.feeOre) }),
+                r.feeOre > 0 && m.invoice_reminder_fee_next({ fee: formatSek(r.feeOre) }),
               ]
                 .filter(Boolean)
                 .join(' · ')}

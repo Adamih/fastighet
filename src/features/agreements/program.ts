@@ -10,6 +10,7 @@ import {
   invoice,
   invoiceLine,
   party,
+  paymentReminder,
   unit,
 } from '#/db/schema'
 import { periodsOverlap } from '#/features/leases/terms'
@@ -149,6 +150,44 @@ export const chargeIsBilled = (chargeId: string) =>
         and(eq(invoiceLine.organizationId, organizationId), eq(invoiceLine.chargeId, chargeId)),
       ),
   ).pipe(Effect.map(([row]) => (row?.n ?? 0) > 0))
+
+/**
+ * The avi that billed each one-off charge, for "billed on avi N" links and to know which can
+ * still be removed. A voided avi counts too (its lines keep the charge), but a live one wins.
+ */
+export const billingAvier = (chargeIds: readonly (string | null)[]) =>
+  Effect.gen(function* () {
+    const ids = [...new Set(chargeIds.filter((id): id is string => id !== null))]
+    const result = new Map<string, { id: string; number: number; voided: boolean }>()
+    for (let i = 0; i < ids.length; i += 50) {
+      const batch = ids.slice(i, i + 50)
+      const rows = yield* orgQuery((db, organizationId) =>
+        db
+          .select({
+            chargeId: invoiceLine.chargeId,
+            id: invoice.id,
+            number: invoice.number,
+            voidedAt: invoice.voidedAt,
+          })
+          .from(invoiceLine)
+          .innerJoin(invoice, eq(invoice.id, invoiceLine.invoiceId))
+          .where(
+            and(
+              eq(invoiceLine.organizationId, organizationId),
+              inArray(invoiceLine.chargeId, batch),
+            ),
+          ),
+      )
+      for (const { chargeId, voidedAt, ...avi } of rows) {
+        if (!chargeId) continue
+        const found = result.get(chargeId)
+        if (!found || (found.voided && !voidedAt)) {
+          result.set(chargeId, { ...avi, voided: voidedAt !== null })
+        }
+      }
+    }
+    return result
+  })
 
 const changeProblemMessages: Record<ChangeProblem, string> = {
   too_early: 'Den nya hyran måste börja efter att den nuvarande började. Rätta beloppet i stället.',
@@ -398,10 +437,23 @@ export const removeOneOffCharge = (chargeId: string) =>
         message: 'Beloppet är aviserat. Kreditera avin i stället.',
       })
     }
+    const on = yield* today
     yield* orgQuery((db, organizationId) =>
-      db
-        .delete(charge)
-        .where(and(eq(charge.id, found.id), eq(charge.organizationId, organizationId))),
+      db.batch([
+        // Removing a reminder fee waives it: the reminder says so and lets go of the charge.
+        db
+          .update(paymentReminder)
+          .set({ feeChargeId: null, feeWaivedOn: on, feeWaiver: 'by_hand' })
+          .where(
+            and(
+              eq(paymentReminder.organizationId, organizationId),
+              eq(paymentReminder.feeChargeId, found.id),
+            ),
+          ),
+        db
+          .delete(charge)
+          .where(and(eq(charge.id, found.id), eq(charge.organizationId, organizationId))),
+      ]),
     )
     return { agreementId: found.agreementId }
   })

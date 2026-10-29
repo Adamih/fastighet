@@ -1,10 +1,11 @@
 import { and, eq, isNull } from 'drizzle-orm'
 import { Effect, Exit } from 'effect'
-import { invoice, paymentReminder } from '#/db/schema'
+import { charge, invoice, paymentReminder } from '#/db/schema'
+import { billingAvier } from '#/features/agreements/program'
 import { getInvoice } from '#/features/invoicing/program'
 import { periodLabel } from '#/features/invoicing/rules'
-import { reminderFeeEntries, statusFromMoney } from '#/features/ledger/postings'
-import { allInvoiceMoney, postingStatements } from '#/features/ledger/program'
+import { statusFromMoney } from '#/features/ledger/postings'
+import { allInvoiceMoney } from '#/features/ledger/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -21,11 +22,19 @@ import {
   reminderFee,
   reminderProblem,
 } from './rules'
-import { reminderSettings, standingFees, waiveStatements } from './waivers'
+import { pendingFees, reminderSettings, waiveStatements } from './waivers'
 
-// Payment reminders (påminnelser): who can be reminded, and sending them. Sending changes what
-// an avi owes when there is a fee, so it needs invoice:manage.
+// Payment reminders (påminnelser): who can be reminded, and sending them. A fee is a one-off
+// charge on the agreement, billed by its next avi, so sending needs invoice:manage.
 const manage: Permissions = { invoice: ['manage'] }
+
+/** The fee the next reminder charges: none on an agreement that has ended, with no next avi. */
+const feeFor = (
+  settings: Parameters<typeof reminderFee>[0],
+  reminders: Parameters<typeof reminderFee>[1],
+  agreementEnds: string | null,
+  on: string,
+) => (agreementEnds !== null && agreementEnds < on ? 0 : reminderFee(settings, reminders))
 
 /**
  * Every overdue avi with what it owes, its reminders so far, and whether it can be reminded
@@ -36,7 +45,10 @@ export const reminderCandidates = Effect.gen(function* () {
   const rows = yield* orgQuery((db, organizationId) =>
     db.query.invoice.findMany({
       where: and(eq(invoice.organizationId, organizationId), isNull(invoice.voidedAt)),
-      with: { reminders: { columns: { sentOn: true, feeOre: true } } },
+      with: {
+        reminders: { columns: { sentOn: true, feeOre: true } },
+        agreement: { columns: { endDate: true } },
+      },
     }),
   )
   const moneyOf = yield* allInvoiceMoney
@@ -61,7 +73,7 @@ export const reminderCandidates = Effect.gen(function* () {
         reminders: row.reminders.length,
         problem,
         nextOn: nextReminderOn(row.dueDate, row.reminders, settings),
-        feeOre: problem ? 0 : reminderFee(settings, row.reminders),
+        feeOre: problem ? 0 : feeFor(settings, row.reminders, row.agreement.endDate, on),
       },
     ]
   })
@@ -77,9 +89,9 @@ const problemMessages: Record<ReminderProblem, string> = {
 }
 
 /**
- * Sends a reminder for an overdue avi: what is still owed, plus the fee with its first reminder,
- * to pay with the same OCR by a new due date. The email goes first; then the reminder and its
- * fee posting are written in one batch.
+ * Sends a reminder for an overdue avi: what is still owed, to pay with the same OCR by a new
+ * due date. Its first reminder charges the fee, as a one-off charge the agreement's next avi
+ * bills. The email goes first; then the reminder and its fee charge are written in one batch.
  */
 export const sendReminder = (invoiceId: string) =>
   Effect.gen(function* () {
@@ -92,8 +104,7 @@ export const sendReminder = (invoiceId: string) =>
     if (!inv.seller.bankgiro || !inv.recipientEmail) {
       return yield* new Conflict({ message: 'Ange bankgironummer under Företagsuppgifter först' })
     }
-    const feeOre = reminderFee(settings, inv.reminders)
-    const owedOre = inv.owedOre + feeOre
+    const feeOre = feeFor(settings, inv.reminders, inv.agreement.endDate, on)
     const dueDate = reminderDueDate(on, settings)
     const sequence = inv.reminders.length + 1
 
@@ -108,7 +119,7 @@ export const sendReminder = (invoiceId: string) =>
         periodLabel: periodLabel({ start: inv.periodStart, end: inv.periodEnd }),
         originalDueDate: inv.dueDate,
         sequence,
-        total: formatSek(owedOre),
+        total: formatSek(inv.owedOre),
         fee: feeOre > 0 ? formatSek(feeOre) : null,
         dueDate,
         bankgiro: inv.seller.bankgiro,
@@ -118,34 +129,40 @@ export const sendReminder = (invoiceId: string) =>
     })
 
     const recipientEmail = inv.recipientEmail
-    yield* orgQuery((db, organizationId) =>
-      db.batch([
+    const feeChargeId = feeOre > 0 ? crypto.randomUUID() : null
+    yield* orgQuery((db, organizationId) => {
+      // The charge first: the reminder refers to it.
+      const [first, ...rest] = [
+        ...(feeChargeId
+          ? [
+              db.insert(charge).values({
+                id: feeChargeId,
+                organizationId,
+                agreementId: inv.agreementId,
+                kind: 'reminder_fee',
+                description: `Påminnelseavgift avi ${inv.number}`,
+                amountOre: feeOre,
+                interval: 'once',
+                // A reminder fee is compensation for collecting, not a sale: no VAT.
+                vat: false,
+                fromDate: on,
+              }),
+            ]
+          : []),
         db.insert(paymentReminder).values({
           organizationId,
           invoiceId: inv.id,
           sequence,
           sentOn: on,
           dueDate,
-          owedOre,
+          owedOre: inv.owedOre,
           feeOre,
+          feeChargeId,
           recipientEmail,
         }),
-        ...(feeOre > 0
-          ? postingStatements(
-              db,
-              organizationId,
-              {
-                date: on,
-                kind: 'reminder',
-                description: `Påminnelseavgift, avi ${inv.number}`,
-                invoiceId: inv.id,
-              },
-              reminderFeeEntries(inv.id, feeOre),
-              { partyId: inv.partyId, agreementId: inv.agreementId },
-            )
-          : []),
-      ]),
-    )
+      ]
+      return db.batch([first, ...rest])
+    })
     return { sequence, feeOre, dueDate }
   })
 
@@ -173,26 +190,27 @@ export const sendReminders = (invoiceIds: readonly string[]) =>
   })
 
 /**
- * "Stryk avgiften": waives the avi's reminder fee. What the avi owes goes back to its own
- * amount; what was already paid of the fee goes to the party's credit balance.
+ * "Stryk avgiften": waives the avi's reminder fee before an avi has billed it. Once billed, it is
+ * a line on that avi, corrected with a credit note.
  */
 export const waiveReminderFee = (invoiceId: string) =>
   Effect.gen(function* () {
     yield* requirePermission(manage)
     const inv = yield* getInvoice(invoiceId)
-    const fee = (yield* standingFees([inv.id])).get(inv.id)
-    if (!fee) return yield* new Conflict({ message: 'Avin har ingen påminnelseavgift att stryka' })
+    const fee = (yield* pendingFees([inv.id])).get(inv.id)
+    if (!fee) {
+      const charged = inv.reminders.find((r) => r.feeChargeId)
+      const billed = charged?.feeChargeId
+        ? (yield* billingAvier([charged.feeChargeId])).get(charged.feeChargeId)
+        : undefined
+      return yield* new Conflict({
+        message: billed
+          ? `Avgiften är redan aviserad på avi ${billed.number}. Kreditera den där.`
+          : 'Avin har ingen påminnelseavgift att stryka',
+      })
+    }
     const on = yield* today
-    yield* orgQuery((db, organizationId) => {
-      const [first, ...rest] = waiveStatements(
-        db,
-        organizationId,
-        inv.id,
-        fee,
-        'by_hand',
-        inv.owedOre,
-        on,
-      )
-      return db.batch([first, ...rest])
-    })
+    yield* orgQuery((db, organizationId) =>
+      db.batch([...waiveStatements(db, organizationId, fee, 'by_hand', on)]),
+    )
   })

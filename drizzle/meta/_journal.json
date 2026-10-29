@@ -78,6 +78,20 @@
       "when": 1793284457773,
       "tag": "0010_reminder_fee_waivers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1793285200470,
+      "tag": "0011_late_interest",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793288525637,
+      "tag": "0012_reminder_fee_charges",
+      "breakpoints": true
     }
   ]
 }

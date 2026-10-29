@@ -14,7 +14,7 @@ import {
   paymentReminder,
 } from '#/db/schema'
 import { billFor } from '#/features/agreements/billing'
-import { billedOnceChargeIds } from '#/features/agreements/program'
+import { billedOnceChargeIds, billingAvier } from '#/features/agreements/program'
 import {
   creditNoteEntries,
   creditTransferEntries,
@@ -32,8 +32,8 @@ import {
   postingStatements,
   reversalStatements,
 } from '#/features/ledger/program'
+import { settlementStatements } from '#/features/ledger/settlement'
 import { undoPaymentStatements } from '#/features/payments/program'
-import { feeWaiverStatements, standingFees } from '#/features/reminders/waivers'
 import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
@@ -373,7 +373,7 @@ export const getInvoice = (invoiceId: string) =>
         where: and(eq(invoice.id, invoiceId), eq(invoice.organizationId, organizationId)),
         with: {
           lines: { orderBy: invoiceLine.position },
-          agreement: { columns: { id: true, number: true, kind: true } },
+          agreement: { columns: { id: true, number: true, kind: true, endDate: true } },
           creditNotes: {
             columns: {
               id: true,
@@ -385,6 +385,9 @@ export const getInvoice = (invoiceId: string) =>
             orderBy: creditNote.number,
           },
           reminders: { orderBy: paymentReminder.sequence },
+          lateInterest: {
+            columns: { chargeId: true, fromDate: true, toDate: true, days: true, amountOre: true },
+          },
           replaces: { columns: { id: true, number: true } },
           replacedBy: {
             columns: { id: true, number: true, issueDate: true },
@@ -401,7 +404,24 @@ export const getInvoice = (invoiceId: string) =>
     const payments = (yield* hasPermission({ payment: ['read'] }))
       ? yield* invoicePayments(row.id)
       : []
-    return { ...toView(row, money, yield* today), payments, seller }
+    // Late interest and reminder fees are billed by a later avi of the agreement; which one,
+    // once it has.
+    const interest = row.lateInterest
+    const billed = yield* billingAvier([
+      interest?.chargeId ?? null,
+      ...row.reminders.map((r) => r.feeChargeId),
+    ])
+    const billedBy = (chargeId: string | null) => {
+      const avi = chargeId ? billed.get(chargeId) : undefined
+      return avi && !avi.voided ? { id: avi.id, number: avi.number } : null
+    }
+    return {
+      ...toView(row, money, yield* today),
+      reminders: row.reminders.map((r) => ({ ...r, feeBilledBy: billedBy(r.feeChargeId) })),
+      lateInterest: interest ? { ...interest, billedBy: billedBy(interest.chargeId) } : null,
+      payments,
+      seller,
+    }
   })
 
 export type InvoiceView = Effect.Success<ReturnType<typeof getInvoice>>
@@ -510,20 +530,13 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
     if (input.paidOn > (yield* today)) {
       return yield* new Conflict({ message: 'Betaldatum kan inte vara i framtiden' })
     }
-    // A payment by hand settles what is still owed, straight from the bank. When paying the avi
-    // without its reminder fee waives the fee (paid before the reminder, or by its due date if
-    // the company waives it then), the payer paid only the avi.
-    const fee = (yield* standingFees([inv.id])).get(inv.id)
-    const withoutFee = inv.owedOre - (fee?.reminder.feeOre ?? 0)
-    const waive =
-      fee && withoutFee > 0
-        ? (yield* feeWaiverStatements(
-            new Map([
-              [inv.id, [{ kind: 'manual_payment', date: input.paidOn, amountOre: -withoutFee }]],
-            ]),
-          )).get(inv.id)
-        : undefined
-    const amountOre = waive ? withoutFee : inv.owedOre
+    // A payment by hand settles what is still owed, straight from the bank, with what settling
+    // the avi brings along (fee waivers, late interest).
+    const settled = (yield* settlementStatements(
+      new Map([
+        [inv.id, [{ kind: 'manual_payment', date: input.paidOn, amountOre: -inv.owedOre }]],
+      ]),
+    )).get(inv.id)
     yield* orgQuery((db, organizationId) =>
       db.batch([
         ...postingStatements(
@@ -535,10 +548,10 @@ export const markInvoicePaid = (input: MarkPaidInput) =>
             description: `Betalning av avi ${inv.number}`,
             invoiceId: inv.id,
           },
-          manualPaymentEntries(inv.id, amountOre),
+          manualPaymentEntries(inv.id, inv.owedOre),
           { partyId: inv.partyId, agreementId: inv.agreementId },
         ),
-        ...(waive ? waive(db, organizationId) : []),
+        ...(settled ? settled(db, organizationId) : []),
       ]),
     )
     return yield* getInvoice(inv.id)

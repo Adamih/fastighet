@@ -7,7 +7,6 @@ import {
   reminderDueDate,
   reminderFee,
   reminderProblem,
-  waivedFeeToCredit,
 } from './rules'
 
 const overdue = {
@@ -54,12 +53,9 @@ test('the reminder is due after its payment term, on a weekday', () => {
 })
 
 describe('automatic fee waivers', () => {
-  // A 9 000 kr avi due 1 October, reminded on 11 October with a 60 kr fee, due 21 October.
-  const reminder = { sentOn: '2026-10-11', dueDate: '2026-10-21', feeOre: 6_000 }
-  const avi: ReceivableEntry[] = [
-    { kind: 'invoice', date: '2026-09-15', amountOre: 900_000 },
-    { kind: 'reminder', date: '2026-10-11', amountOre: 6_000 },
-  ]
+  // A 9 000 kr avi due 1 October, reminded on 11 October, due 21 October.
+  const reminder = { sentOn: '2026-10-11', dueDate: '2026-10-21' }
+  const avi: ReceivableEntry[] = [{ kind: 'invoice', date: '2026-09-15', amountOre: 900_000 }]
   const paid = (date: string, amountOre: number): ReceivableEntry => ({
     kind: 'allocation',
     date,
@@ -68,7 +64,7 @@ describe('automatic fee waivers', () => {
   const off = { waiveReminderFeeByDueDate: false }
   const on = { waiveReminderFeeByDueDate: true }
 
-  test('money booked by the day the reminder went out waives the fee, paid or not', () => {
+  test('money booked by the day the reminder went out waives the fee', () => {
     expect(automaticFeeWaiver([...avi, paid('2026-10-09', 900_000)], reminder, off)).toBe(
       'paid_before_reminder',
     )
@@ -94,7 +90,7 @@ describe('automatic fee waivers', () => {
     ).toBeNull()
   })
 
-  test('paid by the reminder’s due date without the fee waives it, if the company chose so', () => {
+  test('paid by the reminder’s due date waives it, if the company chose so', () => {
     const avierOnly = [...avi, paid('2026-10-20', 900_000)]
     expect(automaticFeeWaiver(avierOnly, reminder, on)).toBe('paid_by_due_date')
     expect(automaticFeeWaiver(avierOnly, reminder, off)).toBeNull()
@@ -102,14 +98,12 @@ describe('automatic fee waivers', () => {
       'paid_by_due_date',
     )
     expect(automaticFeeWaiver([...avi, paid('2026-10-22', 900_000)], reminder, on)).toBeNull()
-    // Who paid the fee too keeps it paid.
-    expect(automaticFeeWaiver([...avi, paid('2026-10-20', 906_000)], reminder, on)).toBeNull()
   })
 
-  test('what was paid of a waived fee goes to credit', () => {
-    expect(waivedFeeToCredit(6_000, 6_000)).toBe(0)
-    expect(waivedFeeToCredit(2_000, 6_000)).toBe(4_000)
-    expect(waivedFeeToCredit(0, 6_000)).toBe(6_000)
-    expect(waivedFeeToCredit(906_000, 6_000)).toBe(0)
+  test('a fee posted to the avi itself, as before fees were charges, isn’t its debt', () => {
+    const legacy: ReceivableEntry = { kind: 'reminder', date: '2026-10-11', amountOre: 6_000 }
+    expect(automaticFeeWaiver([...avi, legacy, paid('2026-10-09', 900_000)], reminder, off)).toBe(
+      'paid_before_reminder',
+    )
   })
 })

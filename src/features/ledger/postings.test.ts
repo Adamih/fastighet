@@ -12,7 +12,6 @@ import {
   paymentEntries,
   type ReceivableEntry,
   refundEntries,
-  reminderFeeEntries,
   reversal,
   statusFromMoney,
 } from './postings'
@@ -50,7 +49,6 @@ describe('postings', () => {
       creditAllocationEntries('p1', 50_000),
       creditUseEntries('i1', 50_000),
       creditTransferEntries('i1', 50_000),
-      reminderFeeEntries('i1', 6_000),
     ]) {
       expect(sum(entries)).toBe(0)
       expect(sum([...entries, ...reversal(entries)])).toBe(0)

@@ -24,7 +24,8 @@ export const postingKinds = [
   'allocation',
   'manual_payment',
   'refund',
-  // A reminder's fee, added to the reminded avi's receivable.
+  // A reminder's fee added to the reminded avi's receivable: no longer written (fees are charges
+  // the next avi bills), kept for postings from before.
   'reminder',
   // Moves between an avi and its party's credit balance: credit used on a new avi, and what an
   // avi was overpaid by (e.g. after a credit note) moved to the credit balance.

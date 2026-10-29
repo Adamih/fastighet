@@ -53,6 +53,18 @@ export const UpdateCompanyDetailsInput = Schema.Struct({
     }),
   ),
   waiveReminderFeeByDueDate: Schema.Boolean,
+  lateInterest: Schema.Boolean,
+  /** Kronor as typed; blank charges any interest of at least 1 kr. */
+  lateInterestMinimum: Schema.String.check(
+    Schema.makeFilter(
+      (s: string) => {
+        if (!s.trim()) return true
+        const ore = parseSek(s)
+        return ore !== null && ore >= 0 && ore <= 100_000
+      },
+      { message: 'Ange högst 1 000 kr, eller lämna tomt' },
+    ),
+  ),
   pledgeFee: FeePercent('pledge_fee', 'Ange högst 1 % av prisbasbeloppet, eller lämna tomt'),
   transferFee: FeePercent('transfer_fee', 'Ange högst 2,5 % av prisbasbeloppet, eller lämna tomt'),
 })

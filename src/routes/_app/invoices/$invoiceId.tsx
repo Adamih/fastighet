@@ -304,6 +304,38 @@ function InvoicePage() {
                 </div>
               </Panel>
             )}
+            {invoice.lateInterest && (
+              <Panel title={m.invoice_late_interest()}>
+                <div className="grid gap-1.5 text-[13px]">
+                  <PanelRow>
+                    <span className="grid min-w-0 gap-0.5">
+                      <span className="font-semibold">
+                        {m.invoice_late_interest_days({ days: invoice.lateInterest.days })}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {invoice.lateInterest.fromDate} – {invoice.lateInterest.toDate}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums">
+                      {formatSekShort(invoice.lateInterest.amountOre)}
+                    </span>
+                  </PanelRow>
+                  {invoice.lateInterest.billedBy ? (
+                    <Link
+                      to="/invoices/$invoiceId"
+                      params={{ invoiceId: invoice.lateInterest.billedBy.id }}
+                      className="font-medium underline-offset-4 hover:underline"
+                    >
+                      {m.invoice_late_interest_billed({
+                        number: invoice.lateInterest.billedBy.number,
+                      })}
+                    </Link>
+                  ) : (
+                    <p className="text-muted-foreground">{m.invoice_late_interest_next()}</p>
+                  )}
+                </div>
+              </Panel>
+            )}
             {invoice.creditNotes.length > 0 && (
               <Panel title={m.invoice_credit_notes()}>
                 <div>
@@ -419,14 +451,16 @@ function ReplacementLink({ invoiceId, text }: { invoiceId: string; text: string 
   )
 }
 
-/** What is owed and how to settle it. */
 const waiverLabels: Record<FeeWaiver, (inputs: { date: string }) => string> = {
   paid_before_reminder: m.invoice_reminder_fee_waived_paid_before_reminder,
   paid_by_due_date: m.invoice_reminder_fee_waived_paid_by_due_date,
   by_hand: m.invoice_reminder_fee_waived_by_hand,
 }
 
-/** A reminder: when, what it asked for, its fee and whether it was waived ("Stryk avgiften"). */
+/**
+ * A reminder: when, what it asked for, and its fee: waiting for the next avi (with "Stryk
+ * avgiften"), billed on a later avi, or waived and why.
+ */
 function ReminderRow({
   reminder: r,
   invoiceId,
@@ -438,15 +472,9 @@ function ReminderRow({
   canWaive: boolean
   onDone: () => Promise<void>
 }) {
-  const [confirming, setConfirming] = useState(false)
-  const waive = useMutation({
-    mutationFn: waiveReminderFeeFn,
-    onSuccess: async () => {
-      setConfirming(false)
-      await onDone()
-    },
-  })
+  const waive = useMutation({ mutationFn: waiveReminderFeeFn, onSuccess: onDone })
   const fee = formatSekShort(r.feeOre)
+  const pending = r.feeChargeId !== null && r.feeBilledBy === null
   return (
     <div className="grid gap-2">
       <PanelRow>
@@ -458,48 +486,36 @@ function ReminderRow({
             {m.invoice_reminder_meta({ date: r.sentOn, due: r.dueDate })}
           </span>
         </span>
-        <span className="grid shrink-0 justify-items-end gap-0.5">
-          <span className="font-semibold tabular-nums">{formatSekShort(r.owedOre)}</span>
-          {r.feeOre > 0 && (
-            <span className={cn('text-muted-foreground text-xs', r.feeWaivedOn && 'line-through')}>
-              {m.invoice_reminder_fee({ fee })}
-            </span>
-          )}
-        </span>
+        <span className="shrink-0 font-semibold tabular-nums">{formatSekShort(r.owedOre)}</span>
       </PanelRow>
-      {r.feeOre > 0 && r.feeWaivedOn && r.feeWaiver && (
-        <p className="text-muted-foreground text-xs">
-          {waiverLabels[r.feeWaiver]({ date: r.feeWaivedOn })}
-        </p>
-      )}
-      {r.feeOre > 0 && !r.feeWaivedOn && canWaive && (
-        <div className="grid gap-2 pb-2">
-          {confirming ? (
-            <>
-              <p className="text-sm">{m.reminder_waive_fee_confirm({ fee })}</p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="h-11 flex-1 sm:h-9"
-                  onClick={() => setConfirming(false)}
-                >
-                  {m.common_cancel()}
-                </Button>
-                <Button
-                  className="h-11 flex-1 sm:h-9"
-                  disabled={waive.isPending}
-                  onClick={() => waive.mutate({ data: { invoiceId } })}
-                >
-                  {m.reminder_waive_fee()}
-                </Button>
-              </div>
-            </>
+      {r.feeOre > 0 && (
+        <div className="grid gap-2 pb-2 text-muted-foreground text-xs">
+          {r.feeWaivedOn && r.feeWaiver ? (
+            <p>
+              <span className="line-through">{m.invoice_reminder_fee_amount({ fee })}</span> ·{' '}
+              {waiverLabels[r.feeWaiver]({ date: r.feeWaivedOn })}
+            </p>
+          ) : r.feeBilledBy ? (
+            <Link
+              to="/invoices/$invoiceId"
+              params={{ invoiceId: r.feeBilledBy.id }}
+              className="underline-offset-4 hover:underline"
+            >
+              {m.invoice_reminder_fee_billed({ fee, number: r.feeBilledBy.number })}
+            </Link>
+          ) : pending ? (
+            <p>{m.invoice_reminder_fee_next({ fee })}</p>
           ) : (
+            // Fees from before they became charges were added to the avi itself.
+            <p>{m.invoice_reminder_fee({ fee })}</p>
+          )}
+          {pending && !r.feeWaivedOn && canWaive && (
             <Button
               variant="outline"
               size="sm"
               className="h-11 justify-self-start sm:h-8"
-              onClick={() => setConfirming(true)}
+              disabled={waive.isPending}
+              onClick={() => waive.mutate({ data: { invoiceId } })}
             >
               <Eraser aria-hidden="true" />
               {m.reminder_waive_fee()}
@@ -512,6 +528,7 @@ function ReminderRow({
   )
 }
 
+/** What is owed and how to settle it. */
 function AmountPanel({
   invoice,
   today,
@@ -527,9 +544,6 @@ function AmountPanel({
   const [copied, setCopied] = useState(false)
   const pay = useMutation({ mutationFn: markInvoicePaidFn, onSuccess: onDone })
   const open = invoice.status === 'unpaid' || invoice.status === 'overdue'
-  // All that is left is (part of) the reminder fee, which can be waived under Påminnelser.
-  const fee = invoice.reminders.find((r) => r.feeOre > 0 && !r.feeWaivedOn)
-  const feeLeft = fee !== undefined && invoice.owedOre <= fee.feeOre
   const days = daysUntil(today, invoice.dueDate)
   const status = {
     overdue: m.invoice_overdue_since({ days: -days }),
@@ -575,9 +589,6 @@ function AmountPanel({
               total: formatSekShort(invoice.totalOre - invoice.creditedOre),
             })}
           </span>
-        )}
-        {open && feeLeft && (
-          <span className="text-[13px] text-muted-foreground">{m.invoice_fee_left()}</span>
         )}
         {invoice.creditUsedOre > 0 && (
           <span className="text-[13px] text-muted-foreground">

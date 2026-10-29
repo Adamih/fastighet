@@ -395,6 +395,16 @@ export const priceBaseAmount = sqliteTable('price_base_amount', {
   amountKr: integer('amount_kr').notNull(),
 })
 
+// Riksbanken's referensränta (räntelagen 9 §), set for each calendar half-year: in force from
+// `fromDate` until the next row. Reference data like `kpi`, from a migration only. Late payment
+// interest is it plus eight percentage points (`features/interest/rules.ts`).
+export const referenceRate = sqliteTable('reference_rate', {
+  // "2026-07-01"
+  fromDate: text('from_date').primaryKey(),
+  // 2,00 % → 200.
+  basisPoints: integer('basis_points').notNull(),
+})
+
 export const propertyRelations = relations(property, ({ many }) => ({ units: many(unit) }))
 
 export const unitRelations = relations(unit, ({ one, many }) => ({
@@ -480,6 +490,10 @@ export const organizationSettings = sqliteTable('organization_settings', {
   waiveReminderFeeByDueDate: integer('waive_reminder_fee_by_due_date', { mode: 'boolean' })
     .notNull()
     .default(false),
+  // Charge dröjsmålsränta on avier paid late, on the next avi, unless it comes to less than the
+  // minimum (null: any whole krona). See `features/interest`.
+  lateInterest: integer('late_interest', { mode: 'boolean' }).notNull().default(false),
+  lateInterestMinimumOre: integer('late_interest_minimum_ore'),
   // Bookkeeping: the month the financial year starts (1 = January), and the company's own
   // account numbers for the SIE export as JSON; unset ones are BAS (`features/bookkeeping`).
   financialYearStartMonth: integer('financial_year_start_month').notNull().default(1),
@@ -575,6 +589,7 @@ export const invoiceRelations = relations(invoice, ({ one, many }) => ({
   lines: many(invoiceLine),
   ledgerEntries: many(ledgerEntry),
   reminders: many(paymentReminder),
+  lateInterest: one(lateInterest),
   creditNotes: many(creditNote),
   replaces: one(invoice, {
     fields: [invoice.replacesInvoiceId],
@@ -666,10 +681,14 @@ export const paymentReminder = sqliteTable(
     sentOn: text('sent_on').notNull(),
     // The reminder's own due date.
     dueDate: text('due_date').notNull(),
-    // What the reminder asked for, fee included, and the fee.
+    // What the reminder asked for, and its fee. The fee is a one-off charge on the agreement
+    // (`feeChargeId`), billed by its next avi; it was posted to the avi itself before 0012, so
+    // older rows' `owedOre` include it and they have no charge.
     owedOre: integer('owed_ore').notNull(),
     feeOre: integer('fee_ore').notNull().default(0),
-    // When and why the fee was waived (`features/reminders/rules.ts`); its posting is reversed.
+    feeChargeId: text('fee_charge_id'),
+    // When and why the fee was waived (`features/reminders/rules.ts`); its charge is deleted and
+    // `feeChargeId` cleared.
     feeWaivedOn: text('fee_waived_on'),
     feeWaiver: text('fee_waiver', { enum: feeWaivers }),
     recipientEmail: text('recipient_email').notNull(),
@@ -678,12 +697,44 @@ export const paymentReminder = sqliteTable(
   (t) => [
     companyKey('payment_reminder', t),
     sameCompany(t, t.invoiceId, invoice),
+    sameCompany(t, t.feeChargeId, charge),
     uniqueIndex('payment_reminder_invoice_sequence_uq').on(t.invoiceId, t.sequence),
   ],
 )
 
 export const paymentReminderRelations = relations(paymentReminder, ({ one }) => ({
   invoice: one(invoice, { fields: [paymentReminder.invoiceId], references: [invoice.id] }),
+  feeCharge: one(charge, { fields: [paymentReminder.feeChargeId], references: [charge.id] }),
+}))
+
+// Dröjsmålsränta charged for an avi paid late: once per avi, as a one-off charge on its
+// agreement that the next avi bills. Removing the charge before it is billed (the charges panel)
+// removes this too, which is how it is waived.
+export const lateInterest = sqliteTable(
+  'late_interest',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    invoiceId: text('invoice_id').notNull(),
+    chargeId: text('charge_id').notNull(),
+    // The days interest ran: the day after the due date through the day it was paid.
+    fromDate: text('from_date').notNull(),
+    toDate: text('to_date').notNull(),
+    days: integer('days').notNull(),
+    amountOre: integer('amount_ore').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    companyKey('late_interest', t),
+    sameCompany(t, t.invoiceId, invoice),
+    sameCompany(t, t.chargeId, charge).onDelete('cascade'),
+    uniqueIndex('late_interest_invoice_uq').on(t.invoiceId),
+  ],
+)
+
+export const lateInterestRelations = relations(lateInterest, ({ one }) => ({
+  invoice: one(invoice, { fields: [lateInterest.invoiceId], references: [invoice.id] }),
+  charge: one(charge, { fields: [lateInterest.chargeId], references: [charge.id] }),
 }))
 
 // A SIE file someone downloaded: which period, how many vouchers. Exporting a period again is

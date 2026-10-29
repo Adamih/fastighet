@@ -23,6 +23,7 @@ import {
   kpiMonthFor,
   perYear,
 } from '#/features/indexation/rules'
+import { lateInterest } from '#/features/interest/rules'
 import { type CreditRequest, draftCreditNote } from '#/features/invoicing/credit'
 import {
   dueDate,
@@ -43,7 +44,6 @@ import {
   invoiceEntries,
   paymentEntries,
   refundEntries,
-  reminderFeeEntries,
   reversal,
 } from '#/features/ledger/postings'
 import { generateCode, hashCode } from '#/features/management/codes'
@@ -112,18 +112,17 @@ async function insertAll<T extends Record<string, unknown>>(
 
 /**
  * Reminders for avier still unpaid today: the first the interval after the due date (with the
- * fee, if one is agreed) and a second one interval later, as "Skicka påminnelse" would.
+ * fee, if one is agreed, as a one-off charge the agreement's next avi bills) and a second one
+ * interval later, as "Skicka påminnelse" would. Insert the charges before the reminders.
  */
 function seedReminders(
   organizationId: string,
-  ledger: ReturnType<typeof seedLedger>,
   invoices: readonly {
     id: string
     number: number
     dueDate: string
     owedOre: number
     recipientEmail: string | null
-    partyId: string
     agreementId: string
   }[],
   settings: ReminderSettings,
@@ -132,11 +131,11 @@ function seedReminders(
   waivedByHand = 0,
 ) {
   const rows: (typeof schema.paymentReminder.$inferInsert)[] = []
+  const charges: (typeof schema.charge.$inferInsert)[] = []
   let waived = 0
   for (const inv of invoices) {
     if (!inv.recipientEmail || inv.owedOre <= 0) continue
     const sent: { sentOn: string; feeOre: number }[] = []
-    let owed = inv.owedOre
     // At most two: after that a landlord would hand it to debt collection (not modelled).
     while (sent.length < 2) {
       const on = weekdayOnOrAfter(nextReminderOn(inv.dueDate, sent, settings))
@@ -144,7 +143,20 @@ function seedReminders(
       const feeOre = reminderFee(settings, sent)
       const waivedOn = feeOre > 0 && waived < waivedByHand ? minDate(addDays(on, 2), today) : null
       if (waivedOn) waived++
-      owed += feeOre
+      const feeChargeId = feeOre > 0 && !waivedOn ? id() : null
+      if (feeChargeId) {
+        charges.push({
+          id: feeChargeId,
+          organizationId,
+          agreementId: inv.agreementId,
+          kind: 'reminder_fee',
+          description: `Påminnelseavgift avi ${inv.number}`,
+          amountOre: feeOre,
+          interval: 'once',
+          vat: false,
+          fromDate: on,
+        })
+      }
       sent.push({ sentOn: on, feeOre })
       rows.push({
         id: id(),
@@ -153,38 +165,16 @@ function seedReminders(
         sequence: sent.length,
         sentOn: on,
         dueDate: reminderDueDate(on, settings),
-        owedOre: owed,
+        owedOre: inv.owedOre,
         feeOre,
+        feeChargeId,
         feeWaivedOn: waivedOn,
         feeWaiver: waivedOn ? 'by_hand' : null,
         recipientEmail: inv.recipientEmail,
       })
-      if (feeOre > 0) {
-        const owner = { partyId: inv.partyId, agreementId: inv.agreementId }
-        const description = `Påminnelseavgift, avi ${inv.number}`
-        const feePostingId = ledger.post(
-          { date: on, kind: 'reminder', description, invoiceId: inv.id },
-          reminderFeeEntries(inv.id, feeOre),
-          owner,
-        )
-        if (waivedOn) {
-          owed -= feeOre
-          ledger.post(
-            {
-              date: waivedOn,
-              kind: 'reminder',
-              description: `Struken: ${description}`,
-              invoiceId: inv.id,
-              reversesPostingId: feePostingId,
-            },
-            reversal(reminderFeeEntries(inv.id, feeOre)),
-            owner,
-          )
-        }
-      }
     }
   }
-  return rows
+  return { rows, charges }
 }
 
 /**
@@ -283,8 +273,9 @@ async function seed() {
     email: 'hyra@fastighet.test',
     phone: '018-00 00 00',
     fSkatt: true,
-    // A 60 kr reminder fee is agreed in every lease.
+    // A 60 kr reminder fee is agreed in every lease, and late payers pay dröjsmålsränta.
     reminderFeeOre: 6_000,
+    lateInterest: true,
     // Commercial leases with index clauses: Fastighetsbolag, agreed with sales.
     planOverride: 'landlord_pro',
   })
@@ -1389,7 +1380,6 @@ async function seed() {
   }
   const reminders = seedReminders(
     orgId,
-    ledger,
     invoices
       .filter((i) => !i.paidOn && !i.voidedAt)
       .map((i) => ({
@@ -1408,7 +1398,63 @@ async function seed() {
     1,
   )
   await ledger.write()
-  await insertAll(schema.paymentReminder, reminders)
+  await insertAll(schema.charge, reminders.charges)
+  await insertAll(schema.paymentReminder, reminders.rows)
+
+  // The latest avi paid late has its dröjsmålsränta waiting for the next avi, as the bank
+  // import would have charged it (`features/interest`).
+  const rates = await db.select().from(schema.referenceRate)
+  const lastLate = payments
+    .filter(
+      (p) =>
+        p.status === 'matched' &&
+        p.marksInvoicePaid &&
+        !p.toCredit &&
+        p.invoice &&
+        p.bookingDate > (p.invoice.dueDate as string) &&
+        (p.invoice.lease.terms.moveOutDate ?? '9999-12-31') > today,
+    )
+    .sort((a, b) => a.bookingDate.localeCompare(b.bookingDate))
+    .at(-1)
+  const lastLateAvi = lastLate?.invoice
+  const interest =
+    lastLate && lastLateAvi
+      ? lateInterest(
+          [
+            { kind: 'invoice', date: lastLateAvi.issueDate, amountOre: lastLateAvi.totalOre },
+            {
+              kind: 'allocation',
+              date: lastLate.bookingDate,
+              amountOre: -(lastLate.amountOre - (lastLate.extraOre ?? 0)),
+            },
+          ],
+          lastLateAvi.dueDate as string,
+          rates,
+        )
+      : null
+  if (lastLateAvi && interest && 'ore' in interest && interest.ore > 0) {
+    const chargeId = id()
+    await db.insert(schema.charge).values({
+      id: chargeId,
+      organizationId: orgId,
+      agreementId: lastLateAvi.lease.id,
+      kind: 'late_interest',
+      description: `Dröjsmålsränta avi ${lastLateAvi.number}, ${interest.days} dagar`,
+      amountOre: interest.ore,
+      interval: 'once',
+      vat: false,
+      fromDate: today,
+    })
+    await db.insert(schema.lateInterest).values({
+      organizationId: orgId,
+      invoiceId: lastLateAvi.id,
+      chargeId,
+      fromDate: interest.fromDate,
+      toDate: interest.toDate,
+      days: interest.days,
+      amountOre: interest.ore,
+    })
+  }
 
   // The month before last was exported to the bookkeeping program, so exporting it again warns.
   const exported = {
@@ -2051,7 +2097,6 @@ async function seedBrf() {
   // The board has agreed no reminder fee; Jonas still gets his reminders.
   const reminders = seedReminders(
     orgId,
-    ledger,
     invoices
       .filter((i) => !i.paidOn)
       .map((i) => ({
@@ -2069,7 +2114,8 @@ async function seedBrf() {
     today,
   )
   await ledger.write()
-  await insertAll(schema.paymentReminder, reminders)
+  await insertAll(schema.charge, reminders.charges)
+  await insertAll(schema.paymentReminder, reminders.rows)
 
   console.log(`Seeded ${org.name} (BRF):
   login      ${board.email} (owner)

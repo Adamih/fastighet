@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { partyAccount } from '#/features/accounts/program'
+import { removeOneOffCharge } from '#/features/agreements/program'
 import {
   createInvoiceRun,
   getInvoice,
@@ -8,7 +8,7 @@ import {
 } from '#/features/invoicing/program'
 import { createLease } from '#/features/leases/program'
 import { buildCamt054 } from '#/features/payments/camt054-builder'
-import { importPayments, listPayments } from '#/features/payments/program'
+import { importPayments } from '#/features/payments/program'
 import { addDays, addMonths, stockholmDate } from '#/lib/dates'
 import { fail, harness } from '#/test/harness'
 import { reminderCandidates, sendReminder, sendReminders, waiveReminderFee } from './program'
@@ -55,8 +55,8 @@ test('a reminder asks for what is owed plus the fee, and the fee is owed on the 
   expect(sent).toMatchObject({ sequence: 1, feeOre: 6_000 })
   expect(h.outbox.at(-1)?.subject).toStartWith('Påminnelse: hyresavi')
   const avi = await h.run(getInvoice(id))
-  expect(avi).toMatchObject({ owedOre: 906_000, status: 'overdue' })
-  expect(avi.reminders.map((r) => [r.sequence, r.owedOre, r.feeOre])).toEqual([[1, 906_000, 6_000]])
+  expect(avi).toMatchObject({ owedOre: 900_000, status: 'overdue' })
+  expect(avi.reminders.map((r) => [r.sequence, r.owedOre, r.feeOre])).toEqual([[1, 900_000, 6_000]])
   const [listed] = await h.run(listInvoices({ filter: 'overdue' }))
   expect(listed.lastRemindedOn).toBe(today)
 })
@@ -69,7 +69,10 @@ test('the next reminder waits the interval, and carries no second fee', async ()
   h.sqlite.exec(`UPDATE payment_reminder SET sent_on = '${addDays(today, -11)}'`)
   const second = await h.run(sendReminder(id))
   expect(second).toMatchObject({ sequence: 2, feeOre: 0 })
-  expect((await h.run(getInvoice(id))).owedOre).toBe(906_000)
+  expect((await h.run(getInvoice(id))).owedOre).toBe(900_000)
+  expect(
+    h.sqlite.query("SELECT count(*) AS n FROM charge WHERE kind = 'reminder_fee'").get(),
+  ).toEqual({ n: 1 })
 })
 
 test('sending in bulk reports what failed without stopping the rest', async () => {
@@ -104,64 +107,90 @@ async function reminded(h: ReturnType<typeof harness>) {
 function remindedDaysAgo(h: ReturnType<typeof harness>, days: number) {
   h.sqlite.exec(`
     UPDATE payment_reminder SET sent_on = '${addDays(today, -days)}';
-    UPDATE posting SET date = '${addDays(today, -days)}' WHERE kind = 'reminder';
     UPDATE posting SET date = '${addDays(today, -40)}' WHERE kind = 'invoice';
   `)
 }
+
+const feeCharges = (h: ReturnType<typeof harness>) =>
+  h.sqlite
+    .query("SELECT amount_ore AS ore, description FROM charge WHERE kind = 'reminder_fee'")
+    .all() as { ore: number; description: string }[]
+
+test('the fee is a charge for the next avi; the reminded avi keeps its own amount', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  expect(avi).toMatchObject({ owedOre: 900_000, status: 'overdue' })
+  expect(avi.reminders[0]).toMatchObject({ owedOre: 900_000, feeOre: 6_000, feeBilledBy: null })
+  expect(feeCharges(h)).toEqual([{ ore: 6_000, description: `Påminnelseavgift avi ${avi.number}` }])
+  expect(h.outbox.at(-1)?.text).toContain('läggs på din nästa hyresavi')
+
+  // Paying the avi settles it; the fee waits for the next avi, which bills it.
+  remindedDaysAgo(h, 3)
+  await pay(h, avi.ocr, 900_000, today)
+  expect((await h.run(getInvoice(avi.id))).status).toBe('paid')
+  await h.run(
+    createInvoiceRun({ month: addMonths(`${today.slice(0, 7)}-01`, 2).slice(0, 7), send: false }),
+  )
+  const [next] = await h.run(listInvoices({ filter: 'all' }))
+  const billing = await h.run(getInvoice(next.id))
+  expect(billing.lines.map((l) => [l.kind, l.netOre, l.vatOre])).toContainEqual([
+    'reminder_fee',
+    6_000,
+    0,
+  ])
+  const after = await h.run(getInvoice(avi.id))
+  expect(after.reminders[0]?.feeBilledBy).toEqual({ id: next.id, number: next.number })
+  expect(await fail(h.run(waiveReminderFee(avi.id)))).toContain(`aviserad på avi ${next.number}`)
+})
 
 test('a payment booked before the reminder went out, imported after, waives its fee', async () => {
   const h = harness()
   const avi = await reminded(h)
   await pay(h, avi.ocr, 900_000, addDays(today, -2))
   const after = await h.run(getInvoice(avi.id))
-  expect(after).toMatchObject({ status: 'paid', owedOre: 0, paidOre: 900_000 })
+  expect(after).toMatchObject({ status: 'paid', owedOre: 0 })
   expect(after.reminders[0]).toMatchObject({
     feeWaivedOn: today,
     feeWaiver: 'paid_before_reminder',
+    feeChargeId: null,
   })
-  // The fee's posting is reversed, so it isn't income either.
-  const income = h.sqlite
-    .query(
-      "SELECT sum(amount_ore) AS ore FROM ledger_entry WHERE account = 'income' AND charge_kind = 'reminder_fee'",
-    )
-    .get() as { ore: number }
-  expect(income.ore).toBe(0)
+  expect(feeCharges(h)).toEqual([])
 })
 
-test('the same payment by hand, dated before the reminder, pays the avi without the fee', async () => {
+test('the same payment by hand, dated before the reminder, waives the fee', async () => {
   const h = harness()
   const avi = await reminded(h)
   const after = await h.run(markInvoicePaid({ invoiceId: avi.id, paidOn: addDays(today, -1) }))
   expect(after).toMatchObject({ status: 'paid', owedOre: 0, paidOre: 900_000 })
   expect(after.reminders[0]?.feeWaiver).toBe('paid_before_reminder')
+  expect(feeCharges(h)).toEqual([])
 })
 
-test('paying the avi but not the fee after the reminder leaves the fee, which can be waived', async () => {
+test('a fee waits for the next avi until someone waives it', async () => {
   const h = harness()
   const avi = await reminded(h)
+  remindedDaysAgo(h, 3)
   await pay(h, avi.ocr, 900_000, today)
-  // Booked the day the reminder went out: it may have crossed the reminder, so the fee goes.
-  expect((await h.run(getInvoice(avi.id))).reminders[0]?.feeWaiver).toBe('paid_before_reminder')
+  expect(feeCharges(h)).toHaveLength(1)
 
-  const h2 = harness()
-  const avi2 = await reminded(h2)
-  remindedDaysAgo(h2, 3)
-  await pay(h2, avi2.ocr, 900_000, today)
-  const left = await h2.run(getInvoice(avi2.id))
-  expect(left).toMatchObject({ status: 'overdue', owedOre: 6_000 })
-  expect(left.reminders[0]?.feeWaivedOn).toBeNull()
-  const [payment] = await h2.run(listPayments('matched'))
-  expect(payment.allocations).toEqual([
-    expect.objectContaining({ invoiceId: avi2.id, amountOre: 900_000, feeLeftOre: 6_000 }),
-  ])
-
-  await h2.run(waiveReminderFee(avi2.id))
-  const waived = await h2.run(getInvoice(avi2.id))
-  expect(waived).toMatchObject({ status: 'paid', owedOre: 0 })
+  await h.run(waiveReminderFee(avi.id))
+  const waived = await h.run(getInvoice(avi.id))
   expect(waived.reminders[0]).toMatchObject({ feeWaivedOn: today, feeWaiver: 'by_hand' })
-  expect(await fail(h2.run(waiveReminderFee(avi2.id)))).toContain('ingen påminnelseavgift')
-  const [listed] = await h2.run(listPayments('matched'))
-  expect(listed.allocations[0]?.feeLeftOre).toBe(0)
+  expect(feeCharges(h)).toEqual([])
+  expect(await fail(h.run(waiveReminderFee(avi.id)))).toContain('ingen påminnelseavgift')
+})
+
+test('removing the fee’s charge on the agreement waives it too', async () => {
+  const h = harness()
+  const avi = await reminded(h)
+  const [{ id }] = h.sqlite.query("SELECT id FROM charge WHERE kind = 'reminder_fee'").all() as {
+    id: string
+  }[]
+  await h.run(removeOneOffCharge(id))
+  expect((await h.run(getInvoice(avi.id))).reminders[0]).toMatchObject({
+    feeWaiver: 'by_hand',
+    feeChargeId: null,
+  })
 })
 
 test('a company can waive the fee when the avi is paid by the reminder’s due date', async () => {
@@ -170,19 +199,14 @@ test('a company can waive the fee when the avi is paid by the reminder’s due d
   const avi = await reminded(h)
   remindedDaysAgo(h, 3)
   await pay(h, avi.ocr, 900_000, today)
-  const after = await h.run(getInvoice(avi.id))
-  expect(after).toMatchObject({ status: 'paid', owedOre: 0 })
-  expect(after.reminders[0]?.feeWaiver).toBe('paid_by_due_date')
+  expect((await h.run(getInvoice(avi.id))).reminders[0]?.feeWaiver).toBe('paid_by_due_date')
+  expect(feeCharges(h)).toEqual([])
 })
 
-test('waiving a fee that was already paid moves it to the payer’s credit', async () => {
+test('no fee on an agreement that has ended: there is no next avi to bill it', async () => {
   const h = harness()
-  const avi = await reminded(h)
-  remindedDaysAgo(h, 3)
-  await pay(h, avi.ocr, 906_000, today)
-  expect((await h.run(getInvoice(avi.id))).status).toBe('paid')
-  await h.run(waiveReminderFee(avi.id))
-  const after = await h.run(getInvoice(avi.id))
-  expect(after).toMatchObject({ status: 'paid', owedOre: 0, toCreditOre: 6_000 })
-  expect((await h.run(partyAccount('anna'))).creditOre).toBe(6_000)
+  const id = await overdueAvi(h)
+  h.sqlite.exec(`UPDATE agreement SET end_date = '${addDays(today, -1)}'`)
+  expect(await h.run(sendReminder(id))).toMatchObject({ feeOre: 0 })
+  expect(feeCharges(h)).toEqual([])
 })
