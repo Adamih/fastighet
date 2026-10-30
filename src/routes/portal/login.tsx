@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '#/com
 import { getSessionFn } from '#/features/auth/functions'
 import { OtherWorkspaceNotice } from '#/features/auth/other-workspace'
 import { authSearch } from '#/features/auth/public-page'
+import { PortalDevLogins } from '#/features/portal/dev-logins'
 import { PortalLoginForm } from '#/features/portal/login-form'
 import { portalDestination } from '#/lib/auth-navigation'
 import { m } from '#/paraglide/messages'
@@ -38,6 +39,7 @@ function PortalLoginPage() {
           </CardContent>
         </Card>
       )}
+      {import.meta.env.DEV && !session && <PortalDevLogins redirectTo={redirectTo} />}
       <p className="text-center text-muted-foreground text-sm">
         {m.workspace_staff_question()}{' '}
         <Link to="/login" className="font-medium text-foreground underline underline-offset-4">

@@ -1560,6 +1560,8 @@
   "portal_login_code_invalid": "Fel eller utgången kod. Försök igen eller skicka en ny kod.",
   "portal_login_code_resent": "Ny kod skickad",
   "portal_login_code_sent": "Om {email} har tillgång till Mina sidor har vi skickat en kod dit. Den gäller i 10 minuter.",
+  "portal_login_dev_member": "Logga in som BRF-medlem (utveckling)",
+  "portal_login_dev_tenant": "Logga in som hyresgäst (utveckling)",
   "portal_login_intro": "Ange din e-postadress så skickar vi en kod. Inget lösenord behövs.",
   "portal_login_resend": "Skicka en ny kod",
   "portal_login_send_code": "Skicka kod",
