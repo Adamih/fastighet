@@ -55,6 +55,7 @@ import {
   reminderDueDate,
   reminderFee,
 } from '#/features/reminders/rules'
+import { issuedSeller } from '#/features/settings/seller'
 import { formatOrganizationNumber } from '#/features/tenants/organization-number'
 import {
   addDays,
@@ -265,15 +266,22 @@ async function seed() {
     organizationNumber: formatOrganizationNumber(withCheckDigit('559900000')),
     bankgiro: formatBankgiro(withCheckDigit('990000')),
   }
-  await db.insert(schema.organizationSettings).values({
-    organizationId: org.id,
-    ...settings,
+  const contact = {
     streetAddress: 'Exempelgatan 1',
     postalCode: '75320',
     city: 'Uppsala',
     email: 'hyra@fastighet.test',
     phone: '018-00 00 00',
     fSkatt: true,
+  }
+  // What every avi and credit note copies as its seller when issued.
+  const seller = JSON.stringify(
+    issuedSeller({ organizationName: org.name, ...settings, ...contact }),
+  )
+  await db.insert(schema.organizationSettings).values({
+    organizationId: org.id,
+    ...settings,
+    ...contact,
     // A 60 kr reminder fee is agreed in every lease, and late payers pay dröjsmålsränta.
     reminderFeeOre: 6_000,
     lateInterest: true,
@@ -942,6 +950,7 @@ async function seed() {
       ocr: ocrFor(number),
       agreementId: lease.id,
       ...bill.recipient,
+      seller,
       periodStart: period.start,
       periodEnd: period.end,
       issueDate,
@@ -1039,6 +1048,7 @@ async function seed() {
       recipientPostalCode: invoice.recipientPostalCode,
       recipientCity: invoice.recipientCity,
       recipientEmail: invoice.recipientEmail,
+      seller,
       issueDate,
       netOre: result.draft.netOre,
       vatOre: result.draft.vatOre,
@@ -1596,14 +1606,21 @@ async function seedBrf(tenantUserId: string) {
     organizationNumber: formatOrganizationNumber(withCheckDigit('769900000')),
     bankgiro: formatBankgiro(withCheckDigit('990100')),
   }
-  await db.insert(schema.organizationSettings).values({
-    organizationId: orgId,
-    ...settings,
+  const contact = {
     streetAddress: 'Lindgatan 3',
     postalCode: '75330',
     city: 'Uppsala',
     email: 'styrelsen@brflinden.test',
+    phone: null,
     fSkatt: false,
+  }
+  const seller = JSON.stringify(
+    issuedSeller({ organizationName: org.name, ...settings, ...contact }),
+  )
+  await db.insert(schema.organizationSettings).values({
+    organizationId: orgId,
+    ...settings,
+    ...contact,
     kind: 'brf',
     // The bylaws allow the highest överlåtelse- and pantsättningsavgift.
     pledgeFeeBasisPoints: 100,
@@ -2060,6 +2077,7 @@ async function seedBrf(tenantUserId: string) {
         ocr: ocrFor(number),
         agreementId: a.id,
         ...bill.recipient,
+        seller,
         periodStart: period.start,
         periodEnd: period.end,
         issueDate,

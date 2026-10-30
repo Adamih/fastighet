@@ -533,6 +533,9 @@ export const invoice = sqliteTable(
     recipientPostalCode: text('recipient_postal_code'),
     recipientCity: text('recipient_city'),
     recipientEmail: text('recipient_email'),
+    // The seller as issued (`IssuedSeller`, JSON): bankgiro, name, address, org.nr, F-skatt.
+    // Null on avier from before 0018, which show the current company details.
+    seller: text('seller'),
     periodStart: text('period_start').notNull(),
     periodEnd: text('period_end').notNull(),
     issueDate: text('issue_date').notNull(),
@@ -628,6 +631,8 @@ export const creditNote = sqliteTable(
     recipientPostalCode: text('recipient_postal_code'),
     recipientCity: text('recipient_city'),
     recipientEmail: text('recipient_email'),
+    // The seller as issued, as on `invoice`; null on credit notes from before 0018.
+    seller: text('seller'),
     issueDate: text('issue_date').notNull(),
     netOre: integer('net_ore').notNull(),
     vatOre: integer('vat_ore').notNull(),

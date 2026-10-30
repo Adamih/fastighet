@@ -3,14 +3,13 @@ import { Effect } from 'effect'
 import { creditNote, creditNoteLine, invoice } from '#/db/schema'
 import { creditNoteEntries, creditTransferEntries } from '#/features/ledger/postings'
 import { invoiceMoneyFor, postingStatements } from '#/features/ledger/program'
-import { loadCompanyDetails } from '#/features/settings/program'
 import type { Permissions } from '#/lib/permissions'
 import { requirePermission } from '#/server/authorize'
 import { Conflict } from '#/server/errors'
 import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
 import { today } from '#/server/today'
 import { type CreditProblem, draftCreditNote } from './credit'
-import { getInvoice } from './program'
+import { getInvoice, sellerAsIssued, sellerToIssue } from './program'
 import type { CreateCreditNoteInput } from './schemas'
 
 // Credit notes (kreditfakturor): issuing one against an avi, and reading it.
@@ -51,6 +50,7 @@ export const createCreditNote = Effect.fn('invoicing.createCreditNote')(function
       .where(inCompany(creditNote, organizationId)),
   )
   const id = crypto.randomUUID()
+  const seller = yield* sellerToIssue
   // A credit beyond what is still owed (the avi was paid, or paid with credit) becomes the
   // party's credit balance, to be used on the next avi or paid back.
   const toCreditOre = Math.max(0, draft.totalOre - Math.max(0, inv.owedOre))
@@ -68,6 +68,7 @@ export const createCreditNote = Effect.fn('invoicing.createCreditNote')(function
         recipientPostalCode: inv.recipientPostalCode,
         recipientCity: inv.recipientCity,
         recipientEmail: inv.recipientEmail,
+        seller,
         issueDate,
         netOre: draft.netOre,
         vatOre: draft.vatOre,
@@ -145,7 +146,7 @@ export const getCreditNote = Effect.fn('invoicing.getCreditNote')(function* (cre
     /** Whether the credit went (in part) to the party's credit balance: the avi had been paid. */
     toCredit: money.toCreditOre > 0,
     invoiceMoney: money,
-    seller: yield* loadCompanyDetails,
+    seller: yield* sellerAsIssued(row.seller),
   }
 })
 

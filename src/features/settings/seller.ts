@@ -1,3 +1,4 @@
+import { Schema } from 'effect'
 import { isValidBankgiro, vatNumberFor } from '#/features/invoicing/rules'
 import { isValidOrganizationNumber } from '#/features/tenants/organization-number'
 import { m } from '#/paraglide/messages'
@@ -15,6 +16,36 @@ export interface SellerDetails {
   readonly phone: string | null
   readonly fSkatt: boolean
 }
+
+/**
+ * The seller as an avi or credit note was issued: copied onto it in the same batch, so a later
+ * change under Företagsuppgifter never changes what an issued document says.
+ */
+export const IssuedSeller = Schema.Struct({
+  organizationName: Schema.String,
+  organizationNumber: Schema.NullOr(Schema.String),
+  bankgiro: Schema.NullOr(Schema.String),
+  streetAddress: Schema.NullOr(Schema.String),
+  postalCode: Schema.NullOr(Schema.String),
+  city: Schema.NullOr(Schema.String),
+  email: Schema.NullOr(Schema.String),
+  phone: Schema.NullOr(Schema.String),
+  fSkatt: Schema.Boolean,
+})
+export type IssuedSeller = typeof IssuedSeller.Type
+
+/** The seller details to copy onto a document being issued. */
+export const issuedSeller = (details: IssuedSeller): IssuedSeller => ({
+  organizationName: details.organizationName,
+  organizationNumber: details.organizationNumber,
+  bankgiro: details.bankgiro,
+  streetAddress: details.streetAddress,
+  postalCode: details.postalCode,
+  city: details.city,
+  email: details.email,
+  phone: details.phone,
+  fSkatt: details.fSkatt,
+})
 
 /** Seller details for the footer of the email and the printed invoice. */
 export function sellerDetails(seller: SellerDetails, hasVat: boolean): string[] {

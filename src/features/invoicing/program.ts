@@ -5,7 +5,9 @@ import { billingAvier } from '#/features/agreements/program'
 import { type InvoiceMoney, statusFromMoney } from '#/features/ledger/postings'
 import { allInvoiceMoney, invoiceMoneyFor, livePostings } from '#/features/ledger/program'
 import { loadCompanyDetails } from '#/features/settings/program'
+import { IssuedSeller, issuedSeller } from '#/features/settings/seller'
 import type { Permissions } from '#/lib/permissions'
+import { storedJson } from '#/lib/schemas'
 import { hasPermission, requirePermission } from '#/server/authorize'
 import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
 import { today } from '#/server/today'
@@ -17,6 +19,22 @@ import type { ListInvoicesInput } from './schemas'
 // next to this one.
 
 const read: Permissions = { invoice: ['read'] }
+
+const storedSeller = storedJson(IssuedSeller)
+
+/**
+ * The seller as an avi or credit note was issued (its `seller` column). Documents from before
+ * the column existed show the current company details.
+ */
+export const sellerAsIssued = (stored: string | null) => {
+  const seller = storedSeller(stored)
+  return seller ? Effect.succeed(seller) : Effect.map(loadCompanyDetails, issuedSeller)
+}
+
+/** The current seller details as JSON, for the `seller` column of a document being issued. */
+export const sellerToIssue = Effect.map(loadCompanyDetails, (details) =>
+  JSON.stringify(issuedSeller(details)),
+)
 
 /** An avi with its money from the ledger: owed, paid, credited, to pay back, and its status. */
 const toView = <R extends typeof invoice.$inferSelect>(
@@ -112,7 +130,7 @@ export const getInvoice = Effect.fn('invoicing.getInvoice')(function* (invoiceId
       },
     }),
   ).pipe(orNotFound('invoice', invoiceId))
-  const seller = yield* loadCompanyDetails
+  const seller = yield* sellerAsIssued(row.seller)
   const money = (yield* invoiceMoneyFor([row.id]))(row.id)
   // Payments on the avi, from the ledger: bank payments matched to it and payments registered
   // by hand. Listed only for those who may read payments.

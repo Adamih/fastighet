@@ -20,6 +20,7 @@ import { forEachBestEffort } from '#/server/best-effort'
 import { Conflict } from '#/server/errors'
 import { inCompany, orgQuery } from '#/server/scoped'
 import { today } from '#/server/today'
+import { sellerToIssue } from './program'
 import { dueDate, invoicePeriod, ocrFor, type Period } from './rules'
 import type { CreateInvoiceRunInput } from './schemas'
 import { emailInvoice } from './send-program'
@@ -170,6 +171,7 @@ export const createInvoiceRun = Effect.fn('invoicing.createInvoiceRun')(function
   }
   const pending = preview.rows.filter((r) => !r.alreadyInvoiced)
   const credit = yield* creditBalances(pending.map((r) => r.recipient.partyId))
+  const seller = yield* sellerToIssue
 
   const [{ maxNumber }] = yield* orgQuery((db, organizationId) =>
     db
@@ -195,6 +197,7 @@ export const createInvoiceRun = Effect.fn('invoicing.createInvoiceRun')(function
           ocr: ocrFor(number),
           agreementId: row.agreementId,
           ...row.recipient,
+          seller,
           periodStart: row.period.start,
           periodEnd: row.period.end,
           issueDate: preview.issueDate,

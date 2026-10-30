@@ -7,6 +7,7 @@ import { periodLabel } from '#/features/invoicing/rules'
 import { statusFromMoney } from '#/features/ledger/postings'
 import { allInvoiceMoney } from '#/features/ledger/program'
 import { portalLink } from '#/features/portal/links'
+import { loadCompanyDetails } from '#/features/settings/program'
 import { sellerDetails } from '#/features/settings/seller'
 import { documentTerms } from '#/features/settings/terminology'
 import { formatSek } from '#/lib/money'
@@ -102,7 +103,10 @@ export const sendReminder = Effect.fn('reminders.sendReminder')(function* (invoi
   const on = yield* today
   const problem = reminderProblem(inv, inv.reminders, settings, on)
   if (problem) return yield* new Conflict({ message: problemMessages[problem] })
-  if (!inv.seller.bankgiro || !inv.recipientEmail) {
+  // A reminder is a new document: it asks for payment now, so it names the company as it is today,
+  // not as the avi was issued.
+  const seller = yield* loadCompanyDetails
+  if (!seller.bankgiro || !inv.recipientEmail) {
     return yield* new Conflict({ message: 'Ange bankgironummer under Företagsuppgifter först' })
   }
   const feeOre = feeFor(settings, inv.reminders, inv.agreement.endDate, on)
@@ -114,7 +118,7 @@ export const sendReminder = Effect.fn('reminders.sendReminder')(function* (invoi
     template: 'paymentReminder',
     props: {
       recipientName: inv.recipientName,
-      organizationName: inv.seller.organizationName,
+      organizationName: seller.organizationName,
       documentName: documentTerms(inv.agreement.kind).invoiceTitle,
       invoiceNumber: inv.number,
       periodLabel: periodLabel({ start: inv.periodStart, end: inv.periodEnd }),
@@ -123,9 +127,9 @@ export const sendReminder = Effect.fn('reminders.sendReminder')(function* (invoi
       total: formatSek(inv.owedOre),
       fee: feeOre > 0 ? formatSek(feeOre) : null,
       dueDate,
-      bankgiro: inv.seller.bankgiro,
+      bankgiro: seller.bankgiro,
       ocr: inv.ocr,
-      sellerDetails: sellerDetails(inv.seller, inv.vatOre > 0),
+      sellerDetails: sellerDetails(seller, inv.vatOre > 0),
       portalUrl: yield* portalLink(inv.partyId, `/portal/avier/${inv.id}`),
     },
   })

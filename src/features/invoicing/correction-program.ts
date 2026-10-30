@@ -17,7 +17,7 @@ import { Conflict } from '#/server/errors'
 import { inCompany, orgQuery, orNotFound } from '#/server/scoped'
 import { today } from '#/server/today'
 import { type ReissueProblem, reissueProblem, type VoidProblem, voidProblem } from './correction'
-import { getInvoice } from './program'
+import { getInvoice, sellerToIssue } from './program'
 import { dueDate, ocrFor } from './rules'
 import { type BillingRow, billingDetails, billRow, creditUseStatements } from './run-program'
 
@@ -159,6 +159,7 @@ export const reissueInvoice = Effect.fn('invoicing.reissueInvoice')(function* (i
   const number = maxNumber + 1
   const id = crypto.randomUUID()
   const credit = yield* creditBalances([recipient.partyId])
+  const seller = yield* sellerToIssue
   yield* orgQuery((db, organizationId) =>
     db.batch([
       db.insert(invoice).values({
@@ -168,6 +169,7 @@ export const reissueInvoice = Effect.fn('invoicing.reissueInvoice')(function* (i
         ocr: ocrFor(number),
         agreementId: preview.agreementId,
         ...recipient,
+        seller,
         periodStart: preview.period.start,
         periodEnd: preview.period.end,
         issueDate: preview.issueDate,
