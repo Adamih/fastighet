@@ -7,9 +7,10 @@ import { inCompany, portalQuery } from '#/server/scoped'
 import { PortalCompany, PortalUser } from '#/server/services'
 import type { UpdatePortalContactInput } from './schemas'
 
-// "Mina uppgifter": the contact details of the person's parties, which they may change when the
-// company allows it, and whom to contact at the company. Issued avier keep their own copies;
-// the next avi uses the new details.
+// "Mina uppgifter": the name and contact details of the person's parties, which they may change
+// when the company allows it, and whom to contact at the company. Issued avier keep their own
+// copies; the next avi uses the new details. The person's own account name is Better Auth's
+// (`updateUser`), not a party's.
 
 const companySettings = portalQuery((db, scope) =>
   db
@@ -59,7 +60,7 @@ export const portalContact = Effect.gen(function* () {
 
 export type PortalContact = Effect.Success<typeof portalContact>
 
-/** Changes one of the person's parties' contact details, when the company allows it. */
+/** Changes one of the person's parties' name and contact details, when the company allows it. */
 export const updatePortalContact = Effect.fn('portal.updatePortalContact')(function* (
   input: UpdatePortalContactInput,
 ) {
@@ -76,6 +77,7 @@ export const updatePortalContact = Effect.fn('portal.updatePortalContact')(funct
     db
       .update(party)
       .set({
+        name: input.name.trim(),
         email: blankToNull(input.email),
         phone: blankToNull(input.phone),
         streetAddress: blankToNull(input.streetAddress),

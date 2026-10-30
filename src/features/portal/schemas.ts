@@ -1,5 +1,5 @@
 import { Schema } from 'effect'
-import { Email, OptionalText, PostalCode } from '#/lib/schemas'
+import { Email, OptionalText, PostalCode, RequiredText } from '#/lib/schemas'
 
 export const PartyIdInput = Schema.Struct({ partyId: Schema.String })
 
@@ -17,6 +17,8 @@ export const AccessIdInput = Schema.Struct({ accessId: Schema.String })
 
 export const UpdatePortalContactInput = Schema.Struct({
   partyId: Schema.String,
+  /** The party's name, as on new avier and in the company's register. */
+  name: RequiredText('Ange ett namn'),
   email: Email,
   phone: OptionalText,
   streetAddress: OptionalText,

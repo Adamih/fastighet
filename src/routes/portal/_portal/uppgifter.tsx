@@ -1,6 +1,7 @@
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { Mail, Phone } from 'lucide-react'
+import { PortalAccountNameForm } from '#/features/portal/account-form'
 import { PortalContactForm } from '#/features/portal/contact-form'
 import { portalContactQuery } from '#/features/portal/portal-functions'
 import { m } from '#/paraglide/messages'
@@ -12,35 +13,54 @@ export const Route = createFileRoute('/portal/_portal/uppgifter')({
 
 function ContactPage() {
   const { data } = useSuspenseQuery(portalContactQuery())
+  const { portal } = Route.useRouteContext()
   return (
     <div className="grid gap-5">
       <h1 className="font-bold text-2xl tracking-tight md:text-3xl">{m.portal_nav_contact()}</h1>
-      {data.parties.map((party) => (
-        <section key={party.id} className="grid gap-3 rounded-xl border bg-card p-4">
-          <h2 className="font-semibold">{party.name}</h2>
-          {data.editsAllowed ? (
-            <PortalContactForm party={party} />
-          ) : (
-            <div className="grid gap-1 text-sm">
-              <span>{party.email ?? '–'}</span>
-              <span>{party.phone ?? '–'}</span>
-              <span>
-                {[party.streetAddress, [party.postalCode, party.city].filter(Boolean).join(' ')]
-                  .filter(Boolean)
-                  .join(', ') || '–'}
-              </span>
-              <p className="pt-1 text-muted-foreground">
-                {m.portal_contact_no_edits({ company: data.company.name })}
-              </p>
-            </div>
-          )}
+
+      <div className="grid gap-3">
+        <div className="grid gap-0.5">
+          <h2 className="font-semibold text-lg">{m.portal_contact_details()}</h2>
+          <p className="text-muted-foreground text-sm">{m.portal_contact_details_hint()}</p>
+        </div>
+        {data.parties.map((party) => (
+          <section key={party.id} className="grid gap-3 rounded-xl border bg-card p-4">
+            {data.editsAllowed ? (
+              <PortalContactForm party={party} />
+            ) : (
+              <div className="grid gap-1 text-sm">
+                <span className="font-semibold">{party.name}</span>
+                <span>{party.email ?? '–'}</span>
+                <span>{party.phone ?? '–'}</span>
+                <span>
+                  {[party.streetAddress, [party.postalCode, party.city].filter(Boolean).join(' ')]
+                    .filter(Boolean)
+                    .join(', ') || '–'}
+                </span>
+                <p className="pt-1 text-muted-foreground">
+                  {m.portal_contact_no_edits({ company: data.company.name })}
+                </p>
+              </div>
+            )}
+          </section>
+        ))}
+      </div>
+
+      <div className="grid gap-3">
+        <div className="grid gap-0.5">
+          <h2 className="font-semibold text-lg">{m.portal_account_settings()}</h2>
+          <p className="text-muted-foreground text-sm">{m.portal_account_settings_hint()}</p>
+        </div>
+        <section className="grid gap-4 rounded-xl border bg-card p-4">
+          <PortalAccountNameForm name={portal.user.name} />
+          <div className="grid gap-0.5 border-t pt-3">
+            <span className="font-medium text-sm">{m.portal_contact_login()}</span>
+            <span className="text-sm">{data.loginEmail}</span>
+            <span className="text-muted-foreground text-sm">{m.portal_contact_login_hint()}</span>
+          </div>
         </section>
-      ))}
-      <section className="grid gap-1 rounded-xl border bg-card p-4">
-        <h2 className="font-semibold">{m.portal_contact_login()}</h2>
-        <p className="text-sm">{data.loginEmail}</p>
-        <p className="text-muted-foreground text-sm">{m.portal_contact_login_hint()}</p>
-      </section>
+      </div>
+
       <section className="grid gap-2 rounded-xl border bg-card p-4">
         <h2 className="font-semibold">
           {m.portal_contact_company({ company: data.company.name })}

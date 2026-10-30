@@ -12,7 +12,7 @@ type Party = PortalContact['parties'][number]
 const validEmail = (value: string) =>
   !value.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 
-/** A party's contact details in "Mina uppgifter", saved in place. */
+/** A party's name and contact details in "Mina uppgifter", saved in place. */
 export function PortalContactForm({ party }: { party: Party }) {
   const queryClient = useQueryClient()
   const [saved, setSaved] = useState(false)
@@ -22,6 +22,7 @@ export function PortalContactForm({ party }: { party: Party }) {
   })
   const form = useAppForm({
     defaultValues: {
+      name: party.name,
       email: party.email ?? '',
       phone: party.phone ?? '',
       streetAddress: party.streetAddress ?? '',
@@ -36,6 +37,22 @@ export function PortalContactForm({ party }: { party: Party }) {
   })
   return (
     <SubmissionForm form={form} method="post" className="grid gap-4">
+      <form.AppField
+        name="name"
+        validators={{
+          onSubmit: ({ value }) => (value.trim() ? undefined : m.common_name_required()),
+        }}
+      >
+        {(field) => (
+          <field.TextField
+            label={
+              party.kind === 'company' ? m.portal_contact_company_name() : m.portal_contact_name()
+            }
+            autoComplete={party.kind === 'company' ? 'organization' : 'name'}
+            hint={m.portal_contact_name_hint()}
+          />
+        )}
+      </form.AppField>
       <form.AppField
         name="email"
         validators={{
